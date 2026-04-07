@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  evalupro-db:
+    image: mongo:6-jammy
+    container_name: evalupro_db
+    restart: unless-stopped
+    volumes:
+      - evalupro_mongo_data:/data/db
+
+  evalupro-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: evalupro_backend
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - MONGODB_URI=mongodb://evalupro-db:27017/evalupro
+      - JWT_SECRET=change_this_to_a_secure_random_string_in_production
+      - FRONTEND_ORIGIN=*
+    depends_on:
+      - evalupro-db
+
+  evalupro-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: evalupro_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - evalupro-backend
+
+volumes:
+  evalupro_mongo_data:

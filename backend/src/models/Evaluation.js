@@ -1,0 +1,20 @@
+const mongoose = require("mongoose");
+
+const evaluationSchema = new mongoose.Schema(
+  {
+    studentName: { type: String, required: true, trim: true },
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
+    date: { type: String, required: true },
+    scores: { type: Map, of: Number, default: {} },
+    comments: { type: Map, of: String, default: {} },
+    generalComment: { type: String, default: "" },
+    aiSummary: { type: String, default: "" },
+    totalScore: { type: Number, default: 0 },
+    totalMax: { type: Number, default: 0 },
+    rubric: { type: mongoose.Schema.Types.ObjectId, ref: "Rubric", required: true },
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("Evaluation", evaluationSchema);
