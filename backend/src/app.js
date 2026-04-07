@@ -24,7 +24,9 @@ app.use("/api/students", studentRoutes);
 // Pour le déploiement monolithique : Servir les fichiers statiques React
 const path = require("path");
 app.use(express.static(path.join(__dirname, "../public")));
-app.get("*", (req, res) => {
+
+// Fallback pour le routage React SPA (Remplacer app.get("*") par app.use())
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "../public", "index.html"));
 });
 
