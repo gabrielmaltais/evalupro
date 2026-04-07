@@ -25,6 +25,14 @@ export default function AdminRubric() {
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const DEFAULT_FEEDBACK = [
+    { minPct: 0, maxPct: 60, message: "Tu n'y es pas encore, mais ne te décourage pas ! Reviens sur les points manquants, consulte tes notes et n'hésite pas à demander de l'aide. Tu as la capacité de progresser et c'est en persévérant qu'on réussit." },
+    { minPct: 60, maxPct: 75, message: "C'est un début ! Tu as saisi les bases, mais certains éléments méritent d'être approfondis. Prends le temps de revoir les points manqués — tu es sur la bonne voie pour t'améliorer." },
+    { minPct: 75, maxPct: 85, message: "Beau travail ! Tu démontres une bonne maîtrise de l'ensemble du sujet. Quelques détails peuvent encore être peaufinés, mais tu peux être fier·e de ta performance." },
+    { minPct: 85, maxPct: 95, message: "Excellent travail ! Tu maîtrises très bien la matière et ton investissement est visible. Continue comme ça, tu t'approches de la perfection !" },
+    { minPct: 95, maxPct: 100, message: "Extraordinaire ! 🎉 Tu as accompli un travail remarquable et exceptionnel. C'est le résultat d'un effort soutenu et d'une vraie rigueur. Félicitations sincères !" },
+  ];
+  const [feedbackMessages, setFeedbackMessages] = useState(DEFAULT_FEEDBACK);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -49,6 +57,7 @@ export default function AdminRubric() {
     setVersion((r.version || 1) + 1); // Auto increment version for new save
     setCriteria(r.criteria || []);
     setIsActive(r.isActive !== false);
+    setFeedbackMessages(r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
     setConfirmDelete(false);
@@ -61,6 +70,7 @@ export default function AdminRubric() {
     setVersion(1);
     setCriteria([{ ...DEFAULT_CRITERION, id: "c1" }]);
     setIsActive(true);
+    setFeedbackMessages(DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
     setConfirmDelete(false);
@@ -71,10 +81,10 @@ export default function AdminRubric() {
     setSuccess("");
     try {
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, criteria, isActive });
+        await api.updateRubric(selectedId, { title, taskTitle, version, criteria, isActive, feedbackMessages });
         setSuccess("Grille modifiée avec succès !");
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, criteria, isActive });
+        const newRubric = await api.createRubric({ title, taskTitle, version, criteria, isActive, feedbackMessages });
         setSelectedId(newRubric._id);
         setSuccess("Nouvelle grille créée avec succès !");
       }
@@ -134,6 +144,30 @@ export default function AdminRubric() {
     setCriteria(newC);
   }
 
+  function addSC(cIdx) {
+    const newC = [...criteria];
+    const newSC = [...(newC[cIdx].subCriteria || [])];
+    newSC.push({ id: Date.now().toString() + Math.random().toString(36).substr(2, 5), label: 'Nouveau point technique', pts: 1 });
+    newC[cIdx] = { ...newC[cIdx], subCriteria: newSC };
+    setCriteria(newC);
+  }
+
+  function updateSC(cIdx, scIdx, field, val) {
+    const newC = [...criteria];
+    const newSC = [...(newC[cIdx].subCriteria || [])];
+    newSC[scIdx] = { ...newSC[scIdx], [field]: val };
+    newC[cIdx] = { ...newC[cIdx], subCriteria: newSC };
+    setCriteria(newC);
+  }
+
+  function removeSC(cIdx, scIdx) {
+    const newC = [...criteria];
+    const newSC = [...(newC[cIdx].subCriteria || [])];
+    newSC.splice(scIdx, 1);
+    newC[cIdx] = { ...newC[cIdx], subCriteria: newSC };
+    setCriteria(newC);
+  }
+
   function exportJSON() {
     const data = { title, taskTitle, version, criteria, isActive };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
@@ -149,6 +183,7 @@ export default function AdminRubric() {
     const template = {
       "_INSTRUCTIONS_IA": "Ceci est un gabarit pour générer des grilles d'évaluation. Vous devez conserver cette structure JSON exacte. Ne modifiez pas la structure des champs 'title', 'weight', 'color', 'levels', 'maxPct', 'desc'.",
       "_DIRECTIVES_NIVEAUX": "Les 'levels' de performance (ex: Insatisfaisant, Bon, Excellent) sont des EXEMPLES. Vous DEVEZ adapter leur quantité et leurs noms au contexte. Si le laboratoire est très technique, on peut avoir juste 2 niveaux (ex: Échec/Réussite). Ajustez maxPct (0 à 1) selon le pourcentage visé.",
+      "_DIRECTIVES_SOUS_CRITERES": "Optionnellement, on peut utiliser des cases à cocher de validation. Ajouter un tableau `subCriteria` avec `{label, pts, id, feedback}`. Le champ 'feedback' est le commentaire qui s'affiche lorsque la case N'EST PAS cochée (pour expliquer ce qui manque ou ce qui a été raté par l'étudiant).",
       "title": "Nom de ton cours ou du sujet principal",
       "taskTitle": "Titre spécifique de la tâche ou de l'examen",
       "criteria": [
@@ -175,7 +210,22 @@ export default function AdminRubric() {
               "maxPct": 1,
               "desc": "La consigne est complétée à 100% avec les bonnes pratiques appliquées."
             }
-          ]
+          ],
+          "subCriteria": [
+            {
+              "id": "sc1",
+              "label": "Tâche technique spécifique (ex: Ping fonctionnel)",
+              "pts": 2.5,
+              "feedback": "Le ping entre les machines n'est pas fonctionnel. Vérifiez l'adressage IP et la configuration du pare-feu."
+            },
+            {
+              "id": "sc2",
+              "label": "Respect des conventions de nommage",
+              "pts": 1,
+              "feedback": "Les conventions de nommage ne sont pas respectées. Revoyez les noms des machines, comptes et OU."
+            }
+          ],
+          "_feedback_comment": "Le champ 'feedback' s'affiche quand la case N'EST PAS cochée. Il explique à l'étudiant ce qui lui manque ou ce qu'il a raté. Rédigez-le comme un retour constructif."
         }
       ]
     };
@@ -364,8 +414,56 @@ export default function AdminRubric() {
                     ))}
                   </div>
 
+                  <div className="space-y-3 pt-4 mt-4 border-t border-gray-100">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-xs font-bold text-gray-400 uppercase">Sous-critères : Cases à cocher (Optionnel)</label>
+                        <button type="button" onClick={() => addSC(idx)} className="text-xs bg-purple-50 text-purple-600 hover:bg-purple-100 px-2 py-1 rounded font-bold transition"><i className="fa-solid fa-plus"></i> Ajouter option</button>
+                    </div>
+                    {c.subCriteria?.map((sc, scIdx) => (
+                      <div key={scIdx} className="space-y-1 group bg-purple-50/30 p-2 rounded-lg border border-purple-100">
+                         <div className="flex gap-2 items-start">
+                           <div className="flex-grow">
+                             <input type="text" className="w-full px-2 py-1.5 border border-purple-200 focus:border-purple-400 rounded text-xs outline-none bg-white font-semibold" placeholder="Ex: L'enregistrement DNS est configuré" value={sc.label} onChange={e => updateSC(idx, scIdx, 'label', e.target.value)} />
+                           </div>
+                           <div className="w-20 flex-shrink-0 relative">
+                             <input type="number" step="0.5" className="w-full px-2 py-1.5 border border-purple-200 focus:border-purple-400 rounded text-xs outline-none bg-white" value={sc.pts} onChange={e => updateSC(idx, scIdx, 'pts', Number(e.target.value))} />
+                             <span className="absolute right-2 top-1.5 text-xs text-gray-400 font-bold">pts</span>
+                           </div>
+                           <div className="flex-shrink-0">
+                             <button type="button" onClick={() => removeSC(idx, scIdx)} className="text-red-400 hover:text-red-600 opacity-20 group-hover:opacity-100 transition p-2" title="Supprimer ce sous-critère"><i className="fa-solid fa-times"></i></button>
+                           </div>
+                         </div>
+                         <textarea className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" rows="1" placeholder="⚠ Feedback si non réussi (optionnel) — affiché quand cette case N'EST PAS cochée" value={sc.feedback || ''} onChange={e => updateSC(idx, scIdx, 'feedback', e.target.value)}></textarea>
+                      </div>
+                    ))}
+                  </div>
+
                 </div>
               ))}
+            </div>
+
+            {/* Feedback Messages Editor */}
+            <div className="mt-8 border-t border-gray-200 pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-gray-700 uppercase"><i className="fa-solid fa-comment-dots mr-2 text-blue-500"></i>Rétroaction Finale (PDF)</h3>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">Ces messages apparaîtront à la fin du document PDF selon le pourcentage obtenu par l'étudiant.</p>
+              <div className="space-y-2">
+                {feedbackMessages.map((fm, fmIdx) => {
+                  const bgColor = fm.maxPct <= 40 ? 'border-l-red-400 bg-red-50/30' : fm.maxPct <= 60 ? 'border-l-orange-400 bg-orange-50/30' : fm.maxPct <= 80 ? 'border-l-yellow-400 bg-yellow-50/30' : fm.maxPct <= 90 ? 'border-l-blue-400 bg-blue-50/30' : 'border-l-green-400 bg-green-50/30';
+                  return (
+                    <div key={fmIdx} className={`flex gap-2 items-start p-2 rounded-lg border-l-4 ${bgColor}`}>
+                      <div className="flex items-center gap-1 flex-shrink-0 pt-1">
+                        <input type="number" className="w-12 px-1 py-1 border border-gray-300 rounded text-xs outline-none text-center" value={fm.minPct} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], minPct: Number(e.target.value)}; setFeedbackMessages(n); }} />
+                        <span className="text-xs text-gray-400">—</span>
+                        <input type="number" className="w-12 px-1 py-1 border border-gray-300 rounded text-xs outline-none text-center" value={fm.maxPct} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], maxPct: Number(e.target.value)}; setFeedbackMessages(n); }} />
+                        <span className="text-xs text-gray-400 font-bold">%</span>
+                      </div>
+                      <input type="text" className="flex-grow px-2 py-1 border border-gray-200 rounded text-xs outline-none" value={fm.message} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], message: e.target.value}; setFeedbackMessages(n); }} />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mt-8 border-t border-gray-200 pt-6 flex justify-between items-center">

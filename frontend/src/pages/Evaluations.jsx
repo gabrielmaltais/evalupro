@@ -9,6 +9,8 @@ export default function Evaluations() {
   const [items, setItems] = useState([]); // Historique
   const [form, setForm] = useState({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: "" });
   const [scores, setScores] = useState({});
+  const [subScores, setSubScores] = useState({});
+  const [touched, setTouched] = useState({});
   const [comments, setComments] = useState({});
   const [showComment, setShowComment] = useState({});
   const [showDatePdf, setShowDatePdf] = useState(false);
@@ -88,6 +90,12 @@ export default function Evaluations() {
          rubric: typeof data.rubric === 'object' ? data.rubric._id : data.rubric
       });
       setScores(data.scores || {});
+      setSubScores(data.subScores || {});
+      // Marquer comme touchés tous les critères qui ont un score ou des subScores
+      const restoredTouched = {};
+      if (data.scores) Object.keys(data.scores).forEach(k => { restoredTouched[k] = true; });
+      if (data.subScores) Object.keys(data.subScores).forEach(k => { restoredTouched[k] = true; });
+      setTouched(restoredTouched);
       setComments(data.comments || {});
       window.scrollTo(0,0);
     } catch(e) {
@@ -102,6 +110,8 @@ export default function Evaluations() {
       if (form._id === id) {
          setForm({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: rubrics[0]?._id });
          setScores({});
+         setSubScores({});
+         setTouched({});
          setComments({});
       }
       refresh();
@@ -135,9 +145,9 @@ export default function Evaluations() {
     setError("");
     try {
       if (form._id) {
-        await api.updateEvaluation(form._id, { ...form, scores, comments });
+        await api.updateEvaluation(form._id, { ...form, scores, subScores, comments });
       } else {
-        const res = await api.createEvaluation({ ...form, scores, comments });
+        const res = await api.createEvaluation({ ...form, scores, subScores, comments });
         setForm(f => ({ ...f, _id: res._id }));
       }
       await refresh();
@@ -166,6 +176,45 @@ export default function Evaluations() {
 
   function handleScore(id, val) {
     setScores(s => ({ ...s, [id]: parseFloat(val) }));
+    setTouched(t => ({ ...t, [id]: true }));
+  }
+
+  function handleLevelClick(cid, criterion, lvl) {
+    const val = criterion.weight * lvl.maxPct;
+    setScores(s => ({ ...s, [cid]: parseFloat(val) }));
+    setTouched(t => ({ ...t, [cid]: true }));
+
+    // Si le critère a des sous-critères, gérer les cases auto
+    if (criterion.subCriteria && criterion.subCriteria.length > 0) {
+      const sortedLevels = [...(criterion.levels || [])].sort((a,b) => a.maxPct - b.maxPct);
+      const isHighest = sortedLevels.length > 0 && lvl.maxPct >= sortedLevels[sortedLevels.length - 1].maxPct;
+      const isLowest = sortedLevels.length > 0 && lvl.maxPct <= sortedLevels[0].maxPct;
+
+      if (isHighest) {
+        // Cocher toutes les cases
+        const allChecked = {};
+        criterion.subCriteria.forEach(sc => { allChecked[sc.id] = true; });
+        setSubScores(prev => ({ ...prev, [cid]: allChecked }));
+      } else if (isLowest) {
+        // Décocher toutes les cases
+        setSubScores(prev => ({ ...prev, [cid]: {} }));
+      }
+      // Pour les niveaux intermédiaires, on laisse les cases telles quelles
+    }
+  }
+
+  function handleSubScore(cid, scId, checked, criterion) {
+    const newCState = { ...(subScores[cid] || {}), [scId]: checked };
+    setSubScores(prev => ({ ...prev, [cid]: newCState }));
+    setTouched(t => ({ ...t, [cid]: true }));
+
+    // Recalculer le score en sommant les sous-critères cochés
+    let total = 0;
+    criterion.subCriteria.forEach(sc => {
+      if (newCState[sc.id]) total += sc.pts;
+    });
+    // Plafonner au poids maximal du critère
+    setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, total), criterion.weight) }));
   }
 
   function generatePDF() {
@@ -294,7 +343,10 @@ export default function Evaluations() {
                     if (currentScore > 0 || scores[cid] === 0) {
                         if (c.levels && c.levels.length > 0) {
                             const sortedLevels = [...c.levels].sort((a,b) => a.maxPct - b.maxPct);
-                            const matchedLevel = sortedLevels.find(l => pctC <= l.maxPct) || sortedLevels[sortedLevels.length - 1];
+                            let matchedLevel = sortedLevels[0];
+                            for (const lvl of sortedLevels) {
+                                if (pctC >= lvl.maxPct) matchedLevel = lvl;
+                            }
                             descText = matchedLevel.desc || "Score attribué";
                         } else {
                             descText = "Score attribué";
@@ -324,7 +376,7 @@ export default function Evaluations() {
                                             const colorType = lvl.maxPct < 0.5 ? 'red' : lvl.maxPct < 0.8 ? 'yellow' : 'green';
                                             const btnClass = colorType === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : colorType === 'yellow' ? 'border-yellow-300 text-yellow-600 hover:bg-yellow-50' : 'border-green-200 text-green-600 hover:bg-green-50';
                                             return (
-                                              <button key={lnum} onClick={() => handleScore(cid, c.weight * lvl.maxPct)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} leading-tight`}>
+                                              <button key={lnum} onClick={() => handleLevelClick(cid, c, lvl)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} leading-tight`}>
                                                   {lvl.label}
                                               </button>
                                             );
@@ -334,9 +386,36 @@ export default function Evaluations() {
                                     <div className="relative pt-4 pb-2">
                                         <input type="range" min="0" max={c.weight || 10} step="0.5" value={currentScore} className="w-full h-2 accent-blue-600 cursor-pointer" onChange={e => handleScore(cid, e.target.value)} />
                                     </div>
+                                    
+                                    {c.subCriteria && c.subCriteria.length > 0 && (
+                                        <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2">
+                                            {c.subCriteria.map(sc => {
+                                                const isChecked = subScores[cid]?.[sc.id] || false;
+                                                return (
+                                                    <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50' : 'border-transparent hover:border-gray-100 hover:bg-gray-50'}`}>
+                                                        <input type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0" />
+                                                        <div className="flex flex-col">
+                                                            <span className={`text-sm ${isChecked ? 'text-purple-700 font-semibold' : 'text-gray-700'}`}>{sc.label}</span>
+                                                            <span className="text-xs text-gray-400">Valeur: {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
+                                                            {!isChecked && sc.feedback && touched[cid] && <p className="text-xs text-red-500 mt-1 italic">⚠ {sc.feedback}</p>}
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
                                 </div>
-                                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex items-center">
+                                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center">
                                     <p className="text-sm text-gray-600 italic leading-snug">{descText}</p>
+                                    {c.subCriteria && c.subCriteria.length > 0 && touched[cid] && (() => {
+                                        const missingFeedbacks = c.subCriteria.filter(sc => !subScores[cid]?.[sc.id] && sc.feedback).map(sc => sc.feedback);
+                                        return missingFeedbacks.length > 0 && (
+                                            <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                                                {missingFeedbacks.map((fb, fbI) => <p key={fbI} className="text-xs text-red-500">✗ {fb}</p>)}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                             
@@ -451,7 +530,10 @@ export default function Evaluations() {
                     if (s > 0 || scores[cid] === 0) {
                         if (c.levels && c.levels.length > 0) {
                             const sortedLevels = [...c.levels].sort((a,b) => a.maxPct - b.maxPct);
-                            const matchedLevel = sortedLevels.find(l => pctC <= l.maxPct) || sortedLevels[sortedLevels.length - 1];
+                            let matchedLevel = sortedLevels[0];
+                            for (const lvl of sortedLevels) {
+                                if (pctC >= lvl.maxPct) matchedLevel = lvl;
+                            }
                             descText = matchedLevel.desc || "Score attribué";
                         } else {
                             descText = "Score attribué";
@@ -467,6 +549,22 @@ export default function Evaluations() {
                                     <span className="font-mono font-bold text-gray-900">{s} <span className="text-gray-400 text-xs">/ {c.weight}</span></span>
                                 </div>
                                 <p className="text-xs text-gray-600 mb-1">{descText}</p>
+                                {c.subCriteria && c.subCriteria.length > 0 && (
+                                    <div className="mt-2 space-y-1">
+                                        {c.subCriteria.map(sc => {
+                                            const isChecked = subScores[cid]?.[sc.id] || false;
+                                            return (
+                                                <div key={sc.id}>
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className={`inline-block w-3.5 h-3.5 border rounded-sm flex-shrink-0 text-center leading-3 ${isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 bg-white'}`}>{isChecked ? '✓' : ''}</span>
+                                                        <span className={isChecked ? 'text-gray-800 font-medium' : 'text-gray-400'}>{sc.label} ({sc.pts > 0 ? '+' : ''}{sc.pts} pts)</span>
+                                                    </div>
+                                                    {!isChecked && sc.feedback && <p className="text-xs text-red-500 ml-6 italic mt-0.5">⚠ {sc.feedback}</p>}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                                 {comments[cid] && <div className="mt-1 text-xs text-gray-500 italic">Note: {comments[cid]}</div>}
                             </div>
                         </div>
@@ -480,6 +578,22 @@ export default function Evaluations() {
                     <div className="text-sm leading-relaxed text-gray-700 bg-gray-50 p-4 rounded text-justify whitespace-pre-wrap">{form.generalComment}</div>
                 </div>
             )}
+
+            {/* Rétroaction finale basée sur le pourcentage */}
+            {selectedRubric?.feedbackMessages && selectedRubric.feedbackMessages.length > 0 && (() => {
+                const finalPct = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+                const match = selectedRubric.feedbackMessages.find(fm => finalPct >= fm.minPct && finalPct <= fm.maxPct);
+                if (!match) return null;
+                const msgColor = finalPct < 60 ? 'border-l-red-400 bg-red-50' : finalPct < 75 ? 'border-l-orange-400 bg-orange-50' : finalPct < 85 ? 'border-l-yellow-400 bg-yellow-50' : finalPct < 95 ? 'border-l-blue-400 bg-blue-50' : 'border-l-green-400 bg-green-50';
+                const textColor = finalPct < 60 ? 'text-red-700' : finalPct < 75 ? 'text-orange-700' : finalPct < 85 ? 'text-yellow-700' : finalPct < 95 ? 'text-blue-700' : 'text-green-700';
+                return (
+                    <div className={`mt-8 border-t border-gray-200 pt-6`}>
+                        <div className={`p-4 rounded-lg border-l-4 ${msgColor}`}>
+                            <p className={`text-sm font-semibold ${textColor}`}>{match.message}</p>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
       </div>
     </>

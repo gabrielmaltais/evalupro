@@ -6,6 +6,7 @@ const evaluationSchema = new mongoose.Schema(
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
     date: { type: String, required: true },
     scores: { type: Map, of: Number, default: {} },
+    subScores: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
     comments: { type: Map, of: String, default: {} },
     generalComment: { type: String, default: "" },
     aiSummary: { type: String, default: "" },

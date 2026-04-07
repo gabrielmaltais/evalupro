@@ -18,8 +18,10 @@ const rubricSchema = z.object({
       weight: z.number().nonnegative(),
       color: z.string().optional(),
       levels: z.array(z.object({ label: z.string(), maxPct: z.number().min(0).max(1), desc: z.string() })).optional(),
+      subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional() })).optional(),
     })
   ),
+  feedbackMessages: z.array(z.object({ minPct: z.number(), maxPct: z.number(), message: z.string() })).optional(),
 });
 
 router.use(auth);

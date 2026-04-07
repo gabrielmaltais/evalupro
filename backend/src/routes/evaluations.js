@@ -13,6 +13,7 @@ const schema = z.object({
   studentId: z.string().optional(),
   date: z.string().min(1),
   scores: z.any().optional(),
+  subScores: z.any().optional(),
   comments: z.any().optional(),
   generalComment: z.string().optional(),
   rubric: z.string().min(1),
