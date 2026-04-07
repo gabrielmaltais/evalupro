@@ -21,4 +21,11 @@ app.use("/api/rubrics", rubricRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
 
+// Pour le déploiement monolithique : Servir les fichiers statiques React
+const path = require("path");
+app.use(express.static(path.join(__dirname, "../public")));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public", "index.html"));
+});
+
 module.exports = app;
