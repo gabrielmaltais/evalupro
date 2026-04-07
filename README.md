@@ -1,51 +1,88 @@
-# Migration vers app moderne + MongoDB
+# EvaluPro 🏫
 
-Ce projet contient maintenant:
-- `eval.html`: version legacy statique (reference)
-- `backend/`: API Express + MongoDB + JWT + RBAC
-- `frontend/`: SPA React (Vite) connectee a l'API
+Application web moderne de création de grilles d'évaluation, notation d'étudiants et génération de rapports PDF automatisés. Parfait pour les enseignants, chargé·es de laboratoire et professionnel·les de l'éducation.
 
-## Prerequis
-- Node.js 20+
-- MongoDB local ou Atlas
+## Fonctionnalités 🚀
+- **Grilles dynamiques** : Éditeur de grilles d'évaluation 100% personnalisable.
+- **Micro-cases (Sous-critères)** : Permet de cocher des éléments de validation spécifiques (parfait pour les examens techniques rigoureux).
+- **Génération PDF** : Exportez des rapports PDF clairs, avec notes, rétroactions ciblées et calcul automatique des points.
+- **Rétroaction verbale assistée** : Les points manqués s'affichent automatiquement sous forme d'explications dans le PDF final.
+- **Prêt pour l'IA** : L'app peut exporter des modèles (gabari) JSON stricts pour permettre à une Intelligence Artificielle de faire avancer l'évaluation.
+- **Conteneurisation complète** : Se déploie en 1 seule commande avec Docker (Monolithe : React + Express).
 
-## Configuration
-1. Copier `backend/.env.example` vers `backend/.env` et remplir les valeurs.
-2. Copier `frontend/.env.example` vers `frontend/.env`.
+---
 
-## Lancer en local
-- Backend: `npm run dev:backend`
-- Frontend: `npm run dev:frontend`
+## 🚀 Installation & Déploiement (Production)
 
-## Tests et build
-- Tous les tests: `npm test`
-- Build frontend: `npm run build`
+L'application est conteneurisée et disponible publiquement sur Docker Hub (`gabrielmaltais/evalupro:latest`). Le backend (Node.js/Express) fournit l'API tout en servant statiquement l'interface React.
 
-## API principale
-- Auth: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
-- Rubrics: `GET/POST/PUT/DELETE /api/rubrics`
-- Evaluations: `GET/POST/GET:id/PUT:id/DELETE:id /api/evaluations`
+### Exigences
+- Serveur avec **Docker** et **Docker Compose** d'installés.
 
-## Import legacy
-Script: `backend/scripts/import-legacy.js`
+### Étape 1 : Le fichier Docker Compose
+Sur votre serveur de production, créez un dossier `evalupro` puis ajoutez-y ce fichier `docker-compose.yml` :
 
-Format attendu:
-```json
-{
-  "config": { "courseTitle": "...", "taskTitle": "...", "criteria": [] },
-  "state": { "studentName": "...", "date": "YYYY-MM-DD", "scores": {}, "comments": {}, "generalComment": "..." }
-}
+```yaml
+version: '3.8'
+
+services:
+  evalupro-app:
+    image: gabrielmaltais/evalupro:latest
+    container_name: evalupro_app
+    restart: unless-stopped
+    ports:
+      - "80:4000"
+    environment:
+      - PORT=4000
+      - MONGODB_URI=mongodb://evalupro-db:27017/evalupro
+      - JWT_SECRET=votre_cle_de_securite_super_secrete
+    depends_on:
+      - evalupro-db
+
+  evalupro-db:
+    image: mongo:6-jammy
+    container_name: evalupro_db
+    restart: unless-stopped
+    volumes:
+      - evalupro_mongo_data:/data/db
+
+volumes:
+  evalupro_mongo_data:
 ```
 
-Commande:
-`node backend/scripts/import-legacy.js ./legacy.json`
+🚨 **Important :** N'oubliez pas de modifier la variable `JWT_SECRET` pour une phrase ou structure très longue et aléatoire afin de sécuriser vos sessions.
 
-## Mapping eval.html -> MongoDB
-- `App.config.courseTitle` -> `Rubric.title`
-- `App.config.taskTitle` -> `Rubric.taskTitle`
-- `App.config.criteria[]` -> `Rubric.criteria[]`
-- `App.state.studentName` -> `Evaluation.studentName`
-- `App.state.date` -> `Evaluation.date`
-- `App.state.scores` -> `Evaluation.scores`
-- `App.state.comments` -> `Evaluation.comments`
-- `App.state.generalComment` -> `Evaluation.generalComment`
+### Étape 2 : Démarrage
+
+Dans le même dossier que votre fichier docker-compose, exécutez la commande suivante pour télécharger les images et lancer l'application en arrière-plan :
+
+```bash
+docker-compose up -d
+```
+
+Voilà ! Votre application écoute désormais sur le **port 80** HTTP (vous devriez utiliser un Reverse Proxy comme Nginx Proxy Manager ou Traefik pour y associer un nom de domaine avec SSL/HTTPS).
+
+---
+
+## 🛠 Environnement de développement (Code Source)
+
+Si vous souhaitez modifier l'application en local :
+
+1. Assurez-vous d'avoir Node.js d'installé.
+2. Démarrez un conteneur MongoDB local: `docker run -d -p 27017:27017 mongo`.
+
+**Lancer le backend (API) :**
+```bash
+cd backend
+npm install
+npm run dev
+# L'API s'ouvrira sur http://localhost:4000
+```
+
+**Lancer le frontend (Interface) :**
+```bash
+cd frontend
+npm install
+npm run dev
+# L'interface s'ouvrira sur http://localhost:5173
+```
