@@ -20,7 +20,7 @@ export default function Login() {
       setLoading(false);
       return;
     }
-    if (form.password.length < 8) {
+    if (mode === "register" && form.password.length < 8) {
       setError("Le mot de passe doit contenir au moins 8 caractères.");
       setLoading(false);
       return;
@@ -100,13 +100,13 @@ export default function Login() {
                     <input 
                         type="password" 
                         required 
-                        minLength={8}
+                        minLength={mode === "register" ? 8 : undefined}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                         placeholder="••••••••" 
                         value={form.password} 
                         onChange={(e) => setForm({ ...form, password: e.target.value })} 
                     />
-                    <p className="text-xs text-gray-400 mt-1 mt-2 text-right">Min. 8 caractères</p>
+                    {mode === "register" && <p className="text-xs text-gray-400 mt-2 text-right">Min. 8 caractères</p>}
                 </div>
 
                 {error && (
