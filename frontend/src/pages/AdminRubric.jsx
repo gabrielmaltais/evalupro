@@ -190,7 +190,7 @@ export default function AdminRubric() {
   }
 
   function exportJSON() {
-    const data = { title, taskTitle, version, criteria, isActive };
+    const data = { title, taskTitle, version, criteria, isActive, feedbackMessages };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
     const a = document.createElement('a');
     a.href = dataStr;
@@ -201,63 +201,148 @@ export default function AdminRubric() {
   }
 
   function downloadAITemplate() {
-    const template = {
-      "_INSTRUCTIONS_IA": "Ceci est un gabarit pour générer des grilles d'évaluation. Vous devez conserver cette structure JSON exacte. Ne modifiez pas la structure des champs 'title', 'weight', 'color', 'levels', 'maxPct', 'desc'.",
-      "_DIRECTIVES_NIVEAUX": "Les 'levels' de performance (ex: Insatisfaisant, Bon, Excellent) sont des EXEMPLES. Vous DEVEZ adapter leur quantité et leurs noms au contexte. Si le laboratoire est très technique, on peut avoir juste 2 niveaux (ex: Échec/Réussite). Ajustez maxPct (0 à 1) selon le pourcentage visé.",
-      "_DIRECTIVES_SOUS_CRITERES": "Optionnellement, on peut utiliser des cases à cocher de validation. Ajouter un tableau `subCriteria` avec `{label, pts, id, feedback}`. Le champ 'feedback' est le commentaire qui s'affiche lorsque la case N'EST PAS cochée (pour expliquer ce qui manque ou ce qui a été raté par l'étudiant).",
-      "title": "Nom de ton cours ou du sujet principal",
-      "taskTitle": "Titre spécifique de la tâche ou de l'examen",
-      "criteria": [
-        {
-          "id": "c1",
-          "title": "Nom du critère évalué (Ex: Présentation de la topologie)",
-          "weight": 10,
-          "_weight_comment": "Le nombre de points totaux pour ce critère",
-          "color": "border-blue-500",
-          "_color_options": "Doit être: border-blue-500, border-green-500, border-red-500, border-purple-500, border-orange-500, ou border-gray-500",
-          "levels": [
-            {
-              "label": "Insuffisant / Non Fonctionnel",
-              "maxPct": 0,
-              "desc": "La configuration est absente ou ne fonctionne pas du tout."
-            },
-            {
-              "label": "Partiel",
-              "maxPct": 0.5,
-              "desc": "La configuration est présente mais incomplète ou avec des erreurs."
-            },
-            {
-              "label": "Excellent / Complet",
-              "maxPct": 1,
-              "desc": "La consigne est complétée à 100% avec les bonnes pratiques appliquées."
-            }
-          ],
-          "subCriteria": [
-            {
-              "id": "sc1",
-              "label": "Tâche technique spécifique (ex: Ping fonctionnel)",
-              "pts": 2.5,
-              "feedback": "Le ping entre les machines n'est pas fonctionnel. Vérifiez l'adressage IP et la configuration du pare-feu."
-            },
-            {
-              "id": "sc2",
-              "label": "Respect des conventions de nommage",
-              "pts": 1,
-              "feedback": "Les conventions de nommage ne sont pas respectées. Revoyez les noms des machines, comptes et OU."
-            }
-          ],
-          "_feedback_comment": "Le champ 'feedback' s'affiche quand la case N'EST PAS cochée. Il explique à l'étudiant ce qui lui manque ou ce qu'il a raté. Rédigez-le comme un retour constructif."
-        }
-      ]
+    const cfg = aiConfig;
+    const LABELS = {
+      fr: { title: "Nom du cours ou du sujet principal", taskTitle: "Titre spécifique de la tâche ou du laboratoire", criterionName: "Nom du critère évalué (ex: Configuration NAT)", weight: "Nombre de points pour ce critère", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Point technique précis (ex: Ping fonctionnel entre hôte A et B)", subFeedback: "Le ping entre les machines A et B n'est pas fonctionnel. Vérifiez l'adressage IP et les routes statiques.", feedbackMsg: "Message de rétroaction affiché à l'élève pour cette tranche de score.", promptIntro: "Génère une grille d'évaluation complète en JSON pour le cours/la tâche suivant(e) en respectant STRICTEMENT la structure et les directives du gabarit fourni." },
+      en: { title: "Course Name", taskTitle: "Task or Lab Title", criterionName: "Criterion Name (e.g. NAT Configuration)", weight: "Points for this criterion", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Specific technical task (e.g. Ping functional between Host A and B)", subFeedback: "The ping between machines A and B is not functional. Check IP addressing and static routes.", feedbackMsg: "Feedback message displayed to the student for this score range.", promptIntro: "Generate a complete evaluation rubric JSON for the following course/task, strictly following the structure and directives of this template." },
+      es: { title: "Nombre del Curso", taskTitle: "Título de la Tarea o Laboratorio", criterionName: "Nombre del Criterio (ej: Configuración NAT)", weight: "Puntos para este criterio", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500", subLabel: "Tarea técnica específica (ej: Ping funcional entre Host A y B)", subFeedback: "El ping entre las máquinas A y B no funciona. Verifique el direccionamiento IP y las rutas estáticas.", feedbackMsg: "Mensaje de retroalimentación para el estudiante en este rango de puntaje.", promptIntro: "Genera una grilla de evaluación completa en JSON para el siguiente curso/tarea, siguiendo ESTRICTAMENTE la estructura y directivas de esta plantilla." },
     };
-    
+    const L = LABELS[cfg.langue] || LABELS.fr;
+
+    const PALETTES = { "arc-en-ciel": ["border-blue-500","border-green-500","border-purple-500","border-orange-500","border-red-500","border-gray-500"], "mono": ["border-blue-500"], "chaleur": ["border-red-500","border-orange-500","border-yellow-500"], "cool": ["border-blue-500","border-indigo-500","border-purple-500","border-cyan-500"] };
+    const palette = PALETTES[cfg.palette] || PALETTES["arc-en-ciel"];
+
+    const NIVEAUX = {
+      "2": [{ label: "Échec / Non réussi", maxPct: 0, desc: "Description de ce niveau d'échec" }, { label: "Réussite / Complet", maxPct: 1, desc: "Description de la réussite complète" }],
+      "3": [{ label: "Insuffisant", maxPct: 0, desc: "Absent ou non fonctionnel" }, { label: "Acceptable", maxPct: 0.65, desc: "Présent mais incomplet ou avec erreurs" }, { label: "Excellent", maxPct: 1, desc: "Complet, fonctionnel et conforme aux bonnes pratiques" }],
+      "4": [{ label: "Débutant", maxPct: 0, desc: "Tentative présente mais non fonctionnelle" }, { label: "Intermédiaire", maxPct: 0.5, desc: "Partiellement réalisé avec des erreurs notables" }, { label: "Avancé", maxPct: 0.8, desc: "Bien réalisé avec quelques lacunes mineures" }, { label: "Expert", maxPct: 1, desc: "Parfaitement réalisé, bonnes pratiques respectées" }],
+      "5": [{ label: "Non fonctionnel", maxPct: 0, desc: "Absent ou totalement incorrect" }, { label: "Débutant", maxPct: 0.35, desc: "Présent mais non fonctionnel, erreurs majeures" }, { label: "En développement", maxPct: 0.6, desc: "Partiellement fonctionnel, erreurs significatives" }, { label: "Compétent", maxPct: 0.8, desc: "Fonctionnel avec quelques imperfections" }, { label: "Maître", maxPct: 1, desc: "Parfait, sans erreur, bonnes pratiques appliquées" }],
+    };
+    const niveauxBase = NIVEAUX[cfg.niveaux] || NIVEAUX["3"];
+
+    const TRANCHES = { "3": [[0,60],[60,80],[80,100]], "5": [[0,60],[60,75],[75,85],[85,95],[95,100]], "7": [[0,40],[40,55],[55,65],[65,75],[75,85],[85,93],[93,100]] };
+    const tranches = TRANCHES[cfg.nombreTranches] || TRANCHES["5"];
+
+    const TON = { encourageant: "Encourageant et motivant — valorisez les efforts, 2-3 phrases chaleureuses", formel: "Formel et académique — ton neutre et factuel, 1-2 phrases précises", direct: "Direct et concis — 1 phrase, allez droit au but", verbeux: "Très détaillé — 4-6 phrases, conseils concrets, exemples de révision suggérés" };
+
+    const makeId = (prefix, n) => cfg.idsSemantics ? `${prefix}-[MOT-CLE-${n}]` : `${prefix}${n}`;
+
+    const buildCriterion = (i) => {
+      const levels = niveauxBase.map(nv => ({
+        label: `[${nv.label}] — Nommer ce niveau selon le contexte`,
+        maxPct: nv.maxPct,
+        desc: cfg.inclureExemples
+          ? `${nv.desc}. [EXEMPLE CONCRET AU CONTEXTE : décrivez un comportement, une production ou un résultat observable attendu à ce niveau]`
+          : `${nv.desc}.`,
+      }));
+      const criterion = {
+        id: makeId("c", i + 1),
+        title: `[${L.criterionName}] — Critère ${i + 1}`,
+        weight: Math.round(100 / parseInt(cfg.nbCriteres || 4)),
+        ...(cfg.inclurePonderations ? { "_weight_note": `${L.weight}. Ajustez pour que la somme totale = 100 pts.` } : {}),
+        color: palette[i % palette.length],
+        "_color_options": L.colors,
+        levels,
+      };
+      if (cfg.inclureSousCriteres) {
+        const fbStyle = cfg.sousCritereFeedbackStyle === "verbeux"
+          ? `${L.subFeedback} Vérifiez les étapes : 1) ..., 2) ..., 3) .... Consultez la documentation de référence section [X].`
+          : L.subFeedback;
+        criterion.subCriteria = [
+          { id: makeId("sc", `${i+1}-1`), label: `[${L.subLabel}] — Point technique 1`, pts: 2, ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
+          { id: makeId("sc", `${i+1}-2`), label: `[${L.subLabel}] — Point technique 2`, pts: 1.5, ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
+        ];
+        criterion["_subCriteria_note"] = cfg.sousCritereFeedback
+          ? "Le champ 'feedback' s'affiche quand la case N'EST PAS cochée. Rédigez un commentaire constructif spécifique à l'erreur. 'pts' peut être positif (bonus) ou négatif (pénalité)."
+          : "Ajoutez autant de sous-critères que nécessaire. 'pts' peut être positif (bonus) ou négatif (pénalité).";
+      }
+      return criterion;
+    };
+
+    const nbCriteres = Math.max(1, Math.min(10, parseInt(cfg.nbCriteres) || 4));
+    const criteriaExamples = Array.from({ length: nbCriteres }, (_, i) => buildCriterion(i));
+
+    const feedbackMessages = cfg.inclureFeedbackGlobal ? tranches.map(([min, max]) => ({
+      minPct: min,
+      maxPct: max,
+      message: `[TON: ${TON[cfg.tonFeedback]}] — Niveau ${cfg.niveauEtudiants}. Rédigez un message motivant/explicatif pour un étudiant ayant obtenu entre ${min}% et ${max}%. ${L.feedbackMsg}`,
+    })) : undefined;
+
+    const promptFinal = cfg.genererPrompt ? [
+      L.promptIntro,
+      "",
+      `**Contexte pédagogique** : ${cfg.contexte || "[COMPLÉTEZ : décrivez brièvement le cours, la technologie évaluée ou la tâche demandée]"}`,
+      `**Niveau des étudiants** : ${cfg.niveauEtudiants === "collegial" ? "Niveau collégial / technique" : cfg.niveauEtudiants === "universitaire" ? "Niveau universitaire / avancé" : "Niveau secondaire / débutant"}`,
+      `**Langue de la grille** : ${cfg.langue === "fr" ? "Français" : cfg.langue === "en" ? "Anglais" : "Espagnol"}`,
+      "",
+      "**Exigences de génération** :",
+      `- Générer exactement ${nbCriteres} critères d'évaluation pertinents au contexte`,
+      `- Chaque critère doit avoir exactement ${cfg.niveaux} niveaux de performance`,
+      `- La somme de tous les 'weight' doit être EXACTEMENT 100`,
+      cfg.inclureSousCriteres ? `- Inclure des sous-critères (cases à cocher techniques) pour CHAQUE critère${cfg.sousCritereFeedback ? `, avec un champ 'feedback' constructif de style "${cfg.sousCritereFeedbackStyle}" pour chaque case non cochée` : ""}` : "- Ne pas inclure de champ 'subCriteria'",
+      cfg.inclureFeedbackGlobal ? `- Inclure ${cfg.nombreTranches} messages 'feedbackMessages' couvrant 0% à 100%, ton : ${cfg.tonFeedback}` : "- Ne pas inclure de champ 'feedbackMessages'",
+      `- Palette de couleurs à utiliser : ${L.colors}`,
+      cfg.inclureExemples ? "- Chaque niveau (desc) doit contenir UN EXEMPLE CONCRET et observable lié au contexte" : "",
+      "- Respecter STRICTEMENT la structure JSON du gabarit fourni (noms de champs, types de valeurs)",
+      "",
+      "**CONTRAINTE ABSOLUE** : Retournez UNIQUEMENT le JSON valide, sans texte, sans balises markdown, sans commentaires. Le fichier doit être directement importable dans ÉvaluPro.",
+    ].filter(Boolean).join("\n") : undefined;
+
+    const template = {
+      "_META": {
+        generateur: "ÉvaluPro — Gabarit IA v2.0",
+        version_schema: "2.0",
+        date_generation: new Date().toISOString().slice(0, 10),
+        configuration_utilisee: {
+          langue: cfg.langue,
+          niveaux_par_critere: parseInt(cfg.niveaux),
+          nombre_criteres_demandes: nbCriteres,
+          avec_sous_criteres: cfg.inclureSousCriteres,
+          feedback_sous_criteres: cfg.inclureSousCriteres ? cfg.sousCritereFeedback : false,
+          style_feedback_sc: cfg.inclureSousCriteres && cfg.sousCritereFeedback ? cfg.sousCritereFeedbackStyle : "n/a",
+          avec_retroaction_globale: cfg.inclureFeedbackGlobal,
+          tranches_retroaction: cfg.inclureFeedbackGlobal ? parseInt(cfg.nombreTranches) : 0,
+          ton_retroaction: cfg.inclureFeedbackGlobal ? cfg.tonFeedback : "n/a",
+          niveau_etudiants: cfg.niveauEtudiants,
+          palette: cfg.palette,
+        }
+      },
+      "_INSTRUCTIONS_IA": [
+        "RÈGLE 1 — STRUCTURE : Conservez EXACTEMENT les noms de champs. Supprimez les champs commençant par '_' (ils sont des instructions).",
+        "RÈGLE 2 — IDS : Chaque 'id' doit être UNIQUE dans tout le document. Remplacez les [MOT-CLE] par des noms sémantiques si applicable.",
+        "RÈGLE 3 — MAXPCT : Les valeurs 'maxPct' dans 'levels' vont de 0 à 1 (ex: 0.75 = 75%). Le niveau maximum DOIT avoir maxPct: 1.",
+        "RÈGLE 4 — WEIGHT : La SOMME de tous les 'weight' doit obligatoirement être égale à 100.",
+        "RÈGLE 5 — COULEURS : Utilisez UNIQUEMENT les valeurs autorisées pour 'color' (voir _color_options).",
+        "RÈGLE 6 — FEEDBACK SC : Le champ 'feedback' dans subCriteria s'affiche quand la case N'EST PAS cochée. Soyez précis et constructif.",
+        "RÈGLE 7 — FEEDBACK GLOBAL : Les 'feedbackMessages' couvrent de 0 à 100%. Les plages ne doivent pas se chevaucher.",
+        "RÈGLE 8 — CONTENU : Remplacez TOUS les textes entre crochets [ ] par de vraies valeurs contextuelles.",
+        "RÈGLE 9 — COHÉRENCE : Les niveaux de performance doivent être progressifs et cohérents entre tous les critères.",
+        "RÈGLE 10 — SORTIE : Retournez UNIQUEMENT le JSON (title, taskTitle, criteria, feedbackMessages si applicable). Sans les champs _META, _INSTRUCTIONS_IA, _SCHEMA_VALIDATION, _PROMPT.",
+      ],
+      "_SCHEMA_VALIDATION": {
+        champs_requis_racine: ["title", "taskTitle", "criteria"],
+        champs_requis_critere: ["id", "title", "weight", "color", "levels"],
+        champs_requis_niveau: ["label", "maxPct", "desc"],
+        champs_optionnels_critere: cfg.inclureSousCriteres ? ["subCriteria"] : [],
+        couleurs_valides: ["border-blue-500","border-green-500","border-red-500","border-purple-500","border-orange-500","border-gray-500","border-indigo-500","border-cyan-500","border-yellow-500"],
+        maxPct_plage: [0, 1],
+        weight_total_attendu: 100,
+      },
+      title: L.title,
+      taskTitle: L.taskTitle,
+      criteria: criteriaExamples,
+      ...(feedbackMessages ? { feedbackMessages } : {}),
+      ...(promptFinal ? { "_PROMPT_PRET_A_UTILISER": promptFinal } : {}),
+    };
+
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(template, null, 2));
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = dataStr;
-    a.download = `Gabarit_Intelligence_Artificielle.json`;
+    a.download = `Gabarit_IA_EvaluPro_${cfg.langue}_${cfg.niveaux}niv.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setShowAIModal(false);
   }
 
   function handleImportJSON(e) {
@@ -273,6 +358,9 @@ export default function AdminRubric() {
           setCriteria(json.criteria);
           setVersion(1);
           setSelectedId(null);
+          if (json.feedbackMessages && Array.isArray(json.feedbackMessages) && json.feedbackMessages.length > 0) {
+            setFeedbackMessages(json.feedbackMessages);
+          }
           setSuccess("Grille importée ! Modifiez-la si besoin, puis Enregistrez.");
           setError("");
         } else {
@@ -281,7 +369,7 @@ export default function AdminRubric() {
       } catch (err) {
         setError("Erreur de lecture du fichier JSON.");
       }
-      e.target.value = null; // reset input
+      e.target.value = null;
     };
     reader.readAsText(file);
   }
@@ -333,7 +421,7 @@ export default function AdminRubric() {
             <button onClick={exportJSON} className="bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Exporter en JSON">
                 <i className="fa-solid fa-download"></i>
             </button>
-            <button onClick={downloadAITemplate} className="bg-white text-purple-600 border border-purple-200 hover:bg-purple-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Gabarit vierge avec instructions pour l'IA">
+            <button onClick={() => setShowAIModal(true)} className="bg-white text-purple-600 border border-purple-200 hover:bg-purple-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Configurer et télécharger un gabarit IA">
                 <i className="fa-solid fa-robot"></i>
             </button>
           </div>
@@ -520,6 +608,176 @@ export default function AdminRubric() {
           </div>
         </div>
       </main>
+
+      {/* AI TEMPLATE MODAL */}
+      {showAIModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={(e) => e.target === e.currentTarget && setShowAIModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-robot text-purple-600"></i> Configurateur de Gabarit IA</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Personnalisez les options pour générer un gabarit JSON optimal</p>
+              </div>
+              <button onClick={() => setShowAIModal(false)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+
+              {/* Contexte */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2"><i className="fa-solid fa-book-open mr-1 text-blue-500"></i> Contexte pédagogique (optionnel)</label>
+                <textarea rows={2} placeholder="Ex: Laboratoire de configuration NAT/PAT sur routeurs Cisco, niveau 2e année techniques informatique" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400 resize-none" value={aiConfig.contexte} onChange={e => setAiConfig({...aiConfig, contexte: e.target.value})} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Langue */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🌐 Langue du gabarit</label>
+                  <div className="flex gap-2">
+                    {[["fr","🇫🇷 Français"],["en","🇬🇧 English"],["es","🇪🇸 Español"]].map(([v,l]) => (
+                      <button key={v} onClick={() => setAiConfig({...aiConfig, langue: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.langue === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Niveau étudiants */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎓 Niveau des étudiants</label>
+                  <div className="flex gap-2">
+                    {[["secondaire","Secondaire"],["collegial","Collégial"],["universitaire","Universitaire"]].map(([v,l]) => (
+                      <button key={v} onClick={() => setAiConfig({...aiConfig, niveauEtudiants: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.niveauEtudiants === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Niveaux */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">📊 Niveaux de performance</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[["2","2 — Échec/Réussite"],["3","3 — Standard"],["4","4 — Graduel"],["5","5 — Granulaire"]].map(([v,l]) => (
+                      <button key={v} onClick={() => setAiConfig({...aiConfig, niveaux: v})} className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-all text-left ${aiConfig.niveaux === v ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Nb critères */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🔢 Nombre de critères à générer</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {["2","3","4","5","6","8"].map(v => (
+                      <button key={v} onClick={() => setAiConfig({...aiConfig, nbCriteres: v})} className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${aiConfig.nbCriteres === v ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'}`}>{v}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sous-critères */}
+              <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-bold text-gray-700">✅ Sous-critères (cases à cocher techniques)</label>
+                  <button onClick={() => setAiConfig({...aiConfig, inclureSousCriteres: !aiConfig.inclureSousCriteres})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiConfig.inclureSousCriteres ? 'bg-purple-600' : 'bg-gray-300'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureSousCriteres ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                {aiConfig.inclureSousCriteres && (
+                  <div className="space-y-2 pl-2 border-l-2 border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">Inclure un feedback par sous-critère non coché</span>
+                      <button onClick={() => setAiConfig({...aiConfig, sousCritereFeedback: !aiConfig.sousCritereFeedback})} className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${aiConfig.sousCritereFeedback ? 'bg-purple-500' : 'bg-gray-300'}`}>
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${aiConfig.sousCritereFeedback ? 'translate-x-5' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                    {aiConfig.sousCritereFeedback && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Style du feedback :</p>
+                        <div className="flex gap-2">
+                          {[["court","Court (1 phrase)"],["verbeux","Détaillé (2-3 phrases)"]].map(([v,l]) => (
+                            <button key={v} onClick={() => setAiConfig({...aiConfig, sousCritereFeedbackStyle: v})} className={`flex-1 py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.sousCritereFeedbackStyle === v ? 'bg-purple-100 text-purple-700 border-purple-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Rétroaction globale */}
+              <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-bold text-gray-700">💬 Rétroactions globales (feedbackMessages)</label>
+                  <button onClick={() => setAiConfig({...aiConfig, inclureFeedbackGlobal: !aiConfig.inclureFeedbackGlobal})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiConfig.inclureFeedbackGlobal ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureFeedbackGlobal ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                {aiConfig.inclureFeedbackGlobal && (
+                  <div className="space-y-3 pl-2 border-l-2 border-blue-200">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Nombre de tranches :</p>
+                      <div className="flex gap-2">
+                        {[["3","3 tranches"],["5","5 tranches"],["7","7 tranches"]].map(([v,l]) => (
+                          <button key={v} onClick={() => setAiConfig({...aiConfig, nombreTranches: v})} className={`flex-1 py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.nombreTranches === v ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Ton de la rétroaction :</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[["encourageant","😊 Encourageant"],["formel","📋 Formel"],["direct","⚡ Direct"],["verbeux","📝 Verbeux"]].map(([v,l]) => (
+                          <button key={v} onClick={() => setAiConfig({...aiConfig, tonFeedback: v})} className={`py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.tonFeedback === v ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Options avancées */}
+              <div>
+                <p className="text-xs font-bold text-gray-600 uppercase mb-2">⚙️ Options avancées</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["inclurePonderations","Inclure note sur les poids"],
+                    ["inclureExemples","Exemples concrets dans les niveaux"],
+                    ["idsSemantics","IDs sémantiques (ex: c-nat-1)"],
+                    ["genererPrompt","Générer le prompt prêt-à-copier"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
+                      <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-4 h-4 rounded text-purple-600 accent-purple-600" />
+                      <span className="text-xs text-gray-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Palette couleurs */}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎨 Palette de couleurs</label>
+                <div className="flex gap-2">
+                  {[["arc-en-ciel","🌈 Arc-en-ciel"],["mono","🔵 Monotone"],["chaleur","🔥 Chaleur"],["cool","❄️ Cool"]].map(([v,l]) => (
+                    <button key={v} onClick={() => setAiConfig({...aiConfig, palette: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.palette === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
+              <div className="text-xs text-gray-400">
+                <i className="fa-solid fa-circle-info mr-1"></i>
+                {parseInt(aiConfig.nbCriteres)} critères · {aiConfig.niveaux} niveaux
+                {aiConfig.inclureSousCriteres ? " · Sous-critères" : ""}
+                {aiConfig.inclureFeedbackGlobal ? ` · ${aiConfig.nombreTranches} rétroactions` : ""}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowAIModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">Annuler</button>
+                <button onClick={downloadAITemplate} className="px-6 py-2 text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow transition flex items-center gap-2">
+                  <i className="fa-solid fa-download"></i> Télécharger le gabarit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
