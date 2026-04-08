@@ -41,6 +41,9 @@ export default function AdminRubric() {
   // AI Modal state
   const [showAIModal, setShowAIModal] = useState(false);
   const [showAIAdvanced, setShowAIAdvanced] = useState(false);
+  const [aiCopySuccess, setAiCopySuccess] = useState(false);
+  const [showPasteJsonModal, setShowPasteJsonModal] = useState(false);
+  const [pastedJsonText, setPastedJsonText] = useState("");
   const [aiConfig, setAiConfig] = useState({
     langue: "fr",
     niveaux: "3",
@@ -204,7 +207,7 @@ export default function AdminRubric() {
     a.remove();
   }
 
-  function downloadAITemplate() {
+  function buildAITemplate() {
     const cfg = aiConfig;
     const LABELS = {
       fr: { title: "Nom du cours ou du sujet principal", taskTitle: "Titre spécifique de la tâche ou du laboratoire", criterionName: "Nom du critère évalué (ex: Configuration NAT)", weight: "Nombre de points pour ce critère", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Point technique précis (ex: Ping fonctionnel entre hôte A et B)", subFeedback: "Le ping entre les machines A et B n'est pas fonctionnel. Vérifiez l'adressage IP et les routes statiques.", feedbackMsg: "Message de rétroaction affiché à l'élève pour cette tranche de score.", promptIntro: "Génère une grille d'évaluation complète en JSON pour le cours/la tâche suivant(e) en respectant STRICTEMENT la structure et les directives du gabarit fourni." },
@@ -303,7 +306,7 @@ export default function AdminRubric() {
       "**CONTRAINTE ABSOLUE** : Retournez UNIQUEMENT le JSON valide, sans texte, sans balises markdown, sans commentaires. Le fichier doit être directement importable dans ÉvaluPro.",
     ].filter(Boolean).join("\n") : undefined;
 
-    const template = {
+    return {
       "_META": {
         generateur: "ÉvaluPro — Gabarit IA v2.0",
         version_schema: "2.0",
@@ -351,7 +354,11 @@ export default function AdminRubric() {
       ...(feedbackMessages ? { feedbackMessages } : {}),
       ...(promptFinal ? { "_PROMPT_PRET_A_UTILISER": promptFinal } : {}),
     };
+  }
 
+  function downloadAITemplate() {
+    const cfg = aiConfig;
+    const template = buildAITemplate();
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(template, null, 2));
     const a = document.createElement("a");
     a.href = dataStr;
@@ -362,6 +369,37 @@ export default function AdminRubric() {
     setShowAIModal(false);
   }
 
+  async function copyAITemplateToClipboard() {
+    try {
+      const template = buildAITemplate();
+      await navigator.clipboard.writeText(JSON.stringify(template, null, 2));
+      setAiCopySuccess(true);
+      setTimeout(() => setAiCopySuccess(false), 2200);
+      setSuccess("Gabarit IA copié dans le presse-papiers.");
+      setError("");
+    } catch (_e) {
+      setError("Impossible de copier automatiquement. Vérifiez les permissions du navigateur.");
+    }
+  }
+
+  function applyImportedRubric(json) {
+    if (json.criteria && Array.isArray(json.criteria)) {
+      setTitle(json.title || json.courseTitle || "Grille Importée");
+      setTaskTitle(json.taskTitle || "Travail Final");
+      setCriteria(json.criteria);
+      setVersion(1);
+      setSelectedId(null);
+      if (json.feedbackMessages && Array.isArray(json.feedbackMessages) && json.feedbackMessages.length > 0) {
+        setFeedbackMessages(json.feedbackMessages);
+      }
+      setSuccess("Grille importée ! Modifiez-la si besoin, puis Enregistrez.");
+      setError("");
+      return true;
+    }
+    setError("Le JSON ne contient pas de critères valides.");
+    return false;
+  }
+
   function handleImportJSON(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -369,26 +407,26 @@ export default function AdminRubric() {
     reader.onload = (evt) => {
       try {
         const json = JSON.parse(evt.target.result);
-        if (json.criteria && Array.isArray(json.criteria)) {
-          setTitle(json.title || json.courseTitle || "Grille Importée");
-          setTaskTitle(json.taskTitle || "Travail Final");
-          setCriteria(json.criteria);
-          setVersion(1);
-          setSelectedId(null);
-          if (json.feedbackMessages && Array.isArray(json.feedbackMessages) && json.feedbackMessages.length > 0) {
-            setFeedbackMessages(json.feedbackMessages);
-          }
-          setSuccess("Grille importée ! Modifiez-la si besoin, puis Enregistrez.");
-          setError("");
-        } else {
-          setError("Le fichier JSON ne contient pas de critères valides.");
-        }
-      } catch (err) {
+        applyImportedRubric(json);
+      } catch (_err) {
         setError("Erreur de lecture du fichier JSON.");
       }
       e.target.value = null;
     };
     reader.readAsText(file);
+  }
+
+  function importFromPastedJson() {
+    try {
+      const json = JSON.parse(pastedJsonText);
+      const ok = applyImportedRubric(json);
+      if (ok) {
+        setShowPasteJsonModal(false);
+        setPastedJsonText("");
+      }
+    } catch (_e) {
+      setError("JSON invalide. Vérifiez la syntaxe avant d'importer.");
+    }
   }
 
   const totalPoints = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
@@ -436,6 +474,9 @@ export default function AdminRubric() {
                 <i className="fa-solid fa-upload"></i>
                 <input type="file" className="hidden" accept=".json" onChange={handleImportJSON} />
             </label>
+            <button type="button" onClick={() => setShowPasteJsonModal(true)} className="bg-white text-teal-600 border border-teal-200 hover:bg-teal-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Coller un JSON">
+                <i className="fa-solid fa-paste"></i>
+            </button>
             <button onClick={exportJSON} className="bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Exporter en JSON">
                 <i className="fa-solid fa-download"></i>
             </button>
@@ -820,10 +861,43 @@ export default function AdminRubric() {
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setShowAIModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">Annuler</button>
+                <button onClick={copyAITemplateToClipboard} className={`px-4 py-2 text-sm font-semibold text-white rounded-lg shadow transition flex items-center gap-2 ${aiCopySuccess ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
+                  <i className={`fa-solid ${aiCopySuccess ? "fa-check" : "fa-copy"}`}></i>
+                  {aiCopySuccess ? "Copié !" : "Copier le JSON"}
+                </button>
                 <button onClick={downloadAITemplate} className="px-6 py-2 text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow transition flex items-center gap-2">
                   <i className="fa-solid fa-download"></i> Télécharger le gabarit
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPasteJsonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={(e) => e.target === e.currentTarget && setShowPasteJsonModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-paste text-teal-600"></i> Importer un JSON collé</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Collez le contenu JSON complet de votre grille.</p>
+              </div>
+              <button onClick={() => setShowPasteJsonModal(false)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fa-solid fa-xmark"></i></button>
+            </div>
+            <div className="p-6">
+              <textarea
+                rows={12}
+                value={pastedJsonText}
+                onChange={(e) => setPastedJsonText(e.target.value)}
+                placeholder='{"title":"...","taskTitle":"...","criteria":[...]}'
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-teal-400"
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl">
+              <button onClick={() => setShowPasteJsonModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">Annuler</button>
+              <button onClick={importFromPastedJson} className="px-5 py-2 text-sm font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow transition flex items-center gap-2">
+                <i className="fa-solid fa-file-import"></i> Importer ce JSON
+              </button>
             </div>
           </div>
         </div>
