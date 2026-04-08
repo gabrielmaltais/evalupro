@@ -9,9 +9,7 @@ services:
       - evalupro_mongo_data:/data/db
 
   evalupro-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: gabrielmaltais/evalupro:latest
     container_name: evalupro_app
     restart: unless-stopped
     ports:
