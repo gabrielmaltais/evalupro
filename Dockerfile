@@ -5,7 +5,7 @@ COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
 # We don't need a specific API URL because the backend will serve the frontend from the same origin
-ENV VITE_API_URL="/api"
+ENV VITE_API_URL=""
 RUN npm run build
 
 # Step 2: Build Backend
