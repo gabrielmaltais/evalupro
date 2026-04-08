@@ -29,9 +29,24 @@ async function request(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+
+  // Token invalide ou expiré → déconnexion automatique
+  if (response.status === 401 && path !== "/api/auth/login") {
+    localStorage.removeItem("token");
+    localStorage.removeItem("eval_token");
+    window.location.href = "/login";
+    return;
+  }
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Erreur API");
+    let errorMsg = "Erreur API";
+    try {
+      const data = await response.json();
+      errorMsg = data.message || errorMsg;
+    } catch {
+      errorMsg = await response.text() || errorMsg;
+    }
+    throw new Error(errorMsg);
   }
   if (response.status === 204) return null;
   return response.json();
