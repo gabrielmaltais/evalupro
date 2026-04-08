@@ -2,7 +2,7 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const { z } = require("zod");
 const User = require("../models/User");
-const auth = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -34,7 +34,7 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+    const { email, password } = z.object({ email: z.string().min(1), password: z.string().min(1) }).parse(req.body);
     const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ message: "Identifiants invalides" });

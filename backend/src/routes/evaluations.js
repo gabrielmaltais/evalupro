@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const Evaluation = require("../models/Evaluation");
 const Rubric = require("../models/Rubric");
-const auth = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
 const { generateSummary } = require("../services/gemini");
 
 const router = express.Router();

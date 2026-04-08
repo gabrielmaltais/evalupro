@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const Rubric = require("../models/Rubric");
-const auth = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 
 const router = express.Router();
