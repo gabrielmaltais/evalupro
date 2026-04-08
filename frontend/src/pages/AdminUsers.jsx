@@ -65,21 +65,21 @@ export default function AdminUsers() {
     <div className="bg-gray-100 dm-bg min-h-screen text-gray-800 dm-text-primary font-sans flex flex-col">
       <header className="bg-white dm-header shadow-sm sticky top-0 z-30 border-b border-gray-200 dm-border">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-indigo-600 text-white p-2 rounded-lg">
-              <i className="fa-solid fa-user-shield text-xl"></i>
+          <div className="flex items-center gap-2 sm:gap-4 truncate mr-2">
+            <div className="bg-indigo-600 text-white p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+              <i className="fa-solid fa-user-shield text-lg sm:text-xl"></i>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 dm-text-primary leading-tight">Gestion des Utilisateurs</h1>
-              <p className="text-xs text-gray-500 dm-text-secondary font-medium uppercase tracking-wide">Rôles &amp; Comptes</p>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-lg font-bold text-gray-900 dm-text-primary leading-tight truncate">Gestion des Utilisateurs</h1>
+              <p className="hidden sm:block text-xs text-gray-500 dm-text-secondary font-medium uppercase tracking-wide">Rôles &amp; Comptes</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Link to="/evaluations" className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
-              <i className="fa-solid fa-arrow-left mr-2"></i>Retour
+          <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+            <Link to="/evaluations" className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors flex items-center">
+              <i className="fa-solid fa-arrow-left sm:mr-2"></i><span className="hidden sm:inline">Retour</span>
             </Link>
             <DarkToggle />
-            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
+            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-1.5 sm:p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
               <i className="fa-solid fa-right-from-bracket text-lg"></i>
             </button>
           </div>

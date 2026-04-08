@@ -248,13 +248,13 @@ export default function Evaluations() {
   return (
     <>
       <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 text-white p-2 rounded-lg">
-              <i className="fa-solid fa-graduation-cap text-xl"></i>
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4 truncate mr-2">
+            <div className="bg-blue-600 text-white p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+              <i className="fa-solid fa-graduation-cap text-lg sm:text-xl"></i>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight truncate">
+            <div className="min-w-0 hidden sm:block">
+              <h1 className="text-sm sm:text-lg font-bold text-gray-900 leading-tight truncate">
                 {selectedRubric ? (selectedRubric.taskTitle || "Sans Titre") : "ÉvaluPro"}
               </h1>
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">
@@ -263,8 +263,8 @@ export default function Evaluations() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <select value={form.rubric} onChange={e => setForm({ ...form, rubric: e.target.value })} className="border border-gray-300 rounded px-2 py-1 text-sm outline-none">
+          <div className="flex items-center gap-2 sm:gap-6 flex-shrink-0">
+            <select value={form.rubric} onChange={e => setForm({ ...form, rubric: e.target.value })} className="max-w-[120px] sm:max-w-xs border border-gray-300 rounded px-1 sm:px-2 py-1 text-xs sm:text-sm outline-none truncate">
               <option value="">-- Choisir une grille --</option>
               {rubrics.map(r => <option key={r._id} value={r._id}>{r.taskTitle || r.title} (v{r.version})</option>)}
             </select>
@@ -272,20 +272,20 @@ export default function Evaluations() {
               <span className="block text-xs text-gray-400 font-semibold uppercase">Total Possible</span>
               <span className="text-lg font-bold text-blue-600">{totalMax} Pts</span>
             </div>
-            <Link to="/admin/students" className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-full transition-colors" title="Liste des Étudiants">
-              <i className="fa-solid fa-users text-xl"></i>
+            <Link to="/admin/students" className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-full transition-colors" title="Liste des Étudiants">
+              <i className="fa-solid fa-users text-lg sm:text-xl"></i>
             </Link>
-            <Link to="/admin/rubrics" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Paramètres (Grilles)">
-              <i className="fa-solid fa-cog text-xl"></i>
+            <Link to="/admin/rubrics" className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Paramètres (Grilles)">
+              <i className="fa-solid fa-cog text-lg sm:text-xl"></i>
             </Link>
             {getUserFromToken()?.role === "admin" && (
-              <Link to="/admin/users" className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors ml-2" title="Gestion des Utilisateurs">
-                  <i className="fa-solid fa-user-shield text-xl"></i>
+              <Link to="/admin/users" className="p-1.5 sm:p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors sm:ml-2" title="Gestion des Utilisateurs">
+                  <i className="fa-solid fa-user-shield text-lg sm:text-xl"></i>
               </Link>
             )}
             <DarkToggle />
-            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href = "/login"; }} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
-              <i className="fa-solid fa-right-from-bracket text-xl"></i>
+            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href = "/login"; }} className="p-1.5 sm:p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
+              <i className="fa-solid fa-right-from-bracket text-lg sm:text-xl"></i>
             </button>
           </div>
         </div>
