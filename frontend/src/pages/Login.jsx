@@ -84,9 +84,9 @@ export default function Login() {
                 )}
                 
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Adresse Email</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Identifiant ou Email</label>
                     <input 
-                        type="email" 
+                        type="text" 
                         required 
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                         placeholder="vous@exemple.com" 
