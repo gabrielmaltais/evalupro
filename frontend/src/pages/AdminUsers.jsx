@@ -1,27 +1,35 @@
 import { useState, useEffect } from "react";
 import { api, getUserFromToken } from "../lib/api";
-import { Link } from "react-router-dom";
-import DarkToggle from "../components/DarkToggle";
+import PageHeader from "../components/PageHeader";
+import TopPageMenu from "../components/TopPageMenu";
 
 export default function AdminUsers() {
   const user = getUserFromToken() || { _id: "" };
+  const [activeTab, setActiveTab] = useState("users");
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [smtpForm, setSmtpForm] = useState({
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    password: "",
+    fromName: "EvaluPro",
+    fromEmail: "",
+    isActive: true,
+  });
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingSmtp, setLoadingSmtp] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
 
   async function fetchUsers() {
     try {
       const data = await api.getUsers();
       setUsers(data);
-      setLoading(false);
+      setLoadingUsers(false);
     } catch (err) {
       setError(err.message || "Impossible de charger les utilisateurs.");
-      setLoading(false);
+      setLoadingUsers(false);
     }
   }
 
@@ -59,83 +67,188 @@ export default function AdminUsers() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Chargement des utilisateurs...</div>;
+  async function saveSmtpConfig() {
+    setError("");
+    setSuccess("");
+    try {
+      await api.updateSmtpConfig({
+        host: smtpForm.host,
+        port: Number(smtpForm.port),
+        secure: !!smtpForm.secure,
+        user: smtpForm.user,
+        password: smtpForm.password || undefined,
+        fromName: smtpForm.fromName,
+        fromEmail: smtpForm.fromEmail,
+        isActive: !!smtpForm.isActive,
+      });
+      setSmtpForm((prev) => ({ ...prev, password: "" }));
+      setSuccess("Configuration SMTP enregistrée.");
+    } catch (err) {
+      setError(err.message || "Erreur d'enregistrement SMTP.");
+    }
+  }
+
+  async function testSmtpConfig() {
+    setError("");
+    setSuccess("");
+    try {
+      await api.testSmtpConfig({
+        host: smtpForm.host,
+        port: Number(smtpForm.port),
+        secure: !!smtpForm.secure,
+        user: smtpForm.user,
+        password: smtpForm.password,
+        fromName: smtpForm.fromName,
+        fromEmail: smtpForm.fromEmail,
+        isActive: !!smtpForm.isActive,
+      });
+      setSuccess("Connexion SMTP valide.");
+    } catch (err) {
+      setError(err.message || "Test SMTP échoué.");
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const [usersData, smtpData] = await Promise.all([
+          api.getUsers(),
+          api.getSmtpConfig(),
+        ]);
+
+        if (!isMounted) return;
+
+        setUsers(usersData);
+        if (smtpData?.config) {
+          setSmtpForm((prev) => ({ ...prev, ...smtpData.config, password: "" }));
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || "Impossible de charger la page d'administration.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingUsers(false);
+          setLoadingSmtp(false);
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (loadingUsers && loadingSmtp) return <div className="p-8 text-center text-gray-500">Chargement administration...</div>;
 
   return (
     <div className="bg-gray-100 dm-bg min-h-screen text-gray-800 dm-text-primary font-sans flex flex-col">
-      <header className="bg-white dm-header shadow-sm sticky top-0 z-30 border-b border-gray-200 dm-border">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4 truncate mr-2">
-            <div className="bg-indigo-600 text-white p-1.5 sm:p-2 rounded-lg flex-shrink-0">
-              <i className="fa-solid fa-user-shield text-lg sm:text-xl"></i>
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-sm sm:text-lg font-bold text-gray-900 dm-text-primary leading-tight truncate">Gestion des Utilisateurs</h1>
-              <p className="hidden sm:block text-xs text-gray-500 dm-text-secondary font-medium uppercase tracking-wide">Rôles &amp; Comptes</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
-            <Link to="/evaluations" className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors flex items-center">
-              <i className="fa-solid fa-arrow-left sm:mr-2"></i><span className="hidden sm:inline">Retour</span>
-            </Link>
-            <DarkToggle />
-            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-1.5 sm:p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
-              <i className="fa-solid fa-right-from-bracket text-lg"></i>
-            </button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        icon="fa-screwdriver-wrench"
+        iconBgClass="bg-indigo-600"
+        title="Administration"
+        subtitle="Utilisateurs et SMTP"
+      />
+      <TopPageMenu />
       <main className="flex-grow max-w-5xl mx-auto w-full py-8 px-4">
 
       {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
       {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-check-circle mr-2"></i>{success}</div>}
 
-      <div className="bg-white dm-surface rounded-xl shadow-sm border border-gray-100 dm-border overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 border-b border-gray-100 text-gray-600 uppercase text-xs">
-            <tr>
-              <th className="px-6 py-4 font-semibold">Nom</th>
-              <th className="px-6 py-4 font-semibold">Email (Identifiant)</th>
-              <th className="px-6 py-4 font-semibold">Date d'inscription</th>
-              <th className="px-6 py-4 font-semibold text-center">Rôle</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {users.map((u) => (
-              <tr key={u._id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 font-medium text-gray-800">{u.name} {u._id === user._id && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Vous</span>}</td>
-                <td className="px-6 py-4 text-gray-500">{u.email}</td>
-                <td className="px-6 py-4 text-gray-500">{new Date(u.createdAt).toLocaleDateString()}</td>
-                <td className="px-6 py-4 text-center">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {u.role === 'admin' ? 'Administrateur' : 'Professeur'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <button 
-                    onClick={() => toggleRole(u)} 
-                    disabled={u._id === user._id}
-                    title={u.role === 'admin' ? "Rétrograder en Professeur" : "Promouvoir Administrateur"}
-                    className={`mr-3 p-2 rounded transition-colors ${u._id === user._id ? 'opacity-50 cursor-not-allowed text-gray-400' : 'text-blue-500 hover:bg-blue-50'}`}
-                  >
-                    <i className={`fa-solid ${u.role === 'admin' ? 'fa-arrow-down' : 'fa-arrow-up'}`}></i>
-                  </button>
-                  <button 
-                    onClick={() => deleteUser(u)} 
-                    disabled={u._id === user._id}
-                    title="Supprimer définitivement"
-                    className={`p-2 rounded transition-colors ${u._id === user._id ? 'opacity-50 cursor-not-allowed text-gray-400' : 'text-red-500 hover:bg-red-50'}`}
-                  >
-                    <i className="fa-solid fa-trash-can"></i>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {users.length === 0 && <div className="p-8 text-center text-gray-500 italic">Aucun utilisateur trouvé.</div>}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-2 mb-4">
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setActiveTab("users")} className={`px-3 py-2 rounded-lg text-sm border ${activeTab === "users" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200"}`}>
+            Utilisateurs
+          </button>
+          <button onClick={() => setActiveTab("smtp")} className={`px-3 py-2 rounded-lg text-sm border ${activeTab === "smtp" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200"}`}>
+            SMTP
+          </button>
+        </div>
       </div>
+
+      {activeTab === "users" && (
+        <div className="bg-white dm-surface rounded-xl shadow-sm border border-gray-100 dm-border overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100 text-gray-600 uppercase text-xs">
+              <tr>
+                <th className="px-6 py-4 font-semibold">Nom</th>
+                <th className="px-6 py-4 font-semibold">Email (Identifiant)</th>
+                <th className="px-6 py-4 font-semibold">Date d'inscription</th>
+                <th className="px-6 py-4 font-semibold text-center">Rôle</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {users.map((u) => (
+                <tr key={u._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-gray-800">{u.name} {u._id === user._id && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Vous</span>}</td>
+                  <td className="px-6 py-4 text-gray-500">{u.email}</td>
+                  <td className="px-6 py-4 text-gray-500">{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${u.role === "admin" ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-600"}`}>
+                      {u.role === "admin" ? "Administrateur" : "Professeur"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => toggleRole(u)}
+                      disabled={u._id === user._id}
+                      title={u.role === "admin" ? "Rétrograder en Professeur" : "Promouvoir Administrateur"}
+                      className={`mr-3 p-2 rounded transition-colors ${u._id === user._id ? "opacity-50 cursor-not-allowed text-gray-400" : "text-blue-500 hover:bg-blue-50"}`}
+                    >
+                      <i className={`fa-solid ${u.role === "admin" ? "fa-arrow-down" : "fa-arrow-up"}`}></i>
+                    </button>
+                    <button
+                      onClick={() => deleteUser(u)}
+                      disabled={u._id === user._id}
+                      title="Supprimer définitivement"
+                      className={`p-2 rounded transition-colors ${u._id === user._id ? "opacity-50 cursor-not-allowed text-gray-400" : "text-red-500 hover:bg-red-50"}`}
+                    >
+                      <i className="fa-solid fa-trash-can"></i>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {users.length === 0 && <div className="p-8 text-center text-gray-500 italic">Aucun utilisateur trouvé.</div>}
+        </div>
+      )}
+
+      {activeTab === "smtp" && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="text-sm">Host
+              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.host} onChange={(e) => setSmtpForm({ ...smtpForm, host: e.target.value })} />
+            </label>
+            <label className="text-sm">Port
+              <input type="number" className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.port} onChange={(e) => setSmtpForm({ ...smtpForm, port: e.target.value })} />
+            </label>
+            <label className="text-sm">Utilisateur SMTP
+              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.user} onChange={(e) => setSmtpForm({ ...smtpForm, user: e.target.value })} />
+            </label>
+            <label className="text-sm">Mot de passe SMTP
+              <input type="password" className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.password} onChange={(e) => setSmtpForm({ ...smtpForm, password: e.target.value })} placeholder="Laisser vide pour conserver l'existant" />
+            </label>
+            <label className="text-sm">Nom expéditeur
+              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.fromName} onChange={(e) => setSmtpForm({ ...smtpForm, fromName: e.target.value })} />
+            </label>
+            <label className="text-sm">Email expéditeur
+              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.fromEmail} onChange={(e) => setSmtpForm({ ...smtpForm, fromEmail: e.target.value })} />
+            </label>
+          </div>
+          <div className="flex gap-6 text-sm">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={smtpForm.secure} onChange={(e) => setSmtpForm({ ...smtpForm, secure: e.target.checked })} />Connexion sécurisée (SSL/TLS)</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={smtpForm.isActive} onChange={(e) => setSmtpForm({ ...smtpForm, isActive: e.target.checked })} />Configuration active</label>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={testSmtpConfig} className="px-4 py-2 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50">Tester la connexion</button>
+            <button type="button" onClick={saveSmtpConfig} className="px-5 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Enregistrer</button>
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );

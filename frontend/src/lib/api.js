@@ -41,8 +41,11 @@ async function request(path, options = {}) {
   if (!response.ok) {
     let errorMsg = "Erreur API";
     try {
-      const data = await response.json();
+      const data = await response.clone().json();
       errorMsg = data.message || errorMsg;
+      if (data.details) {
+        errorMsg = `${errorMsg} (${data.details})`;
+      }
     } catch {
       errorMsg = await response.text() || errorMsg;
     }
@@ -69,10 +72,27 @@ export const api = {
   listStudents: () => request("/api/students"),
   createStudent: (payload) => request("/api/students", { method: "POST", body: JSON.stringify(payload) }),
   createStudentsBulk: (payload) => request("/api/students/bulk", { method: "POST", body: JSON.stringify(payload) }),
+  getStudentGroupDashboard: () => request("/api/students/group-dashboard"),
+  renameGroup: (from, to) => request("/api/students/groups/rename", { method: "POST", body: JSON.stringify({ from, to }) }),
+  mergeGroups: (fromGroups, to) => request("/api/students/groups/merge", { method: "POST", body: JSON.stringify({ fromGroups, to }) }),
+  clearGroup: (groupName) => request(`/api/students/groups/${encodeURIComponent(groupName)}`, { method: "DELETE" }),
   updateStudent: (id, payload) => request(`/api/students/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteStudent: (id) => request(`/api/students/${id}`, { method: "DELETE" }),
   
   getUsers: () => request("/api/users"),
   updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
   deleteUser: (id) => request(`/api/users/${id}`, { method: "DELETE" }),
+
+  getSmtpConfig: () => request("/api/admin/smtp-config"),
+  updateSmtpConfig: (payload) => request("/api/admin/smtp-config", { method: "PUT", body: JSON.stringify(payload) }),
+  testSmtpConfig: (override) => request("/api/admin/smtp-config/test", { method: "POST", body: JSON.stringify(override ? { override } : {}) }),
+
+  getEmailTargets: () => request("/api/evaluations/email-targets"),
+  startEmailBatch: (payload) => request("/api/evaluations/email-batches", { method: "POST", body: JSON.stringify(payload) }),
+  getEmailBatchProgress: (jobId) => request(`/api/evaluations/email-batches/${jobId}`),
+  listEmailDeliveries: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/api/evaluations/email-deliveries${qs ? `?${qs}` : ""}`);
+  },
+  retryFailedEmailBatch: (jobId, payload = {}) => request(`/api/evaluations/email-batches/${jobId}/retry-failed`, { method: "POST", body: JSON.stringify(payload) }),
 };

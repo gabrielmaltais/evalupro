@@ -18,6 +18,7 @@ export default function App() {
       <Route path="/admin/rubrics" element={<PrivateRoute><AdminRubric /></PrivateRoute>} />
       <Route path="/admin/students" element={<PrivateRoute><AdminStudents /></PrivateRoute>} />
       <Route path="/admin/users" element={<PrivateRoute><AdminUsers /></PrivateRoute>} />
+      <Route path="/admin/smtp" element={<Navigate to="/admin/users" replace />} />
       <Route path="*" element={<Navigate to="/evaluations" replace />} />
     </Routes>
   );

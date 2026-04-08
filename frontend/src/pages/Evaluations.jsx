@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, getUserFromToken } from "../lib/api";
-import DarkToggle from "../components/DarkToggle";
+import TopPageMenu from "../components/TopPageMenu";
+import PageHeader from "../components/PageHeader";
 
 export default function Evaluations() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,6 +28,7 @@ export default function Evaluations() {
     setStudents(studentList);
     if (!form.rubric && rubricList[0]) setForm((f) => ({ ...f, rubric: rubricList[0]._id }));
   }
+
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e.message || e)));
@@ -247,54 +249,50 @@ export default function Evaluations() {
 
   return (
     <>
-      <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4 truncate mr-2">
-            <div className="bg-blue-600 text-white p-1.5 sm:p-2 rounded-lg flex-shrink-0">
-              <i className="fa-solid fa-graduation-cap text-lg sm:text-xl"></i>
-            </div>
-            <div className="min-w-0 hidden sm:block">
-              <h1 className="text-sm sm:text-lg font-bold text-gray-900 leading-tight truncate">
-                {selectedRubric ? (selectedRubric.taskTitle || "Sans Titre") : "ÉvaluPro"}
-              </h1>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">
-                {selectedRubric ? (selectedRubric.title || "Sélectionnez une grille") : "Sélectionnez une grille"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-6 flex-shrink-0">
-            <select value={form.rubric} onChange={e => setForm({ ...form, rubric: e.target.value })} className="max-w-[120px] sm:max-w-xs border border-gray-300 rounded px-1 sm:px-2 py-1 text-xs sm:text-sm outline-none truncate">
-              <option value="">-- Choisir une grille --</option>
-              {rubrics.map(r => <option key={r._id} value={r._id}>{r.taskTitle || r.title} (v{r.version})</option>)}
-            </select>
-            <div className="hidden md:block text-right">
-              <span className="block text-xs text-gray-400 font-semibold uppercase">Total Possible</span>
-              <span className="text-lg font-bold text-blue-600">{totalMax} Pts</span>
-            </div>
-            <Link to="/admin/students" className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded-full transition-colors" title="Liste des Étudiants">
-              <i className="fa-solid fa-users text-lg sm:text-xl"></i>
-            </Link>
-            <Link to="/admin/rubrics" className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors" title="Paramètres (Grilles)">
-              <i className="fa-solid fa-cog text-lg sm:text-xl"></i>
-            </Link>
-            {getUserFromToken()?.role === "admin" && (
-              <Link to="/admin/users" className="p-1.5 sm:p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors sm:ml-2" title="Gestion des Utilisateurs">
-                  <i className="fa-solid fa-user-shield text-lg sm:text-xl"></i>
-              </Link>
-            )}
-            <DarkToggle />
-            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href = "/login"; }} className="p-1.5 sm:p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
-              <i className="fa-solid fa-right-from-bracket text-lg sm:text-xl"></i>
-            </button>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        icon="fa-graduation-cap"
+        iconBgClass="bg-blue-600"
+        title="ÉvaluPro"
+        subtitle="Plateforme d'évaluation"
+        showBack={false}
+      />
+      <TopPageMenu inHeader />
 
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
-
         {/* LEFT COLUMN: Evaluation Form */}
         <div className="lg:col-span-8 space-y-6">
+          <section className="-mt-2">
+            <div className="bg-gray-50 border border-gray-200 rounded-2xl p-2.5 sm:p-3">
+              <div className="grid grid-cols-1 gap-2 text-xs sm:text-sm">
+                <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+                  <label className="block text-[11px] uppercase tracking-wide text-gray-400 font-bold mb-1">Examen actif</label>
+                  <div className="mb-2">
+                    <div className="text-lg font-bold text-gray-900 leading-tight truncate">
+                      {selectedRubric?.taskTitle || selectedRubric?.title || "Aucun examen sélectionné"}
+                    </div>
+                    <div className="text-[12px] uppercase tracking-wide text-gray-500 font-semibold truncate">
+                      {selectedRubric?.title && selectedRubric?.taskTitle
+                        ? selectedRubric.title
+                        : "Sélectionnez une grille pour commencer"}
+                    </div>
+                  </div>
+                  <select
+                    value={form.rubric}
+                    onChange={(e) => setForm({ ...form, rubric: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs sm:text-sm outline-none bg-white font-semibold text-gray-800"
+                  >
+                    <option value="">-- Choisir une grille --</option>
+                    {rubrics.map((r) => (
+                      <option key={r._id} value={r._id}>
+                        {r.taskTitle || r.title} (v{r.version})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -464,10 +462,11 @@ export default function Evaluations() {
               {items.length === 0 && <li className="py-2 text-sm text-gray-500 italic">Aucune évaluation</li>}
             </ul>
           </section>
+
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:self-start space-y-6">
           <div className="sticky top-24 space-y-6">
 
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center relative overflow-hidden">
