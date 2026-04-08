@@ -40,6 +40,7 @@ export default function AdminRubric() {
 
   // AI Modal state
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showAIAdvanced, setShowAIAdvanced] = useState(false);
   const [aiConfig, setAiConfig] = useState({
     langue: "fr",
     niveaux: "3",
@@ -56,6 +57,8 @@ export default function AdminRubric() {
     genererPrompt: true,
     contexte: "",
     niveauEtudiants: "collegial",
+    critereParQuestion: true,
+    nbQuestions: "4",
     nbCriteres: "4",
   });
 
@@ -206,7 +209,6 @@ export default function AdminRubric() {
     const LABELS = {
       fr: { title: "Nom du cours ou du sujet principal", taskTitle: "Titre spécifique de la tâche ou du laboratoire", criterionName: "Nom du critère évalué (ex: Configuration NAT)", weight: "Nombre de points pour ce critère", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Point technique précis (ex: Ping fonctionnel entre hôte A et B)", subFeedback: "Le ping entre les machines A et B n'est pas fonctionnel. Vérifiez l'adressage IP et les routes statiques.", feedbackMsg: "Message de rétroaction affiché à l'élève pour cette tranche de score.", promptIntro: "Génère une grille d'évaluation complète en JSON pour le cours/la tâche suivant(e) en respectant STRICTEMENT la structure et les directives du gabarit fourni." },
       en: { title: "Course Name", taskTitle: "Task or Lab Title", criterionName: "Criterion Name (e.g. NAT Configuration)", weight: "Points for this criterion", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Specific technical task (e.g. Ping functional between Host A and B)", subFeedback: "The ping between machines A and B is not functional. Check IP addressing and static routes.", feedbackMsg: "Feedback message displayed to the student for this score range.", promptIntro: "Generate a complete evaluation rubric JSON for the following course/task, strictly following the structure and directives of this template." },
-      es: { title: "Nombre del Curso", taskTitle: "Título de la Tarea o Laboratorio", criterionName: "Nombre del Criterio (ej: Configuración NAT)", weight: "Puntos para este criterio", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500", subLabel: "Tarea técnica específica (ej: Ping funcional entre Host A y B)", subFeedback: "El ping entre las máquinas A y B no funciona. Verifique el direccionamiento IP y las rutas estáticas.", feedbackMsg: "Mensaje de retroalimentación para el estudiante en este rango de puntaje.", promptIntro: "Genera una grilla de evaluación completa en JSON para el siguiente curso/tarea, siguiendo ESTRICTAMENTE la estructura y directivas de esta plantilla." },
     };
     const L = LABELS[cfg.langue] || LABELS.fr;
 
@@ -221,12 +223,22 @@ export default function AdminRubric() {
     };
     const niveauxBase = NIVEAUX[cfg.niveaux] || NIVEAUX["3"];
 
-    const TRANCHES = { "3": [[0,60],[60,80],[80,100]], "5": [[0,60],[60,75],[75,85],[85,95],[95,100]], "7": [[0,40],[40,55],[55,65],[65,75],[75,85],[85,93],[93,100]] };
-    const tranches = TRANCHES[cfg.nombreTranches] || TRANCHES["5"];
+    const TRANCHES_5 = [[0,60],[60,75],[75,85],[85,95],[95,100]];
+    const tranches = TRANCHES_5;
 
-    const TON = { encourageant: "Encourageant et motivant — valorisez les efforts, 2-3 phrases chaleureuses", formel: "Formel et académique — ton neutre et factuel, 1-2 phrases précises", direct: "Direct et concis — 1 phrase, allez droit au but", verbeux: "Très détaillé — 4-6 phrases, conseils concrets, exemples de révision suggérés" };
+    const TON = {
+      encourageant: "Encourageant et motivant, tout en restant professionnel et respectueux — valorisez les efforts, 2-3 phrases chaleureuses",
+      formel: "Formel et académique — ton neutre, précis, professionnel, 1-2 phrases factuelles",
+      direct: "Direct et concis — 1 phrase claire, professionnelle et respectueuse, sans sarcasme, sans familiarité, sans jugement",
+      verbeux: "Très détaillé — 4-6 phrases, conseils concrets et actionnables, vocabulaire professionnel et respectueux",
+    };
 
     const makeId = (prefix, n) => cfg.idsSemantics ? `${prefix}-[MOT-CLE-${n}]` : `${prefix}${n}`;
+
+    const requestedCount = cfg.critereParQuestion
+      ? (parseInt(cfg.nbQuestions) || 4)
+      : (parseInt(cfg.nbCriteres) || 4);
+    const nbCriteres = Math.max(1, Math.min(50, requestedCount));
 
     const buildCriterion = (i) => {
       const levels = niveauxBase.map(nv => ({
@@ -239,7 +251,7 @@ export default function AdminRubric() {
       const criterion = {
         id: makeId("c", i + 1),
         title: `[${L.criterionName}] — Critère ${i + 1}`,
-        weight: Math.round(100 / parseInt(cfg.nbCriteres || 4)),
+        weight: Math.round(100 / nbCriteres),
         ...(cfg.inclurePonderations ? { "_weight_note": `${L.weight}. Ajustez pour que la somme totale = 100 pts.` } : {}),
         color: palette[i % palette.length],
         "_color_options": L.colors,
@@ -259,14 +271,12 @@ export default function AdminRubric() {
       }
       return criterion;
     };
-
-    const nbCriteres = Math.max(1, Math.min(50, parseInt(cfg.nbCriteres) || 4));
     const criteriaExamples = Array.from({ length: nbCriteres }, (_, i) => buildCriterion(i));
 
     const feedbackMessages = cfg.inclureFeedbackGlobal ? tranches.map(([min, max]) => ({
       minPct: min,
       maxPct: max,
-      message: `[TON: ${TON[cfg.tonFeedback]}] — Niveau ${cfg.niveauEtudiants}. Rédigez un message motivant/explicatif pour un étudiant ayant obtenu entre ${min}% et ${max}%. ${L.feedbackMsg}`,
+      message: `[TON: ${TON[cfg.tonFeedback]}] — Niveau ${cfg.niveauEtudiants}. Rédigez un message motivant/explicatif pour un étudiant ayant obtenu entre ${min}% et ${max}%. Le ton doit rester professionnel, constructif et respectueux en tout temps (aucune formulation familière, sarcastique ou dénigrante). ${L.feedbackMsg}`,
     })) : undefined;
 
     const promptFinal = cfg.genererPrompt ? [
@@ -274,14 +284,18 @@ export default function AdminRubric() {
       "",
       `**Contexte pédagogique** : ${cfg.contexte || "[COMPLÉTEZ : décrivez brièvement le cours, la technologie évaluée ou la tâche demandée]"}`,
       `**Niveau des étudiants** : ${cfg.niveauEtudiants === "collegial" ? "Niveau collégial / technique" : cfg.niveauEtudiants === "universitaire" ? "Niveau universitaire / avancé" : "Niveau secondaire / débutant"}`,
-      `**Langue de la grille** : ${cfg.langue === "fr" ? "Français" : cfg.langue === "en" ? "Anglais" : "Espagnol"}`,
+      `**Langue de la grille** : ${cfg.langue === "fr" ? "Français" : "Anglais"}`,
       "",
       "**Exigences de génération** :",
+      cfg.critereParQuestion
+        ? `- IMPORTANT : Générer 1 critère par question (donc exactement ${nbCriteres} critères pour ${parseInt(cfg.nbQuestions) || nbCriteres} questions)`
+        : "- Les critères ne sont pas forcément liés 1:1 aux questions",
       `- Générer exactement ${nbCriteres} critères d'évaluation pertinents au contexte`,
       `- Chaque critère doit avoir exactement ${cfg.niveaux} niveaux de performance`,
       `- La somme de tous les 'weight' doit être EXACTEMENT 100`,
       cfg.inclureSousCriteres ? `- Inclure des sous-critères (cases à cocher techniques) pour CHAQUE critère${cfg.sousCritereFeedback ? `, avec un champ 'feedback' constructif de style "${cfg.sousCritereFeedbackStyle}" pour chaque case non cochée` : ""}` : "- Ne pas inclure de champ 'subCriteria'",
-      cfg.inclureFeedbackGlobal ? `- Inclure ${cfg.nombreTranches} messages 'feedbackMessages' couvrant 0% à 100%, ton : ${cfg.tonFeedback}` : "- Ne pas inclure de champ 'feedbackMessages'",
+      cfg.inclureFeedbackGlobal ? `- Inclure 5 messages 'feedbackMessages' couvrant 0% à 100%, ton : ${cfg.tonFeedback}` : "- Ne pas inclure de champ 'feedbackMessages'",
+      cfg.inclureFeedbackGlobal ? "- Le ton doit être strictement professionnel et respectueux, y compris en mode direct (interdit: moqueries, familiarités, jugements de valeur, sarcasmes)." : "",
       `- Palette de couleurs à utiliser : ${L.colors}`,
       cfg.inclureExemples ? "- Chaque niveau (desc) doit contenir UN EXEMPLE CONCRET et observable lié au contexte" : "",
       "- Respecter STRICTEMENT la structure JSON du gabarit fourni (noms de champs, types de valeurs)",
@@ -297,12 +311,14 @@ export default function AdminRubric() {
         configuration_utilisee: {
           langue: cfg.langue,
           niveaux_par_critere: parseInt(cfg.niveaux),
+          mode_critere_par_question: cfg.critereParQuestion,
+          nombre_questions: cfg.critereParQuestion ? (parseInt(cfg.nbQuestions) || nbCriteres) : null,
           nombre_criteres_demandes: nbCriteres,
           avec_sous_criteres: cfg.inclureSousCriteres,
           feedback_sous_criteres: cfg.inclureSousCriteres ? cfg.sousCritereFeedback : false,
           style_feedback_sc: cfg.inclureSousCriteres && cfg.sousCritereFeedback ? cfg.sousCritereFeedbackStyle : "n/a",
           avec_retroaction_globale: cfg.inclureFeedbackGlobal,
-          tranches_retroaction: cfg.inclureFeedbackGlobal ? parseInt(cfg.nombreTranches) : 0,
+          tranches_retroaction: cfg.inclureFeedbackGlobal ? 5 : 0,
           ton_retroaction: cfg.inclureFeedbackGlobal ? cfg.tonFeedback : "n/a",
           niveau_etudiants: cfg.niveauEtudiants,
           palette: cfg.palette,
@@ -636,7 +652,7 @@ export default function AdminRubric() {
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🌐 Langue du gabarit</label>
                   <div className="flex gap-2">
-                    {[["fr","🇫🇷 Français"],["en","🇬🇧 English"],["es","🇪🇸 Español"]].map(([v,l]) => (
+                    {[["fr","🇫🇷 Français"],["en","🇬🇧 English"]].map(([v,l]) => (
                       <button key={v} onClick={() => setAiConfig({...aiConfig, langue: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.langue === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
                     ))}
                   </div>
@@ -652,6 +668,16 @@ export default function AdminRubric() {
                 </div>
               </div>
 
+              <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-purple-800 flex items-center gap-2"><i className="fa-solid fa-sliders"></i> Mode avancé</p>
+                  <p className="text-xs text-purple-700">Affiche les réglages détaillés liés à chaque section.</p>
+                </div>
+                <button onClick={() => setShowAIAdvanced(!showAIAdvanced)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showAIAdvanced ? 'bg-purple-600' : 'bg-gray-300'}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAIAdvanced ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 {/* Niveaux */}
                 <div>
@@ -664,16 +690,33 @@ export default function AdminRubric() {
                 </div>
                 {/* Nb critères */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2" title="Généralement 1 critère = 1 question">🔢 Nombre de critères (questions)</label>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🔢 Nombre de questions / critères</label>
+                  <div className="flex items-center justify-between mb-2 p-2 rounded-lg border border-orange-200 bg-orange-50">
+                    <span className="text-xs font-medium text-orange-800">1 critère = 1 question</span>
+                    <button onClick={() => setAiConfig({...aiConfig, critereParQuestion: !aiConfig.critereParQuestion})} className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${aiConfig.critereParQuestion ? 'bg-orange-500' : 'bg-gray-300'}`}>
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${aiConfig.critereParQuestion ? 'translate-x-5' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
                   <input
                     type="number"
                     min="1"
                     max="50"
-                    value={aiConfig.nbCriteres}
-                    onChange={e => setAiConfig({...aiConfig, nbCriteres: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
-                    placeholder="Ex: 4"
+                    value={aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres}
+                    onChange={e => setAiConfig({
+                      ...aiConfig,
+                      ...(aiConfig.critereParQuestion
+                        ? { nbQuestions: e.target.value }
+                        : { nbCriteres: e.target.value })
+                    })}
+                    disabled={aiConfig.critereParQuestion}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none ${aiConfig.critereParQuestion ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed" : "border-gray-300 focus:ring-2 focus:ring-orange-400"}`}
+                    placeholder={aiConfig.critereParQuestion ? "Ex: 10 questions = 10 critères" : "Ex: 4 critères"}
                   />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    {aiConfig.critereParQuestion
+                      ? "Mode par défaut: le nombre de critères sera identique au nombre de questions."
+                      : "Mode personnalisé: définissez un nombre de critères indépendant du nombre de questions."}
+                  </p>
                 </div>
               </div>
 
@@ -685,7 +728,7 @@ export default function AdminRubric() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureSousCriteres ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
-                {aiConfig.inclureSousCriteres && (
+                {showAIAdvanced && aiConfig.inclureSousCriteres && (
                   <div className="space-y-2 pl-2 border-l-2 border-purple-200">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600">Inclure un feedback par sous-critère non coché</span>
@@ -715,64 +758,65 @@ export default function AdminRubric() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureFeedbackGlobal ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
-                {aiConfig.inclureFeedbackGlobal && (
+                {showAIAdvanced && aiConfig.inclureFeedbackGlobal && (
                   <div className="space-y-3 pl-2 border-l-2 border-blue-200">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Nombre de tranches :</p>
-                      <div className="flex gap-2">
-                        {[["3","3 tranches"],["5","5 tranches"],["7","7 tranches"]].map(([v,l]) => (
-                          <button key={v} onClick={() => setAiConfig({...aiConfig, nombreTranches: v})} className={`flex-1 py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.nombreTranches === v ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
-                        ))}
+                      <div className="py-1.5 px-2 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200 inline-block">
+                        5 tranches (fixe)
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Ton de la rétroaction :</p>
                       <div className="grid grid-cols-2 gap-1.5">
-                        {[["encourageant","😊 Encourageant"],["formel","📋 Formel"],["direct","⚡ Direct"],["verbeux","📝 Verbeux"]].map(([v,l]) => (
+                        {[["encourageant","😊 Encourageant"],["formel","📋 Formel"],["direct","⚡ Direct professionnel"],["verbeux","📝 Verbeux"]].map(([v,l]) => (
                           <button key={v} onClick={() => setAiConfig({...aiConfig, tonFeedback: v})} className={`py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.tonFeedback === v ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
                         ))}
                       </div>
+                      <p className="text-[11px] text-gray-500 mt-1">Tous les tons restent professionnels et respectueux, même en mode direct.</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Options avancées */}
-              <div>
-                <p className="text-xs font-bold text-gray-600 uppercase mb-2">⚙️ Options avancées</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    ["inclurePonderations","Inclure note sur les poids"],
-                    ["inclureExemples","Exemples concrets dans les niveaux"],
-                    ["idsSemantics","IDs sémantiques (ex: c-nat-1)"],
-                    ["genererPrompt","Générer le prompt prêt-à-copier"],
-                  ].map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
-                      <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-4 h-4 rounded text-purple-600 accent-purple-600" />
-                      <span className="text-xs text-gray-700">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              {showAIAdvanced && (
+                <>
+                  <div>
+                    <p className="text-xs font-bold text-gray-600 uppercase mb-2">⚙️ Options avancées</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        ["inclurePonderations","Inclure note sur les poids"],
+                        ["inclureExemples","Exemples concrets dans les niveaux"],
+                        ["idsSemantics","IDs sémantiques (ex: c-nat-1)"],
+                        ["genererPrompt","Générer le prompt prêt-à-copier"],
+                      ].map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
+                          <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-4 h-4 rounded text-purple-600 accent-purple-600" />
+                          <span className="text-xs text-gray-700">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Palette couleurs */}
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎨 Palette de couleurs</label>
-                <div className="flex gap-2">
-                  {[["arc-en-ciel","🌈 Arc-en-ciel"],["mono","🔵 Monotone"],["chaleur","🔥 Chaleur"],["cool","❄️ Cool"]].map(([v,l]) => (
-                    <button key={v} onClick={() => setAiConfig({...aiConfig, palette: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.palette === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
-                  ))}
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎨 Palette de couleurs</label>
+                    <div className="flex gap-2">
+                      {[["arc-en-ciel","🌈 Arc-en-ciel"],["mono","🔵 Monotone"],["chaleur","🔥 Chaleur"],["cool","❄️ Cool"]].map(([v,l]) => (
+                        <button key={v} onClick={() => setAiConfig({...aiConfig, palette: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.palette === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
             </div>
 
             <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
               <div className="text-xs text-gray-400">
                 <i className="fa-solid fa-circle-info mr-1"></i>
-                {parseInt(aiConfig.nbCriteres)} critères · {aiConfig.niveaux} niveaux
+                {Math.max(1, Math.min(50, parseInt(aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres) || 4))} critères · {aiConfig.niveaux} niveaux
                 {aiConfig.inclureSousCriteres ? " · Sous-critères" : ""}
-                {aiConfig.inclureFeedbackGlobal ? ` · ${aiConfig.nombreTranches} rétroactions` : ""}
+                {aiConfig.inclureFeedbackGlobal ? " · 5 rétroactions" : ""}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setShowAIModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">Annuler</button>
