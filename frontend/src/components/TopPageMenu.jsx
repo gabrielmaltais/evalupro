@@ -7,6 +7,7 @@ export default function TopPageMenu({ inHeader = false }) {
     { to: "/evaluations", label: "Évaluations", icon: "fa-graduation-cap" },
     { to: "/admin/students", label: "Hub", icon: "fa-people-group" },
     { to: "/admin/rubrics", label: "Grilles", icon: "fa-sliders" },
+    { to: "/account", label: "Mon compte", icon: "fa-user-gear" },
   ];
 
   if (role === "admin") {

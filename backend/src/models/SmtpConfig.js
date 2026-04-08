@@ -9,6 +9,14 @@ const smtpConfigSchema = new mongoose.Schema(
     passwordEncrypted: { type: String, required: true },
     fromName: { type: String, default: "EvaluPro", trim: true },
     fromEmail: { type: String, required: true, trim: true },
+    /** Modèles pour les envois de copies d'évaluation (placeholders {studentName}, {examTitle}, {courseTitle}, {teacherName}, {group}) */
+    emailSubjectTemplate: { type: String, trim: true, default: "Copie d'évaluation — {examTitle}" },
+    emailBodyTemplate: {
+      type: String,
+      trim: true,
+      default:
+        "Bonjour {studentName},\n\nVeuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).\n\nCordialement,\n{teacherName}",
+    },
     isActive: { type: Boolean, default: true },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },

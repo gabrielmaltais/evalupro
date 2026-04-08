@@ -11,6 +11,13 @@ const DEFAULT_FORM = {
   password: "",
   fromName: "EvaluPro",
   fromEmail: "",
+  emailSubjectTemplate: "Copie d'évaluation — {examTitle}",
+  emailBodyTemplate: `Bonjour {studentName},
+
+Veuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).
+
+Cordialement,
+{teacherName}`,
   isActive: true,
 };
 
@@ -24,7 +31,13 @@ export default function AdminSmtp() {
     api.getSmtpConfig()
       .then((res) => {
         if (res?.config) {
-          setForm((f) => ({ ...f, ...res.config, password: "" }));
+          setForm((f) => ({
+            ...f,
+            ...res.config,
+            password: "",
+            emailSubjectTemplate: res.config.emailSubjectTemplate || DEFAULT_FORM.emailSubjectTemplate,
+            emailBodyTemplate: res.config.emailBodyTemplate || DEFAULT_FORM.emailBodyTemplate,
+          }));
         }
       })
       .catch((e) => setError(String(e.message || e)))
@@ -43,6 +56,8 @@ export default function AdminSmtp() {
         password: form.password || undefined,
         fromName: form.fromName,
         fromEmail: form.fromEmail,
+        emailSubjectTemplate: form.emailSubjectTemplate,
+        emailBodyTemplate: form.emailBodyTemplate,
         isActive: !!form.isActive,
       });
       setForm((f) => ({ ...f, password: "" }));
@@ -102,13 +117,22 @@ export default function AdminSmtp() {
             <label className="text-sm">Mot de passe SMTP
               <input type="password" className="mt-1 w-full border rounded-lg px-3 py-2" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Laisser vide pour conserver l'existant" />
             </label>
-            <label className="text-sm">Nom expéditeur
+            <label className="text-sm">Nom expéditeur (tests / secours)
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={form.fromName} onChange={(e) => setForm({ ...form, fromName: e.target.value })} />
             </label>
             <label className="text-sm">Email expéditeur
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={form.fromEmail} onChange={(e) => setForm({ ...form, fromEmail: e.target.value })} />
             </label>
           </div>
+          <p className="text-xs text-gray-500">
+            Les envois de copies affichent le <strong>nom du professeur</strong> comme expéditeur (adresse ci-dessus).
+          </p>
+          <label className="text-sm block">Objet du mail (envoi PDF)
+            <input className="mt-1 w-full border rounded-lg px-3 py-2" value={form.emailSubjectTemplate} onChange={(e) => setForm({ ...form, emailSubjectTemplate: e.target.value })} />
+          </label>
+          <label className="text-sm block">Corps du message
+            <textarea rows={8} className="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" value={form.emailBodyTemplate} onChange={(e) => setForm({ ...form, emailBodyTemplate: e.target.value })} />
+          </label>
           <div className="flex gap-6 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.secure} onChange={(e) => setForm({ ...form, secure: e.target.checked })} />Connexion sécurisée (SSL/TLS)</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Configuration active</label>

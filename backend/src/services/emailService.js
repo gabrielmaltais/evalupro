@@ -20,10 +20,17 @@ async function testSmtpConnection() {
   return { ok: true };
 }
 
-async function sendMailWithCurrentConfig(mailOptions) {
+/**
+ * @param {object} mailOptions - options Nodemailer (to, subject, text, html, attachments…)
+ * @param {{ fromDisplayName?: string }} [options] - si fourni, remplace le nom d'affichage From (l'adresse reste fromEmail)
+ */
+async function sendMailWithCurrentConfig(mailOptions, options = {}) {
   const { transporter, config } = await getTransporter();
+  const displayName = options.fromDisplayName != null && String(options.fromDisplayName).trim() !== ""
+    ? String(options.fromDisplayName).trim()
+    : config.fromName;
   const info = await transporter.sendMail({
-    from: `${config.fromName} <${config.fromEmail}>`,
+    from: `${displayName} <${config.fromEmail}>`,
     ...mailOptions,
   });
   return info;

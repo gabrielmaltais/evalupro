@@ -13,10 +13,27 @@ const registerSchema = z.object({
 });
 
 function signToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role }, process.env.JWT_SECRET, {
-    expiresIn: "1d",
-  });
+  return jwt.sign(
+    {
+      sub: user._id.toString(),
+      role: user.role,
+      name: user.name,
+      email: user.email,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "1d" }
+  );
 }
+
+const updateMeSchema = z.object({
+  name: z.string().trim().min(2, "Nom trop court"),
+  email: z.string().trim().email("Email invalide"),
+  currentPassword: z.string().min(1, "Mot de passe actuel requis"),
+  newPassword: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(8, "Le nouveau mot de passe doit faire au moins 8 caractères").optional()
+  ),
+});
 
 router.post("/register", async (req, res) => {
   try {
@@ -48,6 +65,48 @@ router.post("/login", async (req, res) => {
 
 router.get("/me", auth, async (req, res) => {
   res.json({ user: req.user });
+});
+
+router.put("/me", auth, async (req, res) => {
+  try {
+    const body = updateMeSchema.parse(req.body);
+    const user = await User.findById(req.user._id).select("+password");
+    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
+    const valid = await user.comparePassword(body.currentPassword);
+    if (!valid) return res.status(401).json({ message: "Mot de passe actuel incorrect" });
+
+    const nextEmail = body.email.toLowerCase();
+    let changed = false;
+    if (body.name !== user.name) {
+      user.name = body.name;
+      changed = true;
+    }
+    if (nextEmail !== user.email) {
+      const taken = await User.findOne({ email: nextEmail, _id: { $ne: user._id } });
+      if (taken) return res.status(409).json({ message: "Email deja utilise" });
+      user.email = nextEmail;
+      changed = true;
+    }
+    if (body.newPassword) {
+      user.password = body.newPassword;
+      changed = true;
+    }
+    if (!changed) return res.status(400).json({ message: "Aucune modification" });
+
+    await user.save();
+    const fresh = await User.findById(user._id);
+    const token = signToken(fresh);
+    res.json({
+      token,
+      user: { id: fresh._id, name: fresh.name, email: fresh.email, role: fresh.role },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const msg = error.issues?.[0]?.message || "Donnees invalides";
+      return res.status(400).json({ message: msg });
+    }
+    res.status(400).json({ message: "Mise a jour impossible", details: error.message });
+  }
 });
 
 module.exports = router;

@@ -1,8 +1,163 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, getUserFromToken } from "../lib/api";
 import TopPageMenu from "../components/TopPageMenu";
 import PageHeader from "../components/PageHeader";
+
+function evalItemStudentId(it) {
+  if (!it?.studentId) return null;
+  if (typeof it.studentId === "object") return String(it.studentId._id ?? "");
+  return String(it.studentId);
+}
+
+function evalItemRubricId(it) {
+  if (!it?.rubric) return null;
+  if (typeof it.rubric === "object") return String(it.rubric._id ?? "");
+  return String(it.rubric);
+}
+
+/** Liste déroulante étudiants avec icônes (le <select> natif ne permet pas le HTML dans les options). */
+function StudentSelectWithIcons({
+  students,
+  valueStudentId,
+  onSelectStudent,
+  correctedIdsForExam,
+  hasActiveRubric,
+  wrapperClassName = "relative flex-1 min-w-0",
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  const groupedStudents = useMemo(() => {
+    const acc = {};
+    for (const s of students) {
+      const g = s.group || "Sans groupe";
+      if (!acc[g]) acc[g] = [];
+      acc[g].push(s);
+    }
+    return Object.entries(acc)
+      .sort(([a], [b]) => a.localeCompare(b, "fr"))
+      .map(([groupName, list]) => [
+        groupName,
+        [...list].sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr")),
+      ]);
+  }, [students]);
+
+  const showStatus = Boolean(hasActiveRubric && correctedIdsForExam);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [open]);
+
+  const selected = students.find((s) => String(s._id) === String(valueStudentId));
+
+  const pick = useCallback(
+    (student) => {
+      if (!student) {
+        onSelectStudent({ studentId: "", studentName: "" });
+      } else {
+        onSelectStudent({ studentId: student._id, studentName: student.name || "" });
+      }
+      setOpen(false);
+    },
+    [onSelectStudent]
+  );
+
+  return (
+    <div className={wrapperClassName} ref={wrapRef}>
+      <button
+        type="button"
+        id="student-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="w-full h-10 px-3 box-border border border-gray-300 rounded-lg text-left text-sm flex items-center justify-between gap-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+      >
+        <span className="truncate flex items-center gap-2 min-w-0">
+          {selected ? (
+            <>
+              {showStatus && (
+                <span className="w-5 shrink-0 flex justify-center" aria-hidden>
+                  {correctedIdsForExam.has(String(selected._id)) ? (
+                    <i className="fa-solid fa-check text-green-600 text-sm" title="Corrigé pour cet examen" />
+                  ) : (
+                    <i className="fa-regular fa-circle text-amber-500 text-sm" title="Pas encore corrigé pour cet examen" />
+                  )}
+                </span>
+              )}
+              <span className="truncate font-medium text-gray-900">{selected.name}</span>
+            </>
+          ) : (
+            <span className="text-gray-500">— Utilisateur libre —</span>
+          )}
+        </span>
+        <i className={`fa-solid fa-chevron-down text-gray-400 text-xs shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open && (
+        <ul
+          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1"
+          role="listbox"
+          aria-labelledby="student-select-trigger"
+        >
+          <li role="none">
+            <button
+              type="button"
+              role="option"
+              aria-selected={!valueStudentId}
+              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 text-gray-600 border-b border-gray-100"
+              onClick={() => pick(null)}
+            >
+              — Utilisateur libre —
+            </button>
+          </li>
+          {groupedStudents.map(([groupName, groupList]) => (
+            <li key={groupName} role="none" className="pt-1">
+              <div className="px-3 py-1 text-[11px] font-bold italic text-gray-500 tracking-wide">{groupName}</div>
+              <ul role="none">
+                {groupList.map((s) => {
+                  const sid = String(s._id);
+                  const corrected = showStatus && correctedIdsForExam.has(sid);
+                  return (
+                    <li key={s._id} role="none">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={String(valueStudentId) === sid}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center gap-2.5 ${
+                          String(valueStudentId) === sid ? "bg-blue-50/80" : ""
+                        }`}
+                        onClick={() => pick(s)}
+                        title={showStatus ? (corrected ? "Corrigé pour cet examen" : "Pas encore corrigé") : undefined}
+                      >
+                        {showStatus ? (
+                          <span className="w-5 shrink-0 flex justify-center" aria-hidden>
+                            {corrected ? (
+                              <i className="fa-solid fa-check text-green-600 text-sm" />
+                            ) : (
+                              <i className="fa-regular fa-circle text-amber-500 text-sm" />
+                            )}
+                          </span>
+                        ) : (
+                          <span className="w-5 shrink-0" aria-hidden />
+                        )}
+                        <span className="truncate text-gray-900">{s.name}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function Evaluations() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,6 +190,53 @@ export default function Evaluations() {
   }, []);
 
   const selectedRubric = rubrics.find((r) => r._id === form.rubric);
+
+  /** Étudiants (id) ayant déjà au moins une évaluation pour la grille / examen actif */
+  const correctedStudentIdsForActiveExam = useMemo(() => {
+    const rid = form.rubric;
+    if (!rid) return null;
+    const set = new Set();
+    for (const it of items) {
+      const sid = evalItemStudentId(it);
+      if (!sid) continue;
+      const rubId = evalItemRubricId(it);
+      if (rubId === String(rid)) set.add(sid);
+    }
+    return set;
+  }, [items, form.rubric]);
+
+  const [studentPickerGroup, setStudentPickerGroup] = useState("");
+
+  const studentGroupKeys = useMemo(() => {
+    const set = new Set();
+    for (const s of students) set.add(s.group || "Sans groupe");
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [students]);
+
+  const studentsForPicker = useMemo(() => {
+    let list = !studentPickerGroup
+      ? students
+      : students.filter((s) => (s.group || "Sans groupe") === studentPickerGroup);
+    if (form.studentId) {
+      const cur = students.find((s) => String(s._id) === String(form.studentId));
+      if (cur && !list.some((s) => String(s._id) === String(cur._id))) {
+        list = [...list, cur];
+      }
+    }
+    return list;
+  }, [students, studentPickerGroup, form.studentId]);
+
+  function onStudentPickerGroupChange(g) {
+    setStudentPickerGroup(g);
+    setForm((f) => {
+      if (!f.studentId) return f;
+      const st = students.find((s) => String(s._id) === String(f.studentId));
+      if (!st) return { ...f, studentId: "", studentName: "" };
+      const grp = st.group || "Sans groupe";
+      if (g && grp !== g) return { ...f, studentId: "", studentName: "" };
+      return f;
+    });
+  }
 
   let totalMax = 0;
   let totalScore = 0;
@@ -296,41 +498,71 @@ export default function Evaluations() {
           {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
 
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nom de l'étudiant / Classe</label>
-                <div className="flex gap-2">
-                  <select className="w-1/2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                    value={form.studentId}
-                    onChange={e => {
-                      const student = students.find(s => s._id === e.target.value);
-                      setForm({ ...form, studentId: e.target.value, studentName: student ? student.name : "" });
-                    }}>
-                    <option value="">-- Utilisateur libre --</option>
-                    {Object.entries(
-                      students.reduce((acc, s) => {
-                        const g = s.group || "Sans groupe";
-                        if (!acc[g]) acc[g] = [];
-                        acc[g].push(s);
-                        return acc;
-                      }, {})
-                    ).sort().map(([groupName, groupStudents]) => (
-                      <optgroup key={groupName} label={groupName}>
-                        {groupStudents.map(s => (
-                          <option key={s._id} value={s._id}>{s.name}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <input type="text" className="w-1/2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Nom manuel" value={form.studentName} onChange={e => setForm({ ...form, studentName: e.target.value, studentId: "" })} />
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-x-4 lg:items-start">
+              <div className="lg:col-span-3">
+                <label htmlFor="eval-student-group" className="block text-sm font-medium text-gray-700 mb-1 min-h-[1.25rem]">
+                  Groupe
+                </label>
+                <select
+                  id="eval-student-group"
+                  value={studentPickerGroup}
+                  onChange={(e) => onStudentPickerGroupChange(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                >
+                  <option value="">Tous les groupes</option>
+                  {studentGroupKeys.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date de l'évaluation</label>
-                <div className="flex gap-4 items-center">
-                  <input type="date" className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
-                  <label className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-100 transition">
-                    <input type="checkbox" checked={showDatePdf} onChange={e => setShowDatePdf(e.target.checked)} className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
+              <div className="lg:col-span-5 min-w-0">
+                <label htmlFor="student-select-trigger" className="block text-sm font-medium text-gray-700 mb-1 min-h-[1.25rem]">
+                  Étudiant
+                </label>
+                <StudentSelectWithIcons
+                  students={studentsForPicker}
+                  valueStudentId={form.studentId}
+                  onSelectStudent={({ studentId, studentName }) =>
+                    setForm((f) => ({ ...f, studentId, studentName }))
+                  }
+                  correctedIdsForExam={correctedStudentIdsForActiveExam}
+                  hasActiveRubric={Boolean(form.rubric)}
+                  wrapperClassName="relative w-full min-w-0"
+                />
+                {form.rubric && (
+                  <p className="text-xs text-gray-500 mt-2 flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-1 sm:gap-x-4 sm:gap-y-1">
+                    <span className="inline-flex items-center gap-1.5">
+                      <i className="fa-solid fa-check text-green-600 text-xs shrink-0" aria-hidden />
+                      copie déjà enregistrée pour l’examen actif
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <i className="fa-regular fa-circle text-amber-500 text-xs shrink-0" aria-hidden />
+                      pas encore de copie pour cet examen
+                    </span>
+                  </p>
+                )}
+              </div>
+              <div className="lg:col-span-4 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1 min-h-[1.25rem]" htmlFor="eval-date-input">
+                  Date de l&apos;évaluation
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
+                  <input
+                    id="eval-date-input"
+                    type="date"
+                    className="w-full sm:flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  />
+                  <label className="flex h-10 shrink-0 items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 px-3 rounded-lg cursor-pointer hover:bg-gray-100 transition box-border whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={showDatePdf}
+                      onChange={(e) => setShowDatePdf(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 shrink-0"
+                    />
                     Date sur le PDF
                   </label>
                 </div>

@@ -3,10 +3,19 @@ import { api, getUserFromToken } from "../lib/api";
 import PageHeader from "../components/PageHeader";
 import TopPageMenu from "../components/TopPageMenu";
 
+const DEFAULT_SMTP_EMAIL_SUBJECT = "Copie d'évaluation — {examTitle}";
+const DEFAULT_SMTP_EMAIL_BODY = `Bonjour {studentName},
+
+Veuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).
+
+Cordialement,
+{teacherName}`;
+
 export default function AdminUsers() {
   const user = getUserFromToken() || { _id: "" };
   const [activeTab, setActiveTab] = useState("users");
   const [users, setUsers] = useState([]);
+
   const [smtpForm, setSmtpForm] = useState({
     host: "",
     port: 587,
@@ -15,6 +24,8 @@ export default function AdminUsers() {
     password: "",
     fromName: "EvaluPro",
     fromEmail: "",
+    emailSubjectTemplate: DEFAULT_SMTP_EMAIL_SUBJECT,
+    emailBodyTemplate: DEFAULT_SMTP_EMAIL_BODY,
     isActive: true,
   });
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -79,6 +90,8 @@ export default function AdminUsers() {
         password: smtpForm.password || undefined,
         fromName: smtpForm.fromName,
         fromEmail: smtpForm.fromEmail,
+        emailSubjectTemplate: smtpForm.emailSubjectTemplate,
+        emailBodyTemplate: smtpForm.emailBodyTemplate,
         isActive: !!smtpForm.isActive,
       });
       setSmtpForm((prev) => ({ ...prev, password: "" }));
@@ -122,7 +135,13 @@ export default function AdminUsers() {
 
         setUsers(usersData);
         if (smtpData?.config) {
-          setSmtpForm((prev) => ({ ...prev, ...smtpData.config, password: "" }));
+          setSmtpForm((prev) => ({
+            ...prev,
+            ...smtpData.config,
+            password: "",
+            emailSubjectTemplate: smtpData.config.emailSubjectTemplate || DEFAULT_SMTP_EMAIL_SUBJECT,
+            emailBodyTemplate: smtpData.config.emailBodyTemplate || DEFAULT_SMTP_EMAIL_BODY,
+          }));
         }
       } catch (err) {
         if (isMounted) {
@@ -232,12 +251,26 @@ export default function AdminUsers() {
             <label className="text-sm">Mot de passe SMTP
               <input type="password" className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.password} onChange={(e) => setSmtpForm({ ...smtpForm, password: e.target.value })} placeholder="Laisser vide pour conserver l'existant" />
             </label>
-            <label className="text-sm">Nom expéditeur
+            <label className="text-sm">Nom expéditeur (tests / secours)
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.fromName} onChange={(e) => setSmtpForm({ ...smtpForm, fromName: e.target.value })} />
             </label>
             <label className="text-sm">Email expéditeur
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.fromEmail} onChange={(e) => setSmtpForm({ ...smtpForm, fromEmail: e.target.value })} />
             </label>
+          </div>
+          <p className="text-xs text-gray-500">
+            Les envois de copies d&apos;évaluation affichent comme expéditeur le <strong>nom complet du professeur</strong> qui lance l&apos;envoi (adresse ci-dessus).
+          </p>
+          <div className="space-y-2">
+            <label className="text-sm block">Objet du mail (envoi PDF)
+              <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.emailSubjectTemplate} onChange={(e) => setSmtpForm({ ...smtpForm, emailSubjectTemplate: e.target.value })} />
+            </label>
+            <label className="text-sm block">Corps du message (texte brut)
+              <textarea rows={10} className="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" value={smtpForm.emailBodyTemplate} onChange={(e) => setSmtpForm({ ...smtpForm, emailBodyTemplate: e.target.value })} />
+            </label>
+            <p className="text-xs text-gray-500">
+              Variables : <code className="bg-gray-100 px-1 rounded">{"{studentName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{examTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{courseTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{teacherName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{group}"}</code>.
+            </p>
           </div>
           <div className="flex gap-6 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" checked={smtpForm.secure} onChange={(e) => setSmtpForm({ ...smtpForm, secure: e.target.checked })} />Connexion sécurisée (SSL/TLS)</label>

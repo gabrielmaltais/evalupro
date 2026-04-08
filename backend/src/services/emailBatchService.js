@@ -1,9 +1,12 @@
 const crypto = require("crypto");
 const Evaluation = require("../models/Evaluation");
 const Student = require("../models/Student");
+const User = require("../models/User");
 const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const { sendMailWithCurrentConfig } = require("./emailService");
 const { createEvaluationPdfBuffer, getEvaluationPdfFileName } = require("./evaluationPdfService");
+const { buildEvaluationEmailParts } = require("./evaluationEmailTemplate");
+const { getActiveSmtpConfig } = require("./smtpConfigService");
 
 const batchProgress = new Map();
 
@@ -66,6 +69,24 @@ async function runBatchJob({
   let failed = 0;
   let skipped = 0;
 
+  const smtpConfig = await getActiveSmtpConfig();
+  if (!smtpConfig) {
+    setProgress(jobId, {
+      status: "failed",
+      error: "Aucune configuration SMTP active",
+      total: targets.length,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      processed: 0,
+    });
+    return;
+  }
+
+  const ownerDoc = await User.findById(owner._id).select("name");
+  const teacherName = (ownerDoc && ownerDoc.name) || owner.name || "Enseignant";
+  const ownerForTemplate = { ...owner, name: teacherName };
+
   setProgress(jobId, {
     status: "running",
     total: targets.length,
@@ -122,12 +143,20 @@ async function runBatchJob({
     try {
       const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric);
       const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
-      const info = await sendMailWithCurrentConfig({
-        to: student.email,
-        subject: `Copie d'evaluation - ${evaluation.rubric.taskTitle || evaluation.rubric.title}`,
-        text: `Bonjour ${student.name},\n\nVeuillez trouver ci-joint votre copie d'evaluation.\n\nCordialement,\nEvaluPro`,
-        attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+      const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
+        owner: ownerForTemplate,
+        student,
+        rubric: evaluation.rubric,
       });
+      const info = await sendMailWithCurrentConfig(
+        {
+          to: student.email,
+          subject,
+          text,
+          attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+        },
+        { fromDisplayName: teacherName }
+      );
 
       sent += 1;
       delivery.status = "sent";

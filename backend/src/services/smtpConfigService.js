@@ -45,6 +45,8 @@ function sanitizeSmtpConfig(configDoc) {
     user: configDoc.user,
     fromName: configDoc.fromName,
     fromEmail: configDoc.fromEmail,
+    emailSubjectTemplate: configDoc.emailSubjectTemplate,
+    emailBodyTemplate: configDoc.emailBodyTemplate,
     isActive: configDoc.isActive,
     updatedAt: configDoc.updatedAt,
   };

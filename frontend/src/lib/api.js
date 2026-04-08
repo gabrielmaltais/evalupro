@@ -13,7 +13,11 @@ export function getUserFromToken() {
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload; // { sub: id, email: string, role: string, exp: time }
+    return {
+      ...payload,
+      _id: payload.sub,
+      id: payload.sub,
+    };
   } catch (e) {
     return null;
   }
@@ -59,11 +63,15 @@ export const api = {
   register: (payload) => request("/api/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request("/api/auth/me"),
+  updateMe: (payload) => request("/api/auth/me", { method: "PUT", body: JSON.stringify(payload) }),
   listRubrics: () => request("/api/rubrics"),
   createRubric: (payload) => request("/api/rubrics", { method: "POST", body: JSON.stringify(payload) }),
   updateRubric: (id, payload) => request(`/api/rubrics/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRubric: (id) => request(`/api/rubrics/${id}`, { method: "DELETE" }),
-  listEvaluations: () => request("/api/evaluations"),
+  listEvaluations: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/api/evaluations${qs ? `?${qs}` : ""}`);
+  },
   listEvaluationsByStudent: (studentId) => request(`/api/evaluations?studentId=${studentId}&limit=50`),
   getEvaluation: (id) => request(`/api/evaluations/${id}`),
   createEvaluation: (payload) => request("/api/evaluations", { method: "POST", body: JSON.stringify(payload) }),

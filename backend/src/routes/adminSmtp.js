@@ -24,6 +24,8 @@ const smtpSchema = z.object({
   ),
   fromName: z.string().trim().min(1, "Nom expéditeur requis"),
   fromEmail: z.string().trim().email("Email expéditeur invalide"),
+  emailSubjectTemplate: z.string().trim().min(1, "Objet du mail requis").max(500).optional(),
+  emailBodyTemplate: z.string().min(1, "Corps du mail requis").max(20000).optional(),
   isActive: z.coerce.boolean().optional(),
 });
 
@@ -54,6 +56,8 @@ router.put("/smtp-config", async (req, res) => {
         passwordEncrypted: nextEncrypted,
         fromName: payload.fromName,
         fromEmail: payload.fromEmail,
+        ...(payload.emailSubjectTemplate != null ? { emailSubjectTemplate: payload.emailSubjectTemplate } : {}),
+        ...(payload.emailBodyTemplate != null ? { emailBodyTemplate: payload.emailBodyTemplate } : {}),
         isActive: payload.isActive !== false,
         updatedBy: req.user._id,
       },

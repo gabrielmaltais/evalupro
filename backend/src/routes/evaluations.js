@@ -30,7 +30,7 @@ router.get("/", async (req, res) => {
   if (req.query.studentName) query.studentName = new RegExp(req.query.studentName, "i");
   if (req.query.studentId) query.studentId = req.query.studentId;
   const [items, total] = await Promise.all([
-    Evaluation.find(query).populate("rubric", "title version").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    Evaluation.find(query).populate("rubric", "title taskTitle version").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Evaluation.countDocuments(query),
   ]);
   res.json({ items, page, limit, total });
@@ -118,7 +118,11 @@ router.get("/email-deliveries", async (req, res) => {
   if (req.query.examKey) query.examKey = req.query.examKey;
 
   const items = await EvaluationEmailDelivery.find(query)
-    .populate("evaluationId", "studentName date rubric")
+    .populate({
+      path: "evaluationId",
+      select: "studentName date rubric",
+      populate: { path: "rubric", select: "title taskTitle version" },
+    })
     .populate("studentId", "name email group")
     .sort({ updatedAt: -1 })
     .limit(300);
