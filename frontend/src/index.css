@@ -136,35 +136,57 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
 .dark .text-gray-900,
 .dark .text-gray-800,
 .dark .text-gray-700 {
-  color: #f1f5f9 !important;
+  color: #cbd5e1 !important; /* Softened slate-300 instead of bright slate-100 */
 }
 
 .dark .text-gray-600,
-.dark .text-gray-500 {
-  color: #94a3b8 !important;
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #94a3b8 !important; /* slate-400 */
 }
 
+/* Borders */
+.dark .border-gray-50,
 .dark .border-gray-100,
 .dark .border-gray-200,
 .dark .border-gray-300 {
-  border-color: rgba(99,130,255,0.2) !important;
+  border-color: rgba(99,130,255,0.15) !important;
 }
 
+/* Inputs and interactive surfaces */
 .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 .dark textarea,
 .dark select {
-  background-color: rgba(15, 25, 55, 0.8) !important;
-  border-color: rgba(99,130,255,0.25) !important;
+  background-color: rgba(13, 22, 45, 0.4) !important;
+  border-color: rgba(99,130,255,0.2) !important;
   color: #e2e8f0 !important;
 }
 
-.dark .bg-blue-50 { background-color: rgba(59,130,246,0.15) !important; }
-.dark .hover\:bg-blue-100:hover { background-color: rgba(59,130,246,0.25) !important; }
-.dark .bg-emerald-50 { background-color: rgba(16,185,129,0.15) !important; }
-.dark .hover\:bg-emerald-100:hover { background-color: rgba(16,185,129,0.25) !important; }
-.dark .bg-red-50 { background-color: rgba(239,68,68,0.15) !important; }
-.dark .hover\:bg-red-100:hover { background-color: rgba(239,68,68,0.25) !important; }
-.dark .bg-indigo-50 { background-color: rgba(99,102,241,0.15) !important; }
+/* Interactive element backgrounds & hovers for all generic utility classes used */
+.dark .bg-gray-50 { background-color: rgba(99,130,255,0.05) !important; }
+.dark .hover\:bg-gray-50:hover { background-color: rgba(99,130,255,0.1) !important; }
+.dark .hover\:bg-gray-100:hover { background-color: rgba(99,130,255,0.15) !important; }
+
+/* Status Colors (Échec, Partiel, Complet buttons) */
+.dark .bg-blue-50 { background-color: rgba(59,130,246,0.1) !important; }
+.dark .hover\:bg-blue-100:hover { background-color: rgba(59,130,246,0.2) !important; }
+.dark .border-blue-200 { border-color: rgba(59,130,246,0.3) !important; }
+
+.dark .bg-emerald-50, .dark .bg-green-50 { background-color: rgba(16,185,129,0.1) !important; }
+.dark .hover\:bg-emerald-100:hover, .dark .hover\:bg-green-100:hover { background-color: rgba(16,185,129,0.2) !important; }
+.dark .border-emerald-200, .dark .border-green-200 { border-color: rgba(16,185,129,0.3) !important; }
+
+.dark .bg-red-50 { background-color: rgba(239,68,68,0.1) !important; }
+.dark .hover\:bg-red-100:hover { background-color: rgba(239,68,68,0.2) !important; }
+.dark .border-red-200 { border-color: rgba(239,68,68,0.3) !important; }
+
+.dark .bg-yellow-50 { background-color: rgba(245,158,11,0.1) !important; }
+.dark .hover\:bg-yellow-100:hover { background-color: rgba(245,158,11,0.2) !important; }
+.dark .border-yellow-200 { border-color: rgba(245,158,11,0.3) !important; }
+
+.dark .bg-indigo-50 { background-color: rgba(99,102,241,0.1) !important; }
+.dark .hover\:bg-indigo-100:hover { background-color: rgba(99,102,241,0.2) !important; }
+.dark .border-indigo-200 { border-color: rgba(99,102,241,0.3) !important; }
 
 /* Scrollbar dark */
 .dark ::-webkit-scrollbar-track { background: rgba(10,18,40,0.8); }
