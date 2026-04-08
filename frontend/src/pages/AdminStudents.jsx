@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, getUserFromToken } from "../lib/api";
 
 export default function AdminStudents() {
   const [students, setStudents] = useState([]);
@@ -154,7 +154,12 @@ export default function AdminStudents() {
                 <Link to="/evaluations" className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
                     <i className="fa-solid fa-arrow-left mr-2"></i>Retour aux évaluations
                 </Link>
-                <button onClick={() => { localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors ml-4" title="Se déconnecter">
+                {getUserFromToken()?.role === "admin" && (
+                  <Link to="/admin/users" className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors ml-2" title="Gestion des Utilisateurs">
+                      <i className="fa-solid fa-user-shield text-lg"></i>
+                  </Link>
+                )}
+                <button onClick={() => { localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors ml-2" title="Se déconnecter">
                     <i className="fa-solid fa-right-from-bracket text-lg"></i>
                 </button>
             </div>

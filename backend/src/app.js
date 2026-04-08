@@ -8,6 +8,7 @@ const rubricRoutes = require("./routes/rubrics");
 const evaluationRoutes = require("./routes/evaluations");
 
 const studentRoutes = require("./routes/students");
+const userRoutes = require("./routes/users");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
@@ -19,6 +20,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/rubrics", rubricRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/users", userRoutes);
 
 // Pour le déploiement monolithique : Servir les fichiers statiques React
 const path = require("path");

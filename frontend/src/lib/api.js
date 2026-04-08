@@ -5,7 +5,18 @@ export function setToken(token) {
 }
 
 export function getToken() {
-  return localStorage.getItem("token");
+  return localStorage.getItem("token") || localStorage.getItem("eval_token"); // Compatibility logic if needed
+}
+
+export function getUserFromToken() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload; // { sub: id, email: string, role: string, exp: time }
+  } catch (e) {
+    return null;
+  }
 }
 
 async function request(path, options = {}) {
@@ -45,4 +56,8 @@ export const api = {
   createStudentsBulk: (payload) => request("/api/students/bulk", { method: "POST", body: JSON.stringify(payload) }),
   updateStudent: (id, payload) => request(`/api/students/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteStudent: (id) => request(`/api/students/${id}`, { method: "DELETE" }),
+  
+  getUsers: () => request("/api/users"),
+  updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
+  deleteUser: (id) => request(`/api/users/${id}`, { method: "DELETE" }),
 };
