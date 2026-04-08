@@ -86,3 +86,9 @@ npm install
 npm run dev
 # L'interface s'ouvrira sur http://localhost:5173
 ```
+
+---
+
+## Carte technique rapide
+
+Pour naviguer efficacement dans le projet (points d'entrée, flux auth/scoring/RBAC, zones à risque, routine de vérification), consulter [`docs/operational-map.md`](docs/operational-map.md).
