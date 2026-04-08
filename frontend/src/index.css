@@ -1,5 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 * { box-sizing: border-box; }
-body { font-family: 'Inter', sans-serif; }
+body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease, color 0.4s ease; }
+
+/* ────────────────────────────────────────────────
+   GALAXY DARK MODE
+──────────────────────────────────────────────── */
+
+/* Star field canvas using pseudo-elements + box-shadows */
+.dark body::before,
+.dark body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark body::before {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(99,102,241,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139,92,246,0.15) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(59,130,246,0.10) 0%, transparent 60%),
+    linear-gradient(135deg, #020818 0%, #020c1b 30%, #040d24 50%, #060e22 70%, #030a18 100%);
+}
+
+/* Animated star particles using multiple box-shadows */
+.dark body::after {
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.9) 0%, transparent 100%),
+    radial-gradient(1px 1px at 20% 35%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 30% 5%, rgba(200,220,255,0.9) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 45%, rgba(255,255,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 60% 60%, rgba(180,200,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 10%, rgba(255,255,255,0.9) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 75%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 85% 30%, rgba(200,180,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 50%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 90%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1px 1px at 35% 55%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 80%, rgba(200,220,255,0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 55% 40%, rgba(255,255,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 85%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,0.9) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 70%, rgba(180,200,255,0.7) 0%, transparent 100%),
+    radial-gradient(2px 2px at 5% 45%, rgba(200,180,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 95% 25%, rgba(255,255,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 48% 92%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 72% 42%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 8% 88%, rgba(200,220,255,0.8) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38% 18%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88% 95%, rgba(255,255,255,0.5) 0%, transparent 100%);
+  animation: starTwinkle 8s ease-in-out infinite alternate;
+}
+
+@keyframes starTwinkle {
+  0%   { opacity: 0.7; transform: scale(1); }
+  50%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0.75; transform: scale(1); }
+}
+
+/* ────────────────────────────────────────────────
+   DARK MODE OVERRIDES (applied with .dark class on <html>)
+──────────────────────────────────────────────── */
+.dark .dm-bg       { background: transparent !important; }
+.dark .dm-surface  { background: rgba(13, 22, 45, 0.75) !important; backdrop-filter: blur(12px); border-color: rgba(99,130,255,0.18) !important; }
+.dark .dm-surface2 { background: rgba(10, 18, 40, 0.85) !important; backdrop-filter: blur(8px); border-color: rgba(80,110,255,0.15) !important; }
+.dark .dm-header   { background: rgba(8, 14, 35, 0.92) !important; backdrop-filter: blur(20px); border-color: rgba(99,130,255,0.15) !important; }
+
+.dark .dm-text-primary   { color: #e2e8f0 !important; }
+.dark .dm-text-secondary { color: #94a3b8 !important; }
+.dark .dm-text-accent    { color: #818cf8 !important; }
+.dark .dm-text-muted     { color: #64748b !important; }
+
+.dark .dm-border   { border-color: rgba(99,130,255,0.2) !important; }
+.dark .dm-divider  { border-color: rgba(99,130,255,0.12) !important; }
+
+.dark .dm-input    {
+  background: rgba(15, 25, 55, 0.8) !important;
+  border-color: rgba(99,130,255,0.25) !important;
+  color: #e2e8f0 !important;
+}
+.dark .dm-input::placeholder { color: #4a5679 !important; }
+.dark .dm-input:focus {
+  border-color: rgba(129,140,248,0.6) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important;
+}
+
+.dark .dm-btn-ghost {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+  color: #c7d2fe !important;
+}
+.dark .dm-btn-ghost:hover {
+  background: rgba(255,255,255,0.12) !important;
+}
+
+.dark .dm-badge-green  { background: rgba(16,185,129,0.15) !important; color: #34d399 !important; border-color: rgba(16,185,129,0.25) !important; }
+.dark .dm-badge-blue   { background: rgba(59,130,246,0.15) !important; color: #93c5fd !important; border-color: rgba(59,130,246,0.25) !important; }
+.dark .dm-badge-red    { background: rgba(239,68,68,0.15) !important;  color: #fca5a5 !important; border-color: rgba(239,68,68,0.25) !important; }
+.dark .dm-badge-purple { background: rgba(139,92,246,0.15) !important; color: #c4b5fd !important; border-color: rgba(139,92,246,0.25) !important; }
+
+.dark .dm-row-hover:hover { background: rgba(99,130,255,0.08) !important; }
+.dark .dm-row-active      { background: rgba(99,130,255,0.15) !important; border-color: rgba(129,140,248,0.4) !important; }
+
+/* Glowing accent for cards in dark mode */
+.dark .dm-glow {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.2), 0 8px 32px rgba(0,0,50,0.4) !important;
+}
+.dark .dm-glow:hover {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.35), 0 16px 48px rgba(0,0,80,0.5) !important;
+}
+
+/* Gradient text for headings in dark mode */
+.dark .dm-gradient-text {
+  background: linear-gradient(135deg, #818cf8, #a78bfa, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Scrollbar dark */
+.dark ::-webkit-scrollbar-track { background: rgba(10,18,40,0.8); }
+.dark ::-webkit-scrollbar-thumb { background: rgba(99,130,255,0.3); border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(129,140,248,0.5); }
+
+/* Select in dark mode */
+.dark select { background-color: rgba(15,25,55,0.8) !important; color: #e2e8f0 !important; border-color: rgba(99,130,255,0.25) !important; }
+.dark option  { background: #0d1631; color: #e2e8f0; }
+
+/* ────────────────────────────────────────────────
+   LIGHT MODE STYLES (unchanged)
+──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.transition-all-300 { transition: all 0.3s ease-in-out; }
+
+.loader {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  width: 20px; height: 20px;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; background: transparent; }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px; width: 16px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%; height: 4px;
+  cursor: pointer;
+  background: #e2e8f0;
+  border-radius: 2px;
+}
+
+.pdf-page-break { page-break-inside: avoid; }
+.error { color: #b91c1c; white-space: pre-wrap; }
+
 
 /* Custom Scrollbar for clean look */
 ::-webkit-scrollbar { width: 8px; }

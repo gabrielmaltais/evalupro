@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getUserFromToken } from "../lib/api";
+import DarkToggle from "../components/DarkToggle";
 
 export default function AdminStudents() {
   const [students, setStudents] = useState([]);
@@ -159,7 +160,8 @@ export default function AdminStudents() {
                       <i className="fa-solid fa-user-shield text-lg"></i>
                   </Link>
                 )}
-                <button onClick={() => { localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors ml-2" title="Se déconnecter">
+                <DarkToggle />
+                <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors ml-2" title="Se déconnecter">
                     <i className="fa-solid fa-right-from-bracket text-lg"></i>
                 </button>
             </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, getUserFromToken } from "../lib/api";
 import { Link } from "react-router-dom";
+import DarkToggle from "../components/DarkToggle";
 
 export default function AdminUsers() {
   const user = getUserFromToken() || { _id: "" };
@@ -61,16 +62,35 @@ export default function AdminUsers() {
   if (loading) return <div className="p-8 text-center text-gray-500">Chargement des utilisateurs...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-        <i className="fa-solid fa-users-cog mr-3 text-purple-600"></i>
-        Gestion des Utilisateurs
-      </h2>
+    <div className="bg-gray-100 dm-bg min-h-screen text-gray-800 dm-text-primary font-sans flex flex-col">
+      <header className="bg-white dm-header shadow-sm sticky top-0 z-30 border-b border-gray-200 dm-border">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-indigo-600 text-white p-2 rounded-lg">
+              <i className="fa-solid fa-user-shield text-xl"></i>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 dm-text-primary leading-tight">Gestion des Utilisateurs</h1>
+              <p className="text-xs text-gray-500 dm-text-secondary font-medium uppercase tracking-wide">Rôles &amp; Comptes</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link to="/evaluations" className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
+              <i className="fa-solid fa-arrow-left mr-2"></i>Retour
+            </Link>
+            <DarkToggle />
+            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href="/login"; }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
+              <i className="fa-solid fa-right-from-bracket text-lg"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+      <main className="flex-grow max-w-5xl mx-auto w-full py-8 px-4">
 
       {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
       {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-check-circle mr-2"></i>{success}</div>}
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white dm-surface rounded-xl shadow-sm border border-gray-100 dm-border overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 border-b border-gray-100 text-gray-600 uppercase text-xs">
             <tr>
@@ -116,6 +136,7 @@ export default function AdminUsers() {
         </table>
         {users.length === 0 && <div className="p-8 text-center text-gray-500 italic">Aucun utilisateur trouvé.</div>}
       </div>
+      </main>
     </div>
   );
 }

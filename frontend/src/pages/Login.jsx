@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setToken } from "../lib/api";
+import DarkToggle from "../components/DarkToggle";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -48,18 +49,21 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center p-4 font-sans">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen dm-bg flex items-center justify-center p-4 font-sans relative" style={{background: 'linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 50%, #0f172a 100%)'}}>
+      <div className="absolute top-4 right-4 z-10">
+        <DarkToggle />
+      </div>
+      <div className="bg-white dm-surface w-full max-w-md rounded-2xl shadow-2xl dm-glow overflow-hidden">
         
         {/* Header */}
-        <div className="bg-gray-50 border-b border-gray-100 p-6 text-center">
+        <div className="bg-gray-50 dm-surface2 border-b border-gray-100 dm-divider p-6 text-center">
             <div className="mx-auto bg-blue-600 text-white w-12 h-12 flex items-center justify-center rounded-xl shadow-md mb-4">
                 <i className="fa-solid fa-graduation-cap text-2xl"></i>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-bold text-gray-900 dm-text-primary dm-gradient-text tracking-tight">
                 ÉvaluPro
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dm-text-secondary mt-1">
                 {mode === "login" ? "Connectez-vous pour continuer" : "Créez votre compte enseignant"}
             </p>
         </div>

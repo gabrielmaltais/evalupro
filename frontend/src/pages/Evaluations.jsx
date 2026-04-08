@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, getUserFromToken } from "../lib/api";
+import DarkToggle from "../components/DarkToggle";
 
 export default function Evaluations() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -282,7 +283,8 @@ export default function Evaluations() {
                   <i className="fa-solid fa-user-shield text-xl"></i>
               </Link>
             )}
-            <button onClick={() => { localStorage.removeItem("eval_token"); window.location.href = "/login"; }} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors ml-2" title="Se déconnecter">
+            <DarkToggle />
+            <button onClick={() => { localStorage.removeItem("token"); localStorage.removeItem("eval_token"); window.location.href = "/login"; }} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors" title="Se déconnecter">
               <i className="fa-solid fa-right-from-bracket text-xl"></i>
             </button>
           </div>
