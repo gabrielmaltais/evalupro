@@ -37,6 +37,27 @@ export default function AdminRubric() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // AI Modal state
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiConfig, setAiConfig] = useState({
+    langue: "fr",
+    niveaux: "3",
+    inclureSousCriteres: true,
+    sousCritereFeedback: true,
+    sousCritereFeedbackStyle: "court",
+    inclureFeedbackGlobal: true,
+    nombreTranches: "5",
+    tonFeedback: "encourageant",
+    palette: "arc-en-ciel",
+    idsSemantics: false,
+    inclurePonderations: true,
+    inclureExemples: true,
+    genererPrompt: true,
+    contexte: "",
+    niveauEtudiants: "collegial",
+    nbCriteres: "4",
+  });
+
   async function refresh() {
     try {
       const data = await api.listRubrics();
