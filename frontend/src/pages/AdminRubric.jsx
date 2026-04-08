@@ -260,7 +260,7 @@ export default function AdminRubric() {
       return criterion;
     };
 
-    const nbCriteres = Math.max(1, Math.min(10, parseInt(cfg.nbCriteres) || 4));
+    const nbCriteres = Math.max(1, Math.min(50, parseInt(cfg.nbCriteres) || 4));
     const criteriaExamples = Array.from({ length: nbCriteres }, (_, i) => buildCriterion(i));
 
     const feedbackMessages = cfg.inclureFeedbackGlobal ? tranches.map(([min, max]) => ({
@@ -664,12 +664,16 @@ export default function AdminRubric() {
                 </div>
                 {/* Nb critères */}
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🔢 Nombre de critères à générer</label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {["2","3","4","5","6","8"].map(v => (
-                      <button key={v} onClick={() => setAiConfig({...aiConfig, nbCriteres: v})} className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${aiConfig.nbCriteres === v ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'}`}>{v}</button>
-                    ))}
-                  </div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2" title="Généralement 1 critère = 1 question">🔢 Nombre de critères (questions)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={aiConfig.nbCriteres}
+                    onChange={e => setAiConfig({...aiConfig, nbCriteres: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
+                    placeholder="Ex: 4"
+                  />
                 </div>
               </div>
 
