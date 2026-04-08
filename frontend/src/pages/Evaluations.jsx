@@ -571,3 +571,37 @@ export default function Evaluations() {
                         })}
                       </div>
                     )}
+                    {comments[cid] && <div className="mt-1 text-xs text-gray-500 italic">Note: {comments[cid]}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {form.generalComment && (
+            <div className="mt-8 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-bold text-gray-900 uppercase mb-2">Synthèse de l'enseignant</h3>
+              <div className="text-sm leading-relaxed text-gray-700 bg-gray-50 p-4 rounded text-justify whitespace-pre-wrap">{form.generalComment}</div>
+            </div>
+          )}
+
+          {/* Rétroaction finale basée sur le pourcentage */}
+          {selectedRubric?.feedbackMessages && selectedRubric.feedbackMessages.length > 0 && (() => {
+            const finalPct = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+            const match = selectedRubric.feedbackMessages.find(fm => finalPct >= fm.minPct && finalPct <= fm.maxPct);
+            if (!match) return null;
+            const msgColor = finalPct < 60 ? 'border-l-red-400 bg-red-50' : finalPct < 75 ? 'border-l-orange-400 bg-orange-50' : finalPct < 85 ? 'border-l-yellow-400 bg-yellow-50' : finalPct < 95 ? 'border-l-blue-400 bg-blue-50' : 'border-l-green-400 bg-green-50';
+            const textColor = finalPct < 60 ? 'text-red-700' : finalPct < 75 ? 'text-orange-700' : finalPct < 85 ? 'text-yellow-700' : finalPct < 95 ? 'text-blue-700' : 'text-green-700';
+            return (
+              <div className={`mt-8 border-t border-gray-200 pt-6`}>
+                <div className={`p-4 rounded-lg border-l-4 ${msgColor}`}>
+                  <p className={`text-sm font-semibold ${textColor}`}>{match.message}</p>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    </>
+  );
+}
