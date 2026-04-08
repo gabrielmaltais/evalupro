@@ -122,14 +122,54 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
   background-clip: text;
 }
 
+/* ────────────────────────────────────────────────
+   GLOBAL TAILWIND OVERRIDES FOR DARK MODE
+   (Forces existing classes to adopt dark styles)
+──────────────────────────────────────────────── */
+.dark .bg-white,
+.dark .bg-gray-50,
+.dark .bg-gray-100 {
+  background-color: rgba(13, 22, 45, 0.75) !important;
+  backdrop-filter: blur(12px);
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: rgba(99,130,255,0.2) !important;
+}
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.dark textarea,
+.dark select {
+  background-color: rgba(15, 25, 55, 0.8) !important;
+  border-color: rgba(99,130,255,0.25) !important;
+  color: #e2e8f0 !important;
+}
+
+.dark .bg-blue-50 { background-color: rgba(59,130,246,0.15) !important; }
+.dark .hover\:bg-blue-100:hover { background-color: rgba(59,130,246,0.25) !important; }
+.dark .bg-emerald-50 { background-color: rgba(16,185,129,0.15) !important; }
+.dark .hover\:bg-emerald-100:hover { background-color: rgba(16,185,129,0.25) !important; }
+.dark .bg-red-50 { background-color: rgba(239,68,68,0.15) !important; }
+.dark .hover\:bg-red-100:hover { background-color: rgba(239,68,68,0.25) !important; }
+.dark .bg-indigo-50 { background-color: rgba(99,102,241,0.15) !important; }
+
 /* Scrollbar dark */
 .dark ::-webkit-scrollbar-track { background: rgba(10,18,40,0.8); }
 .dark ::-webkit-scrollbar-thumb { background: rgba(99,130,255,0.3); border-radius: 4px; }
 .dark ::-webkit-scrollbar-thumb:hover { background: rgba(129,140,248,0.5); }
-
-/* Select in dark mode */
-.dark select { background-color: rgba(15,25,55,0.8) !important; color: #e2e8f0 !important; border-color: rgba(99,130,255,0.25) !important; }
-.dark option  { background: #0d1631; color: #e2e8f0; }
 
 /* ────────────────────────────────────────────────
    LIGHT MODE STYLES (unchanged)
