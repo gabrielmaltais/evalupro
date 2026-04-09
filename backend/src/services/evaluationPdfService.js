@@ -86,6 +86,36 @@ function feedbackBandColors(finalPct) {
   return { border: "#4ade80", bg: "#f0fdf4", text: "#15803d" };
 }
 
+/** Aligné sur les classes Tailwind des critères (Evaluations.jsx / AdminRubric). */
+function criterionStripeColor(criterion) {
+  const raw = String(criterion.color || "border-blue-500").trim();
+  const map = {
+    "border-blue-500": "#3b82f6",
+    "border-green-500": "#22c55e",
+    "border-red-500": "#ef4444",
+    "border-purple-500": "#a855f7",
+    "border-orange-500": "#f97316",
+    "border-gray-500": "#6b7280",
+  };
+  return map[raw] || "#3b82f6";
+}
+
+function drawCheckbox(doc, x, y, size, isChecked) {
+  if (isChecked) {
+    doc.rect(x, y, size, size).fillAndStroke("#9333ea", "#9333ea");
+    doc.save();
+    doc.moveTo(x + size * 0.22, y + size * 0.52)
+      .lineTo(x + size * 0.42, y + size * 0.72)
+      .lineTo(x + size * 0.82, y + size * 0.28)
+      .lineWidth(size * 0.12)
+      .strokeColor("#ffffff")
+      .stroke();
+    doc.restore();
+  } else {
+    doc.rect(x, y, size, size).strokeColor("#d1d5db").lineWidth(0.6).stroke();
+  }
+}
+
 /**
  * Aligne le rendu sur le template #pdf-content de Evaluations.jsx (export manuel).
  * showDatePdf côté UI n'est pas persisté : on n'affiche pas la date (comportement par défaut de la page).
@@ -110,14 +140,34 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
     const left = doc.page.margins.left;
     let y = doc.page.margins.top;
 
-    // En-tête (titre + note) — même structure que le PDF manuel
+    // En-tête : hauteurs dynamiques (évite le chevauchement titre / sous-titre si le titre passe sur 2 lignes)
     const split = 0.58;
-    doc.font("Helvetica-Bold").fontSize(20).fillColor("#111827").text(rubric.title || "Évaluation", left, y, { width: pageWidth * split });
-    doc.font("Helvetica").fontSize(9).fillColor("#6b7280").text(String(rubric.taskTitle || "").toUpperCase(), left, y + 24, { width: pageWidth * split });
-    doc.fontSize(9).fillColor("#6b7280").text("Note Finale", left + pageWidth * split, y, { width: pageWidth * (1 - split), align: "right" });
-    doc.fontSize(28).fillColor("#2563eb").text(`${displayScore}/${totalMax}`, left + pageWidth * split, y + 14, { width: pageWidth * (1 - split), align: "right" });
+    const colW = pageWidth * split;
+    const rightW = pageWidth * (1 - split);
+    const rightX = left + colW;
+    const titleStr = rubric.title || "Évaluation";
+    const taskStr = String(rubric.taskTitle || "").toUpperCase();
 
-    y += 52;
+    doc.font("Helvetica-Bold").fontSize(20).fillColor("#111827");
+    const titleH = doc.heightOfString(titleStr, { width: colW });
+    doc.text(titleStr, left, y, { width: colW });
+
+    const gapTitleTask = 8;
+    const subY = y + titleH + gapTitleTask;
+    doc.font("Helvetica").fontSize(9).fillColor("#6b7280");
+    const taskH = taskStr ? doc.heightOfString(taskStr, { width: colW }) : 0;
+    if (taskStr) doc.text(taskStr, left, subY, { width: colW });
+
+    const leftBlockH = titleH + gapTitleTask + taskH;
+    const noteLabelH = 12;
+    const scoreH = 32;
+    const rightBlockH = noteLabelH + scoreH;
+    const headerH = Math.max(leftBlockH, rightBlockH);
+
+    doc.fontSize(9).fillColor("#6b7280").text("Note Finale", rightX, y, { width: rightW, align: "right" });
+    doc.fontSize(28).fillColor("#2563eb").text(`${displayScore}/${totalMax}`, rightX, y + noteLabelH, { width: rightW, align: "right" });
+
+    y += headerH + 10;
     doc.moveTo(left, y).lineTo(left + pageWidth, y).strokeColor("#111827").lineWidth(2).stroke();
     y += 14;
     doc.y = y;
@@ -151,19 +201,33 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
 
       if (c.subCriteria && c.subCriteria.length) {
         const block = getSubBlock(subScores, cid);
+        const chkSize = 8;
+        const chkGap = 4;
+        const labelX = textLeft + chkSize + chkGap + 2;
+        const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
           const isChecked = !!(block[sc.id] || block[String(sc.id)]);
-          const mark = isChecked ? "✓" : "";
-          doc.fontSize(8).fillColor(isChecked ? "#1f2937" : "#9ca3af").text(
-            `[${mark}] ${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`,
-            textLeft,
-            cursorY,
-            { width: pageWidth - 24 }
-          );
-          cursorY += 12;
+          const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
+          doc.font("Helvetica").fontSize(8);
+          const labelH = doc.heightOfString(labelText, { width: labelW });
+          const rowH = Math.max(chkSize, labelH);
+          const boxY = cursorY + (rowH - chkSize) / 2;
+          drawCheckbox(doc, textLeft, boxY, chkSize, isChecked);
+          doc.fillColor(isChecked ? "#1f2937" : "#9ca3af").text(labelText, labelX, cursorY, { width: labelW });
+          cursorY += rowH + 4;
+
           if (!isChecked && sc.feedback) {
-            doc.fontSize(8).fillColor("#ef4444").text(`⚠ ${sc.feedback}`, textLeft + 10, cursorY, { width: pageWidth - 34 });
-            cursorY += 12;
+            const pad = 4;
+            const boxInnerW = pageWidth - 36;
+            const fbText = `⚠ ${sc.feedback}`;
+            doc.fontSize(8);
+            const fbTextH = doc.heightOfString(fbText, { width: boxInnerW - pad * 2 });
+            const fbH = fbTextH + pad * 2;
+            const fbX = textLeft + 10;
+            const fbY = cursorY;
+            doc.rect(fbX, fbY, pageWidth - 28, fbH).fillAndStroke("#fef2f2", "#fecaca");
+            doc.fillColor("#b91c1c").text(fbText, fbX + pad, fbY + pad, { width: boxInnerW - pad * 2 });
+            cursorY = fbY + fbH + 6;
           }
         });
       }
@@ -175,8 +239,9 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       }
 
       const blockBottom = cursorY + 6;
+      const stripeH = Math.max(28, blockBottom - rowTop);
       doc.save();
-      doc.rect(left, rowTop, 4, Math.max(28, blockBottom - rowTop)).fill("#3b82f6");
+      doc.rect(left, rowTop, 4, stripeH).fill(criterionStripeColor(c));
       doc.restore();
 
       doc.y = blockBottom;
