@@ -334,6 +334,94 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
   color: #15803d !important;
 }
 
+/* AI rubric modal: dedicated dark-mode palette for proper contrast */
+.dark .ai-modal-shell {
+  background: linear-gradient(180deg, rgba(8, 17, 42, 0.98), rgba(7, 14, 34, 0.98)) !important;
+  border: 1px solid rgba(99, 130, 255, 0.28);
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.75);
+}
+.dark .ai-modal-header {
+  background: linear-gradient(90deg, rgba(38, 12, 75, 0.9), rgba(23, 37, 84, 0.92)) !important;
+  border-bottom-color: rgba(99, 130, 255, 0.2) !important;
+}
+.dark .ai-modal-body,
+.dark .ai-modal-footer {
+  color: #e2e8f0 !important;
+}
+.dark .ai-modal-footer {
+  background: rgba(8, 16, 38, 0.9) !important;
+  border-top-color: rgba(99, 130, 255, 0.2) !important;
+}
+.dark .ai-modal-shell .text-gray-900,
+.dark .ai-modal-shell .text-gray-800,
+.dark .ai-modal-shell .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+.dark .ai-modal-shell .text-gray-600,
+.dark .ai-modal-shell .text-gray-500,
+.dark .ai-modal-shell .text-gray-400 {
+  color: #94a3b8 !important;
+}
+.dark .ai-modal-shell .text-purple-800 {
+  color: #d8b4fe !important;
+}
+.dark .ai-modal-shell .text-purple-700 {
+  color: #c4b5fd !important;
+}
+.dark .ai-modal-shell .text-orange-800 {
+  color: #fdba74 !important;
+}
+.dark .ai-modal-shell .bg-gray-50 {
+  background: rgba(17, 27, 58, 0.75) !important;
+}
+.dark .ai-modal-shell .bg-gray-100 {
+  background: rgba(28, 40, 76, 0.9) !important;
+}
+.dark .ai-modal-shell .bg-purple-50,
+.dark .ai-modal-shell .bg-purple-50\/60 {
+  background: rgba(76, 29, 149, 0.28) !important;
+}
+.dark .ai-modal-shell .bg-blue-50 {
+  background: rgba(30, 64, 175, 0.25) !important;
+}
+.dark .ai-modal-shell .bg-orange-50 {
+  background: rgba(154, 52, 18, 0.28) !important;
+}
+.dark .ai-modal-shell .border-gray-100,
+.dark .ai-modal-shell .border-gray-200,
+.dark .ai-modal-shell .border-gray-300 {
+  border-color: rgba(99, 130, 255, 0.25) !important;
+}
+.dark .ai-modal-shell .border-purple-200 {
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+.dark .ai-modal-shell .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+.dark .ai-modal-shell .border-orange-200 {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+}
+.dark .ai-modal-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.dark .ai-modal-shell textarea,
+.dark .ai-modal-shell select {
+  background-color: rgba(11, 21, 49, 0.9) !important;
+  border-color: rgba(99, 130, 255, 0.35) !important;
+  color: #e2e8f0 !important;
+}
+.dark .ai-modal-shell input::placeholder,
+.dark .ai-modal-shell textarea::placeholder {
+  color: #7b8bab !important;
+}
+.dark .ai-modal-shell button.bg-white {
+  background-color: rgba(13, 24, 55, 0.88) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(99, 130, 255, 0.35) !important;
+}
+.dark .ai-modal-shell button.hover\:bg-gray-100:hover,
+.dark .ai-modal-shell label.hover\:bg-gray-50:hover {
+  background-color: rgba(59, 130, 246, 0.14) !important;
+}
+
 /* ────────────────────────────────────────────────
    LIGHT MODE STYLES (unchanged)
 ──────────────────────────────────────────────── */

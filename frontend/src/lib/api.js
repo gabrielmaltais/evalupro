@@ -25,14 +25,23 @@ export function getUserFromToken() {
 
 async function request(path, options = {}) {
   const token = getToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    const isNetwork = error instanceof TypeError || /networkerror|failed to fetch/i.test(String(error?.message || ""));
+    if (isNetwork) {
+      throw new Error("Connexion au serveur impossible. Vérifiez votre réseau ou rechargez la page.");
+    }
+    throw error;
+  }
 
   // Token invalide ou expiré → déconnexion automatique
   if (response.status === 401 && path !== "/api/auth/login") {

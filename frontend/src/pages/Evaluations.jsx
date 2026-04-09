@@ -163,6 +163,8 @@ function StudentSelectWithIcons({
 }
 
 export default function Evaluations() {
+  const EVAL_DRAFT_STORAGE_KEY = "evaluations:last-unsaved-draft";
+  const EVAL_LAST_RUBRIC_STORAGE_KEY = "evaluations:last-active-rubric-id";
   const [searchParams, setSearchParams] = useSearchParams();
   const [rubrics, setRubrics] = useState([]);
   const [students, setStudents] = useState([]);
@@ -179,6 +181,40 @@ export default function Evaluations() {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
   const pdfTemplateRef = useRef(null);
+  const lastCommittedEvalRef = useRef("");
+
+  function stableNormalize(value) {
+    if (Array.isArray(value)) return value.map(stableNormalize);
+    if (value && typeof value === "object") {
+      const out = {};
+      Object.keys(value)
+        .sort()
+        .forEach((k) => {
+          out[k] = stableNormalize(value[k]);
+        });
+      return out;
+    }
+    return value;
+  }
+
+  function captureEvalSnapshot(next = {}) {
+    const snap = {
+      form: {
+        _id: next.form?._id ?? form._id ?? "",
+        studentId: next.form?.studentId ?? form.studentId ?? "",
+        studentName: next.form?.studentName ?? form.studentName ?? "",
+        rubric: next.form?.rubric ?? form.rubric ?? "",
+        date: next.form?.date ?? form.date ?? "",
+        generalComment: next.form?.generalComment ?? form.generalComment ?? "",
+      },
+      scores: next.scores ?? scores,
+      subScores: next.subScores ?? subScores,
+      comments: next.comments ?? comments,
+    };
+    return JSON.stringify(stableNormalize(snap));
+  }
+
+  const hasEvaluationChanges = captureEvalSnapshot() !== lastCommittedEvalRef.current;
 
   /** Onglet principal : correction, suivi par examen, envois de copies. */
   const [evalPageTab, setEvalPageTab] = useState(() => {
@@ -203,6 +239,29 @@ export default function Evaluations() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailJob, setEmailJob] = useState({ jobId: "", status: "", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
   const [hubSendBusyId, setHubSendBusyId] = useState(null);
+
+  function persistLocalDraft() {
+    try {
+      const payload = {
+        savedAt: new Date().toISOString(),
+        form,
+        scores,
+        subScores,
+        comments,
+      };
+      localStorage.setItem(EVAL_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Fallback silencieux : quota storage / mode privé.
+    }
+  }
+
+  function clearLocalDraft() {
+    try {
+      localStorage.removeItem(EVAL_DRAFT_STORAGE_KEY);
+    } catch {
+      // no-op
+    }
+  }
 
   async function refresh() {
     try {
@@ -230,7 +289,11 @@ export default function Evaluations() {
           rubricId,
         };
       });
-      if (!form.rubric && rubricList[0]) setForm((f) => ({ ...f, rubric: rubricList[0]._id }));
+      if (!form.rubric && rubricList[0]) {
+        const rememberedRubricId = localStorage.getItem(EVAL_LAST_RUBRIC_STORAGE_KEY);
+        const rememberedExists = rememberedRubricId && rubricList.some((r) => String(r._id) === String(rememberedRubricId));
+        setForm((f) => ({ ...f, rubric: rememberedExists ? rememberedRubricId : rubricList[0]._id }));
+      }
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -240,7 +303,37 @@ export default function Evaluations() {
     refresh().catch((e) => setError(String(e.message || e)));
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(EVAL_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      if (form._id || Object.keys(scores).length || Object.keys(subScores).length || Object.keys(comments).length) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.form) return;
+      const ok = window.confirm("Un brouillon local non enregistré a été trouvé. Voulez-vous le restaurer ?");
+      if (!ok) return;
+      setForm((f) => ({ ...f, ...(parsed.form || {}) }));
+      setScores(parsed.scores || {});
+      setSubScores(parsed.subScores || {});
+      setComments(parsed.comments || {});
+      setError("Brouillon local restauré.");
+    } catch {
+      // no-op
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!form.rubric) return;
+    try {
+      localStorage.setItem(EVAL_LAST_RUBRIC_STORAGE_KEY, String(form.rubric));
+    } catch {
+      // no-op
+    }
+  }, [form.rubric]);
+
   const selectedRubric = rubrics.find((r) => r._id === form.rubric);
+  const canEditEvaluation = Boolean(form.studentId);
 
   /** Étudiants (id) ayant déjà au moins une évaluation pour la grille / examen actif */
   const correctedStudentIdsForActiveExam = useMemo(() => {
@@ -602,6 +695,19 @@ export default function Evaluations() {
       }
       setSubCriteriaTouched(restoredSubTouched);
       setComments(data.comments || {});
+      lastCommittedEvalRef.current = captureEvalSnapshot({
+        form: {
+          _id: data._id,
+          studentId: data.studentId || "",
+          studentName: data.studentName || "",
+          date: data.date.slice(0, 10),
+          generalComment: data.generalComment || "",
+          rubric: typeof data.rubric === "object" ? data.rubric._id : data.rubric,
+        },
+        scores: data.scores || {},
+        subScores: data.subScores || {},
+        comments: data.comments || {},
+      });
       window.scrollTo(0, 0);
     } catch (e) {
       setError("Impossible de charger l'évaluation.");
@@ -621,6 +727,19 @@ export default function Evaluations() {
     setSubScores({});
     setSubCriteriaTouched({});
     setComments({});
+    const nextForm = {
+      ...form,
+      ...overrides,
+      _id: undefined,
+      date: Object.prototype.hasOwnProperty.call(overrides, "date") ? overrides.date : today,
+      generalComment: Object.prototype.hasOwnProperty.call(overrides, "generalComment") ? overrides.generalComment : "",
+    };
+    lastCommittedEvalRef.current = captureEvalSnapshot({
+      form: nextForm,
+      scores: {},
+      subScores: {},
+      comments: {},
+    });
   }
 
   /** Charge la dernière copie pour l’étudiant + l’examen, ou prépare une nouvelle saisie. */
@@ -771,17 +890,33 @@ export default function Evaluations() {
 
   async function saveEval() {
     setError("");
+    if (!form.studentId) {
+      setError("Sélectionnez un étudiant avant de modifier ou enregistrer une évaluation.");
+      return false;
+    }
     try {
       if (form._id) {
         await api.updateEvaluation(form._id, { ...form, scores, subScores, comments });
+        lastCommittedEvalRef.current = captureEvalSnapshot();
       } else {
         const res = await api.createEvaluation({ ...form, scores, subScores, comments });
         setForm(f => ({ ...f, _id: res._id }));
+        lastCommittedEvalRef.current = captureEvalSnapshot({
+          form: { ...form, _id: res._id },
+        });
       }
+      clearLocalDraft();
       await refresh();
       return true;
     } catch (err) {
-      setError(String(err.message || err));
+      persistLocalDraft();
+      const raw = String(err.message || err);
+      const isNetwork = /connexion au serveur impossible|networkerror|failed to fetch/i.test(raw);
+      if (isNetwork) {
+        setError("Impossible d'enregistrer pour le moment (connexion serveur). Votre brouillon local est conservé : ne fermez pas la page, puis réessayez.");
+      } else {
+        setError(raw);
+      }
       return false;
     }
   }
@@ -925,6 +1060,7 @@ export default function Evaluations() {
                     value={form.rubric}
                     onChange={(e) => {
                       const v = e.target.value;
+                      if (v) localStorage.setItem(EVAL_LAST_RUBRIC_STORAGE_KEY, String(v));
                       void syncEvaluationForStudentAndRubric(form.studentId, form.studentName, v);
                     }}
                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs sm:text-sm outline-none bg-white font-semibold text-gray-800"
@@ -998,12 +1134,14 @@ export default function Evaluations() {
                     type="date"
                     className="eval-form-control w-full min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border bg-white text-gray-900"
                     value={form.date}
+                    disabled={!canEditEvaluation}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
                   <label className="flex h-10 w-full items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 px-3 rounded-lg cursor-pointer hover:bg-gray-100 transition box-border">
                     <input
                       type="checkbox"
                       checked={showDatePdf}
+                      disabled={!canEditEvaluation}
                       onChange={(e) => setShowDatePdf(e.target.checked)}
                       className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 shrink-0"
                     />
@@ -1014,7 +1152,13 @@ export default function Evaluations() {
             </div>
           </div>
 
-          <div className="space-y-4">
+          {!canEditEvaluation && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Sélectionnez un étudiant pour commencer la correction. Les champs d&apos;évaluation restent verrouillés tant qu&apos;aucun étudiant n&apos;est choisi.
+            </div>
+          )}
+
+          <div className={`space-y-4 ${!canEditEvaluation ? "opacity-60 pointer-events-none select-none" : ""}`}>
             {selectedRubric && selectedRubric.criteria && selectedRubric.criteria.map((c, i) => {
               const cid = c.id || c._id || String(i);
               const currentScore = scores[cid] || 0;
@@ -1045,7 +1189,7 @@ export default function Evaluations() {
                       <div className="flex items-center gap-2">
                         <span className="text-2xl font-bold text-blue-600">{currentScore}</span>
                         <span className="text-gray-400 text-sm">/ {c.weight}</span>
-                        <button onClick={() => setShowComment(s => ({ ...s, [cid]: !s[cid] }))} className="ml-2 text-gray-400 hover:text-blue-500 transition"><i className="fa-regular fa-comment-dots text-xl"></i></button>
+                        <button disabled={!canEditEvaluation} onClick={() => setShowComment(s => ({ ...s, [cid]: !s[cid] }))} className="ml-2 text-gray-400 hover:text-blue-500 transition disabled:opacity-40 disabled:cursor-not-allowed"><i className="fa-regular fa-comment-dots text-xl"></i></button>
                       </div>
                     </div>
 
@@ -1057,7 +1201,7 @@ export default function Evaluations() {
                               const colorType = lvl.maxPct < 0.5 ? 'red' : lvl.maxPct < 0.8 ? 'yellow' : 'green';
                               const btnClass = colorType === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : colorType === 'yellow' ? 'border-yellow-300 text-yellow-600 hover:bg-yellow-50' : 'border-green-200 text-green-600 hover:bg-green-50';
                               return (
-                                <button key={lnum} onClick={() => handleLevelClick(cid, c, lvl)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} leading-tight`}>
+                                <button key={lnum} disabled={!canEditEvaluation} onClick={() => handleLevelClick(cid, c, lvl)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} leading-tight disabled:opacity-50 disabled:cursor-not-allowed`}>
                                   {lvl.label}
                                 </button>
                               );
@@ -1065,7 +1209,7 @@ export default function Evaluations() {
                           </div>
                         )}
                         <div className="relative pt-4 pb-2">
-                          <input type="range" min="0" max={c.weight || 10} step="0.5" value={currentScore} className="w-full h-2 accent-blue-600 cursor-pointer" onChange={e => handleScore(cid, e.target.value)} />
+                          <input disabled={!canEditEvaluation} type="range" min="0" max={c.weight || 10} step="0.5" value={currentScore} className="w-full h-2 accent-blue-600 cursor-pointer disabled:cursor-not-allowed" onChange={e => handleScore(cid, e.target.value)} />
                         </div>
 
                         {c.subCriteria && c.subCriteria.length > 0 && (
@@ -1074,7 +1218,7 @@ export default function Evaluations() {
                               const isChecked = subScores[cid]?.[sc.id] || false;
                               return (
                                 <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : 'border-transparent hover:border-gray-100 hover:bg-gray-50 dark:hover:border-white/10 dark:hover:bg-white/[0.04]'}`}>
-                                  <input type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0 dark:border-slate-500 dark:bg-slate-800" />
+                                  <input disabled={!canEditEvaluation} type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0 dark:border-slate-500 dark:bg-slate-800 disabled:cursor-not-allowed" />
                                   <div className="flex flex-col gap-0.5 min-w-0">
                                     <span className={`text-sm ${isChecked ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
                                     <span className="text-xs text-slate-600 dark:text-slate-300">Valeur : {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
@@ -1116,7 +1260,7 @@ export default function Evaluations() {
                     {showComment[cid] && (
                       <div className="mt-4 pt-3 border-t border-gray-100">
                         <label className="text-xs font-bold text-gray-400 uppercase">Commentaire spécifique</label>
-                        <textarea className="w-full mt-1 p-2 border border-gray-300 rounded text-sm outline-none" rows="2" value={comments[cid] || ""} onChange={e => setComments(s => ({ ...s, [cid]: e.target.value }))}></textarea>
+                        <textarea disabled={!canEditEvaluation} className="w-full mt-1 p-2 border border-gray-300 rounded text-sm outline-none disabled:bg-gray-100 disabled:cursor-not-allowed" rows="2" value={comments[cid] || ""} onChange={e => setComments(s => ({ ...s, [cid]: e.target.value }))}></textarea>
                       </div>
                     )}
                   </div>
@@ -1129,7 +1273,7 @@ export default function Evaluations() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-800">Synthèse & Commentaires Généraux</h3>
             </div>
-            <textarea rows="6" className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="Observations générales sur le travail..." value={form.generalComment} onChange={e => setForm({ ...form, generalComment: e.target.value })}></textarea>
+            <textarea disabled={!canEditEvaluation} rows="6" className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" placeholder="Observations générales sur le travail..." value={form.generalComment} onChange={e => setForm({ ...form, generalComment: e.target.value })}></textarea>
           </div>
 
           <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mt-6">
@@ -1155,11 +1299,15 @@ export default function Evaluations() {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:self-start space-y-6">
-          <div className="sticky top-24 space-y-6">
+        <div className="lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:sticky lg:top-24 lg:self-start space-y-6 h-fit">
+          <div className="space-y-6">
 
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-teal-400"></div>
+              <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Étudiant</p>
+                <p className="truncate text-lg font-semibold text-gray-900">{form.studentName || "Non sélectionné"}</p>
+              </div>
               <h2 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-2">Note Finale</h2>
               <div className="flex items-end justify-center gap-1 mb-4">
                 <span className="text-6xl font-extrabold text-gray-900 tracking-tighter">{Math.round(totalScore * 10) / 10}</span>
@@ -1176,13 +1324,29 @@ export default function Evaluations() {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 grid gap-3">
-              <button onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3">
+              <button disabled={!canEditEvaluation} onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 disabled:opacity-45 disabled:cursor-not-allowed">
                 <i className="fa-solid fa-save"></i> Enregistrer l'évaluation
               </button>
-              <button onClick={handleDownloadPDF} className="w-full bg-slate-600 hover:bg-slate-500 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 border border-slate-500/40 dark:bg-indigo-900/90 dark:hover:bg-indigo-800 dark:border-indigo-400/25">
+              <button disabled={!canEditEvaluation} onClick={handleDownloadPDF} className="w-full bg-slate-600 hover:bg-slate-500 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 border border-slate-500/40 dark:bg-indigo-900/90 dark:hover:bg-indigo-800 dark:border-indigo-400/25 disabled:opacity-45 disabled:cursor-not-allowed">
                 <i className="fa-solid fa-file-pdf"></i> Enregistrer & Télécharger PDF
               </button>
-              <button onClick={() => { if (window.confirm('Réinitialiser ?')) { setScores({}); setForm({ ...form, studentId: '', studentName: '', generalComment: '' }); setComments({}); } }} className="w-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-3">
+              <button
+                disabled={!canEditEvaluation}
+                onClick={() => {
+                  if (hasEvaluationChanges && !window.confirm("Réinitialiser ?")) return;
+                  setScores({});
+                  setSubScores({});
+                  setComments({});
+                  setForm({ ...form, studentId: "", studentName: "", generalComment: "" });
+                  lastCommittedEvalRef.current = captureEvalSnapshot({
+                    form: { ...form, studentId: "", studentName: "", generalComment: "" },
+                    scores: {},
+                    subScores: {},
+                    comments: {},
+                  });
+                }}
+                className="w-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-3 disabled:opacity-45 disabled:cursor-not-allowed"
+              >
                 <i className="fa-solid fa-rotate-right"></i> Réinitialiser
               </button>
             </div>

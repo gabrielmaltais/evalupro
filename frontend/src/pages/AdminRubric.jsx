@@ -650,8 +650,8 @@ export default function AdminRubric() {
       {/* AI TEMPLATE MODAL */}
       {showAIModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={(e) => e.target === e.currentTarget && setShowAIModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
+          <div className="ai-modal-shell bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="ai-modal-header flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-robot text-purple-600"></i> Configurateur de Gabarit IA</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Personnalisez les options pour générer un gabarit JSON optimal</p>
@@ -659,7 +659,7 @@ export default function AdminRubric() {
               <button onClick={() => setShowAIModal(false)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fa-solid fa-xmark"></i></button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="ai-modal-body p-6 space-y-6">
 
               {/* Contexte */}
               <div>
@@ -831,7 +831,7 @@ export default function AdminRubric() {
 
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
+            <div className="ai-modal-footer px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
               <div className="text-xs text-gray-400">
                 <i className="fa-solid fa-circle-info mr-1"></i>
                 {Math.max(1, Math.min(50, parseInt(aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres) || 4))} critères · {aiConfig.niveaux} niveaux
