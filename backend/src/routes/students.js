@@ -9,8 +9,9 @@ const router = express.Router();
 
 const studentSchema = z.object({
   name: z.string().min(1),
-  email: z.string().optional(),
-  group: z.string().optional(),
+  email: z
+    .preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().email().optional()),
+  group: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().optional()),
 });
 
 router.use(auth);

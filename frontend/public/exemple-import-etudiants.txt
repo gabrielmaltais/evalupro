@@ -1,0 +1,4 @@
+Jean Dupont
+Marie Tremblay	marie.tremblay@ecole.ca
+Luc Martin;luc.martin@ecole.ca
+Sophie Arsenault,sophie.arsenault@ecole.ca

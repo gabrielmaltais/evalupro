@@ -548,15 +548,15 @@ export default function Evaluations() {
                 <label className="block text-sm font-medium text-gray-700 mb-1 min-h-[1.25rem]" htmlFor="eval-date-input">
                   Date de l&apos;évaluation
                 </label>
-                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-stretch">
+                <div className="flex flex-col gap-2">
                   <input
                     id="eval-date-input"
                     type="date"
-                    className="w-full sm:flex-1 min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border"
+                    className="w-full min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border"
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
-                  <label className="flex h-10 shrink-0 items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 px-3 rounded-lg cursor-pointer hover:bg-gray-100 transition box-border whitespace-nowrap">
+                  <label className="flex h-10 w-full items-center gap-2 text-sm text-gray-600 bg-gray-50 border border-gray-200 px-3 rounded-lg cursor-pointer hover:bg-gray-100 transition box-border">
                     <input
                       type="checkbox"
                       checked={showDatePdf}

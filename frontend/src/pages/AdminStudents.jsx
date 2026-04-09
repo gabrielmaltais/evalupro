@@ -7,10 +7,10 @@ import PageHeader from "../components/PageHeader";
 function HubHeader() {
   return (
     <PageHeader
-      icon="fa-people-group"
+      icon="fa-chalkboard-user"
       iconBgClass="bg-blue-600"
-      title="Hub pédagogique"
-      subtitle="Groupes, étudiants, évaluations et envois centralisés"
+      title="Espace classe"
+      subtitle="Groupes, étudiants, suivi des évaluations et envoi des copies"
     />
   );
 }
@@ -93,6 +93,56 @@ function evalStudentId(it) {
   return String(it.studentId);
 }
 
+function evalRubricId(it) {
+  if (!it?.rubric) return null;
+  if (typeof it.rubric === "object") return String(it.rubric._id ?? "");
+  return String(it.rubric);
+}
+
+/** Si plusieurs copies pour le même étudiant et la même grille, on retient la plus récente par date. */
+function findLatestEvalForStudentRubric(studentId, rubricId, itemsList) {
+  const sid = String(studentId);
+  const rid = String(rubricId);
+  const matches = itemsList.filter((it) => {
+    const eSid = evalStudentId(it);
+    const eRid = evalRubricId(it);
+    return eSid === sid && eRid === rid;
+  });
+  if (!matches.length) return null;
+  matches.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""), "fr"));
+  return matches[0];
+}
+
+/** Une ligne d’import : nom seul, ou nom + courriel (tab, point-virgule, ou virgule si la partie droite ressemble à un mail). */
+function parseStudentBulkLine(line) {
+  const t = line.trim();
+  if (!t) return null;
+  if (t.includes("\t")) {
+    const parts = t.split("\t");
+    const name = (parts[0] || "").trim();
+    const email = parts.slice(1).join("\t").trim();
+    if (!name) return null;
+    return { name, email: email || undefined };
+  }
+  const semi = t.indexOf(";");
+  if (semi !== -1) {
+    const name = t.slice(0, semi).trim();
+    const email = t.slice(semi + 1).trim();
+    if (!name) return null;
+    return { name, email: email || undefined };
+  }
+  const commaIdx = t.indexOf(",");
+  if (commaIdx !== -1) {
+    const after = t.slice(commaIdx + 1).trim();
+    if (after.includes("@")) {
+      const name = t.slice(0, commaIdx).trim();
+      if (!name) return null;
+      return { name, email: after || undefined };
+    }
+  }
+  return { name: t };
+}
+
 export default function AdminStudents() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("roster");
@@ -123,6 +173,8 @@ export default function AdminStudents() {
     allowResendFailed: true,
     delayMs: 700,
   });
+  /** Tri du tableau « Suivi des évaluations » (onglet Évaluations du hub). */
+  const [hubEvalSort, setHubEvalSort] = useState({ key: "name", dir: "asc" });
 
   /** Examens connus du serveur pour lesquels il existe au moins une évaluation (copie corrigée) dans le groupe sélectionné, ou dans n'importe quel groupe si « Tous ». */
   const examsForSend = useMemo(() => {
@@ -209,13 +261,70 @@ export default function AdminStudents() {
     return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group));
   }, [groupDashboard, draftGroups]);
   const filteredStudents = selectedGroup ? (groupedStudents[selectedGroup] || []) : students;
-  const filteredEvals = selectedGroup
-    ? items.filter((it) => {
-        const sid = evalStudentId(it);
-        const s = students.find((x) => String(x._id) === sid);
-        return (s?.group || "Sans groupe") === selectedGroup;
-      })
-    : items;
+
+  const hubEvalTableRows = useMemo(() => {
+    const rid = emailBatchConfig.rubricId;
+    if (!rid) return [];
+    return filteredStudents.map((s) => {
+      const ev = findLatestEvalForStudentRubric(s._id, rid, items);
+      const totalMax = ev?.totalMax ?? 0;
+      const totalScore = ev?.totalScore ?? 0;
+      const pct = totalMax > 0 ? (Number(totalScore) / Number(totalMax)) * 100 : null;
+      const dateStr = ev?.date ? String(ev.date).slice(0, 10) : "";
+      return {
+        student: s,
+        evaluation: ev,
+        corrected: !!ev,
+        pct,
+        dateStr,
+      };
+    });
+  }, [filteredStudents, items, emailBatchConfig.rubricId]);
+
+  const hubEvalSortedRows = useMemo(() => {
+    const rows = [...hubEvalTableRows];
+    const { key, dir } = hubEvalSort;
+    const mult = dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (key) {
+        case "name":
+          cmp = (a.student.name || "").localeCompare(b.student.name || "", "fr");
+          break;
+        case "status": {
+          const va = a.corrected ? 1 : 0;
+          const vb = b.corrected ? 1 : 0;
+          cmp = va - vb;
+          break;
+        }
+        case "date": {
+          const da = a.dateStr;
+          const db = b.dateStr;
+          if (!da && !db) cmp = 0;
+          else if (!da) cmp = 1;
+          else if (!db) cmp = -1;
+          else cmp = da.localeCompare(db);
+          break;
+        }
+        case "score": {
+          const na = a.pct == null ? -1 : a.pct;
+          const nb = b.pct == null ? -1 : b.pct;
+          cmp = na - nb;
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return mult * cmp;
+    });
+    return rows;
+  }, [hubEvalTableRows, hubEvalSort]);
+
+  function toggleHubEvalSort(nextKey) {
+    setHubEvalSort((prev) =>
+      prev.key === nextKey ? { key: nextKey, dir: prev.dir === "asc" ? "desc" : "asc" } : { key: nextKey, dir: "asc" }
+    );
+  }
 
   const enrollSendSummaries = useMemo(() => {
     if (!selectedGroup) return [];
@@ -364,10 +473,15 @@ export default function AdminStudents() {
     setError("");
     setSuccess("");
     try {
-      const names = bulkText.split("\n").map((n) => n.trim()).filter(Boolean);
-      if (!names.length) return setError("La liste est vide.");
-      await api.createStudentsBulk({ students: names.map((n) => ({ name: n, group })) });
-      setSuccess(`${names.length} étudiants importés.`);
+      const parsed = bulkText.split("\n").map(parseStudentBulkLine).filter(Boolean);
+      if (!parsed.length) return setError("La liste est vide.");
+      const studentsPayload = parsed.map((p) => ({
+        name: p.name,
+        ...(p.email ? { email: p.email } : {}),
+        ...(group.trim() ? { group: group.trim() } : {}),
+      }));
+      await api.createStudentsBulk({ students: studentsPayload });
+      setSuccess(`${parsed.length} étudiants importés.`);
       setBulkText("");
       setBulkMode(false);
       await refresh();
@@ -606,7 +720,22 @@ export default function AdminStudents() {
                 <div>
                   <h2 className="text-lg font-bold mb-3">Import en lot</h2>
                   <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Groupe cible" value={group} onChange={(e) => setGroup(e.target.value)} />
-                  <textarea rows={10} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+                  <p className="text-xs text-gray-600 mb-2 leading-relaxed">
+                    Une ligne par étudiant : <strong>nom seul</strong>, ou <strong>nom</strong> suivi d’une tabulation, d’un point-virgule ou d’une virgule (si le courriel contient <code className="bg-gray-100 px-0.5 rounded">@</code>) puis le <strong>courriel</strong>.
+                    Ex. <code className="bg-gray-100 px-1 rounded text-[11px]">Marie Curie	marie@ecole.ca</code> ou{" "}
+                    <code className="bg-gray-100 px-1 rounded text-[11px]">Paul Martin;paul@ecole.ca</code>
+                  </p>
+                  <div className="mb-2">
+                    <a
+                      href={`${import.meta.env.BASE_URL}exemple-import-etudiants.txt`}
+                      download="exemple-import-etudiants.txt"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-50 transition-colors"
+                    >
+                      <i className="fa-solid fa-file-arrow-down" aria-hidden />
+                      Télécharger un fichier d’exemple (.txt)
+                    </a>
+                  </div>
+                  <textarea rows={10} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Jean Dupont\nClaire Boisclair\tclaire@ecole.ca\nLuc;luc@ecole.ca"} />
                   <div className="mt-3 flex justify-end"><button onClick={saveBulk} className="bg-emerald-600 text-white rounded-lg px-4 py-2">Importer</button></div>
                 </div>
               ) : (
@@ -657,13 +786,17 @@ export default function AdminStudents() {
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">Suivi des évaluations {selectedGroup ? `• ${selectedGroup}` : ""}</h2>
-              <button onClick={() => navigate("/evaluations")} className="text-sm text-blue-600 hover:text-blue-800">Ouvrir l'éditeur</button>
+              <button type="button" onClick={() => navigate("/evaluations")} className="text-sm text-blue-600 hover:text-blue-800">
+                Ouvrir l&apos;éditeur
+              </button>
             </div>
-            <div className="mb-5 rounded-xl border border-gray-100 bg-gray-50/80 p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">Liste des étudiants · statut pour un examen</h3>
-              <label className="text-xs text-gray-600 block">Examen</label>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 mb-4">
+              <label htmlFor="hub-eval-exam-select" className="text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-2">
+                Examen
+              </label>
               <select
-                className="mt-1 w-full max-w-md text-sm border rounded-lg px-2 py-1.5 bg-white"
+                id="hub-eval-exam-select"
+                className="w-full max-w-xl text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white shadow-sm"
                 value={emailBatchConfig.rubricId}
                 onChange={(e) => setEmailBatchConfig((prev) => ({ ...prev, rubricId: e.target.value }))}
               >
@@ -675,42 +808,152 @@ export default function AdminStudents() {
                 ))}
               </select>
               {!emailBatchConfig.rubricId && (
-                <p className="text-xs text-gray-500 mt-2">Sélectionnez un examen pour voir qui est corrigé ou non dans la liste ci-dessous.</p>
+                <p className="text-sm text-gray-700 mt-3 rounded-xl border border-amber-100 bg-amber-50/90 px-4 py-3">
+                  Sélectionnez un examen pour afficher le tableau : une ligne par étudiant du périmètre actif (groupe ou tous), avec statut, date, note et actions.
+                </p>
               )}
-              {emailBatchConfig.rubricId && correctedStudentIdsForHubExam && (
-                <ul className="mt-3 max-h-40 overflow-y-auto divide-y border border-gray-100 rounded-lg bg-white">
-                  {filteredStudents.map((s) => (
-                    <li key={s._id} className="py-2 px-3 flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate">{s.name}</span>
-                      <span
-                        className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          correctedStudentIdsForHubExam.has(String(s._id)) ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {correctedStudentIdsForHubExam.has(String(s._id)) ? "Corrigé" : "À corriger"}
-                      </span>
-                    </li>
-                  ))}
-                  {filteredStudents.length === 0 && (
-                    <li className="py-2 px-3 text-xs text-gray-500">Aucun étudiant pour ce filtre.</li>
-                  )}
-                </ul>
+              {emailBatchConfig.rubricId && examsForSend.length === 0 && (
+                <p className="text-xs text-amber-800 mt-2">Aucun examen avec correction dans ce périmètre — importez ou corrigez d&apos;abord une copie.</p>
               )}
             </div>
-            <ul className="divide-y">
-              {filteredEvals.slice(0, 100).map((ev) => (
-                <li key={ev._id} className="py-2 flex justify-between items-center text-sm">
-                  <div>{ev.studentName} • {ev.date} • {ev.rubric?.taskTitle || ev.rubric?.title}</div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-blue-700">{ev.totalScore}/{ev.totalMax}</span>
-                    <Link to={`/evaluations?load=${ev._id}`} className="text-blue-600 hover:underline">Voir</Link>
-                    <Link to={`/evaluations?load=${ev._id}&download=true`} className="text-gray-700 hover:underline">PDF</Link>
-                    <button onClick={() => removeEval(ev._id)} className="text-red-600 hover:underline">Suppr.</button>
-                  </div>
-                </li>
-              ))}
-              {filteredEvals.length === 0 && <li className="py-2 text-sm text-gray-500">Aucune évaluation pour ce filtre.</li>}
-            </ul>
+
+            {emailBatchConfig.rubricId && (
+              <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="max-h-[60vh] overflow-auto">
+                  <table className="w-full text-sm text-left border-collapse min-w-[640px]">
+                    <thead className="bg-slate-100 text-slate-800 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
+                      <tr>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("name")}
+                            className="inline-flex items-center gap-1.5 hover:text-blue-700 rounded-lg -mx-1 px-1 py-0.5 transition-colors"
+                          >
+                            Étudiant
+                            {hubEvalSort.key === "name" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-gray-400 text-xs" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("status")}
+                            className="inline-flex items-center gap-1.5 hover:text-blue-700 rounded-lg -mx-1 px-1 py-0.5 transition-colors"
+                          >
+                            Statut
+                            {hubEvalSort.key === "status" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-gray-400 text-xs" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("date")}
+                            className="inline-flex items-center gap-1.5 hover:text-blue-700 rounded-lg -mx-1 px-1 py-0.5 transition-colors"
+                          >
+                            Date
+                            {hubEvalSort.key === "date" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-gray-400 text-xs" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("score")}
+                            className="inline-flex items-center gap-1.5 hover:text-blue-700 rounded-lg -mx-1 px-1 py-0.5 transition-colors"
+                          >
+                            Résultat
+                            {hubEvalSort.key === "score" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-gray-400 text-xs" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {hubEvalSortedRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                            Aucun étudiant pour ce filtre (groupe actif ou liste vide).
+                          </td>
+                        </tr>
+                      ) : (
+                        hubEvalSortedRows.map((row) => (
+                          <tr key={row.student._id} className="even:bg-slate-50/60 hover:bg-blue-50/40 transition-colors">
+                            <td className="px-4 py-3 font-medium text-gray-900">{row.student.name}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex text-xs font-semibold px-2.5 py-1 rounded-full ${
+                                  row.corrected ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
+                                }`}
+                              >
+                                {row.corrected ? "Corrigé" : "À corriger"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 tabular-nums">{row.dateStr || "—"}</td>
+                            <td className="px-4 py-3">
+                              {row.evaluation ? (
+                                <span className="tabular-nums">
+                                  <span className="font-semibold text-blue-800">
+                                    {row.evaluation.totalScore}/{row.evaluation.totalMax}
+                                  </span>
+                                  {row.pct != null && (
+                                    <span className="text-gray-500 ml-2">({Math.round(row.pct)}%)</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {row.evaluation ? (
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <Link
+                                    to={`/evaluations?load=${row.evaluation._id}`}
+                                    className="text-blue-600 hover:underline font-medium"
+                                  >
+                                    Voir
+                                  </Link>
+                                  <Link
+                                    to={`/evaluations?load=${row.evaluation._id}&download=true`}
+                                    className="text-gray-700 hover:underline"
+                                  >
+                                    PDF
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeEval(row.evaluation._id)}
+                                    className="text-red-600 hover:underline"
+                                  >
+                                    Suppr.
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
