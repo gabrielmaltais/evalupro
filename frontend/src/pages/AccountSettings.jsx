@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getUserFromToken, setToken } from "../lib/api";
-import PageHeader from "../components/PageHeader";
-import TopPageMenu from "../components/TopPageMenu";
+import PageSectionTitle from "../components/PageSectionTitle";
 
 export default function AccountSettings() {
   const [name, setName] = useState("");
@@ -88,15 +87,14 @@ export default function AccountSettings() {
   }
 
   return (
-    <div className="bg-gray-100 dm-bg min-h-screen text-gray-800 dm-text-primary font-sans flex flex-col">
-      <PageHeader
-        icon="fa-user-gear"
-        iconBgClass="bg-slate-600"
-        title="Mon compte"
-        subtitle="Nom, email et mot de passe"
-      />
-      <TopPageMenu />
-      <main className="flex-grow max-w-lg mx-auto w-full py-8 px-4">
+    <div className="dm-text-primary flex w-full flex-1 flex-col text-gray-800 dm-bg">
+      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-8">
+        <PageSectionTitle
+          icon="fa-user-gear"
+          iconBgClass="bg-slate-600"
+          title="Mon compte"
+          subtitle="Nom, email et mot de passe"
+        />
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm border border-red-100">
             <i className="fa-solid fa-circle-exclamation mr-2" />

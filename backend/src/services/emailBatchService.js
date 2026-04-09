@@ -32,7 +32,7 @@ function getProgress(jobId) {
 }
 
 async function selectEvaluationsForBatch({ ownerId, group, rubricId }) {
-  const students = await Student.find({ createdBy: ownerId, group }).select("_id email name group");
+  const students = await Student.find({ createdBy: ownerId, group }).select("_id email name firstName lastName group");
   const validStudents = students.filter((s) => s.email);
   const studentIds = validStudents.map((s) => s._id);
   if (!studentIds.length) return [];
@@ -189,8 +189,108 @@ function startBatchJob(params) {
   return jobId;
 }
 
+/**
+ * Envoie la copie PDF d’une seule évaluation par courriel (suivi d’évaluation).
+ * @returns {Promise<{ ok: true, alreadySent?: boolean, sent?: boolean, delivery: object }>}
+ */
+async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
+  const evaluation = await Evaluation.findOne({ _id: evaluationId, owner: owner._id }).populate("rubric");
+  if (!evaluation) {
+    const err = new Error("Évaluation introuvable");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (!evaluation.studentId) {
+    const err = new Error("Aucun étudiant associé à cette évaluation");
+    err.statusCode = 400;
+    throw err;
+  }
+  const student = await Student.findOne({ _id: evaluation.studentId, createdBy: owner._id });
+  if (!student || !String(student.email || "").trim()) {
+    const err = new Error("L'étudiant n'a pas d'adresse courriel");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const smtpConfig = await getActiveSmtpConfig();
+  if (!smtpConfig) {
+    const err = new Error("Aucune configuration SMTP active");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const examKey = examKeyFromRubric(evaluation.rubric);
+  const existing = await EvaluationEmailDelivery.findOne({
+    evaluationId: evaluation._id,
+    studentId: student._id,
+    owner: owner._id,
+    examKey,
+  });
+
+  if (existing && existing.status === "sent" && !resend) {
+    return { ok: true, alreadySent: true, delivery: existing };
+  }
+
+  const jobId = makeJobId();
+  let delivery = existing;
+  if (!delivery) {
+    delivery = await EvaluationEmailDelivery.create({
+      evaluationId: evaluation._id,
+      studentId: student._id,
+      group: student.group || "",
+      examKey,
+      status: "queued",
+      attempts: 0,
+      owner: owner._id,
+      jobId,
+    });
+  } else {
+    delivery.status = "queued";
+    delivery.jobId = jobId;
+    await delivery.save();
+  }
+
+  const ownerDoc = await User.findById(owner._id).select("name");
+  const teacherName = (ownerDoc && ownerDoc.name) || owner.name || "Enseignant";
+  const ownerForTemplate = { ...owner, name: teacherName };
+
+  try {
+    const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric);
+    const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
+    const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
+      owner: ownerForTemplate,
+      student,
+      rubric: evaluation.rubric,
+    });
+    const info = await sendMailWithCurrentConfig(
+      {
+        to: student.email,
+        subject,
+        text,
+        attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+      },
+      { fromDisplayName: teacherName }
+    );
+
+    delivery.status = "sent";
+    delivery.attempts += 1;
+    delivery.lastError = "";
+    delivery.sentAt = new Date();
+    delivery.messageId = info.messageId || "";
+    await delivery.save();
+    return { ok: true, sent: true, delivery };
+  } catch (error) {
+    delivery.status = "failed";
+    delivery.attempts += 1;
+    delivery.lastError = String(error.message || error);
+    await delivery.save();
+    throw error;
+  }
+}
+
 module.exports = {
   startBatchJob,
   getProgress,
   selectEvaluationsForBatch,
+  sendOneEvaluationEmail,
 };

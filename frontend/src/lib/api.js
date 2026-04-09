@@ -84,6 +84,11 @@ export const api = {
   renameGroup: (from, to) => request("/api/students/groups/rename", { method: "POST", body: JSON.stringify({ from, to }) }),
   mergeGroups: (fromGroups, to) => request("/api/students/groups/merge", { method: "POST", body: JSON.stringify({ fromGroups, to }) }),
   clearGroup: (groupName) => request(`/api/students/groups/${encodeURIComponent(groupName)}`, { method: "DELETE" }),
+  deleteGroupWithStudents: (groupName, confirmGroupName) =>
+    request("/api/students/groups/delete-with-students", {
+      method: "POST",
+      body: JSON.stringify({ groupName, confirmGroupName }),
+    }),
   updateStudent: (id, payload) => request(`/api/students/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteStudent: (id) => request(`/api/students/${id}`, { method: "DELETE" }),
   
@@ -97,6 +102,8 @@ export const api = {
 
   getEmailTargets: () => request("/api/evaluations/email-targets"),
   startEmailBatch: (payload) => request("/api/evaluations/email-batches", { method: "POST", body: JSON.stringify(payload) }),
+  sendEvaluationEmailOne: (evaluationId, opts = {}) =>
+    request("/api/evaluations/email-send-one", { method: "POST", body: JSON.stringify({ evaluationId, ...opts }) }),
   getEmailBatchProgress: (jobId) => request(`/api/evaluations/email-batches/${jobId}`),
   listEmailDeliveries: (params = {}) => {
     const qs = new URLSearchParams(params).toString();

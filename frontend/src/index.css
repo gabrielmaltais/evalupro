@@ -133,6 +133,42 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
   backdrop-filter: blur(12px);
 }
 
+/* Champs (select / input / bouton type champ) : surface plus contrastée que la carte .bg-white */
+.dark .eval-form-control {
+  background-color: rgba(15, 25, 55, 0.88) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(99, 130, 255, 0.28) !important;
+}
+
+/* Listes scrollables dans les modales (Envois · détail étudiants) : scrollbar fine, lisible en sombre */
+.modal-student-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) rgba(15, 23, 42, 0.45);
+}
+.dark .modal-student-list {
+  scrollbar-color: rgba(99, 130, 255, 0.35) rgba(15, 23, 42, 0.85);
+}
+.modal-student-list::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-student-list::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.8);
+  border-radius: 4px;
+}
+.modal-student-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.65);
+  border-radius: 4px;
+}
+.dark .modal-student-list::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+.dark .modal-student-list::-webkit-scrollbar-thumb {
+  background: rgba(99, 130, 255, 0.35);
+}
+.dark .modal-student-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(129, 140, 248, 0.5);
+}
+
 .dark .text-gray-900,
 .dark .text-gray-800,
 .dark .text-gray-700 {
@@ -192,6 +228,111 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
 .dark ::-webkit-scrollbar-track { background: rgba(10,18,40,0.8); }
 .dark ::-webkit-scrollbar-thumb { background: rgba(99,130,255,0.3); border-radius: 4px; }
 .dark ::-webkit-scrollbar-thumb:hover { background: rgba(129,140,248,0.5); }
+
+/* ─ PDF export (#pdf-content) : html2pdf/html2canvas lit les styles calculés — sans ceci,
+   les règles .dark .bg-white / .text-gray-* au-dessus rendent la page noire en export. ─ */
+.dark .pdf-forced-light {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+  color-scheme: light !important;
+  backdrop-filter: none !important;
+}
+.dark .pdf-forced-light .bg-white {
+  background-color: #ffffff !important;
+  backdrop-filter: none !important;
+}
+.dark .pdf-forced-light .bg-gray-50 {
+  background-color: #f9fafb !important;
+}
+.dark .pdf-forced-light .bg-gray-100 {
+  background-color: #f3f4f6 !important;
+}
+.dark .pdf-forced-light .text-gray-900 {
+  color: #111827 !important;
+}
+.dark .pdf-forced-light .text-gray-800 {
+  color: #1f2937 !important;
+}
+.dark .pdf-forced-light .text-gray-700 {
+  color: #374151 !important;
+}
+.dark .pdf-forced-light .text-gray-600 {
+  color: #4b5563 !important;
+}
+.dark .pdf-forced-light .text-gray-500 {
+  color: #6b7280 !important;
+}
+.dark .pdf-forced-light .text-gray-400 {
+  color: #9ca3af !important;
+}
+.dark .pdf-forced-light .text-blue-600 {
+  color: #2563eb !important;
+}
+.dark .pdf-forced-light .text-white {
+  color: #ffffff !important;
+}
+.dark .pdf-forced-light .border-gray-800 {
+  border-color: #1f2937 !important;
+}
+.dark .pdf-forced-light .border-gray-200,
+.dark .pdf-forced-light .border-gray-100,
+.dark .pdf-forced-light .border-gray-300 {
+  border-color: #e5e7eb !important;
+}
+.dark .pdf-forced-light .text-red-700 {
+  color: #b91c1c !important;
+}
+.dark .pdf-forced-light .bg-red-50 {
+  background-color: #fef2f2 !important;
+}
+.dark .pdf-forced-light .border-red-200 {
+  border-color: #fecaca !important;
+}
+.dark .pdf-forced-light .bg-purple-600 {
+  background-color: #9333ea !important;
+}
+.dark .pdf-forced-light .border-purple-600 {
+  border-color: #9333ea !important;
+}
+.dark .pdf-forced-light .border-l-red-400 {
+  border-left-color: #f87171 !important;
+}
+.dark .pdf-forced-light .border-l-orange-400 {
+  border-left-color: #fb923c !important;
+}
+.dark .pdf-forced-light .bg-orange-50 {
+  background-color: #fff7ed !important;
+}
+.dark .pdf-forced-light .text-orange-700 {
+  color: #c2410c !important;
+}
+.dark .pdf-forced-light .border-l-yellow-400 {
+  border-left-color: #facc15 !important;
+}
+.dark .pdf-forced-light .bg-yellow-50 {
+  background-color: #fefce8 !important;
+}
+.dark .pdf-forced-light .text-yellow-700 {
+  color: #a16207 !important;
+}
+.dark .pdf-forced-light .border-l-blue-400 {
+  border-left-color: #60a5fa !important;
+}
+.dark .pdf-forced-light .bg-blue-50 {
+  background-color: #eff6ff !important;
+}
+.dark .pdf-forced-light .text-blue-700 {
+  color: #1d4ed8 !important;
+}
+.dark .pdf-forced-light .border-l-green-400 {
+  border-left-color: #4ade80 !important;
+}
+.dark .pdf-forced-light .bg-green-50 {
+  background-color: #f0fdf4 !important;
+}
+.dark .pdf-forced-light .text-green-700 {
+  color: #15803d !important;
+}
 
 /* ────────────────────────────────────────────────
    LIGHT MODE STYLES (unchanged)

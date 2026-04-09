@@ -1,6 +1,6 @@
 const DEFAULT_SUBJECT = "Copie d'évaluation — {examTitle}";
 
-const DEFAULT_BODY = `Bonjour {studentName},
+const DEFAULT_BODY = `Bonjour {studentFirstName},
 
 Veuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).
 
@@ -8,7 +8,7 @@ Cordialement,
 {teacherName}`;
 
 /**
- * Remplace {cle} dans le modèle. Clés supportées : studentName, examTitle, courseTitle, teacherName, group.
+ * Remplace {cle} dans le modèle. Clés : studentFirstName, studentLastName, studentName (complet), examTitle, courseTitle, teacherName, group.
  */
 function applyTemplate(template, vars) {
   if (!template) return "";
@@ -20,11 +20,19 @@ function applyTemplate(template, vars) {
   return out;
 }
 
+const {
+  studentFirstNameFromDoc,
+  studentLastNameFromDoc,
+  studentFullNameFromDoc,
+} = require("../utils/studentName");
+
 function buildEvaluationEmailParts(smtpConfig, { owner, student, rubric }) {
   const examTitle = rubric.taskTitle || rubric.title || "Évaluation";
   const courseTitle = rubric.title || "";
   const vars = {
-    studentName: student.name || "",
+    studentFirstName: studentFirstNameFromDoc(student),
+    studentLastName: studentLastNameFromDoc(student),
+    studentName: studentFullNameFromDoc(student),
     examTitle,
     courseTitle,
     teacherName: owner.name || "Enseignant",

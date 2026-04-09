@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import TopPageMenu from "../components/TopPageMenu";
-import PageHeader from "../components/PageHeader";
+import PageSectionTitle from "../components/PageSectionTitle";
 
 const DEFAULT_CRITERION = {
   id: "cx",
@@ -433,16 +432,16 @@ export default function AdminRubric() {
   const totalPoints = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
 
   return (
-    <div className="bg-gray-100 min-h-screen text-gray-800 font-sans flex flex-col">
-      <PageHeader
-        icon="fa-sliders"
-        iconBgClass="bg-slate-700"
-        title="Administration des Grilles"
-        subtitle="Configuration"
-      />
-      <TopPageMenu />
-
-      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full grid grid-cols-1 lg:grid-cols-4 gap-8">
+    <div className="flex w-full flex-1 flex-col">
+      <main className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-4 lg:px-8">
+        <div className="lg:col-span-4">
+          <PageSectionTitle
+            icon="fa-sliders"
+            iconBgClass="bg-slate-700"
+            title="Administration des Grilles"
+            subtitle="Configuration"
+          />
+        </div>
         
         {/* LEFT COLUMN: List */}
         <div className="lg:col-span-1 space-y-4">

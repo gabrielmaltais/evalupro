@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import TopPageMenu from "../components/TopPageMenu";
-import PageHeader from "../components/PageHeader";
+import PageSectionTitle from "../components/PageSectionTitle";
 
 const DEFAULT_FORM = {
   host: "",
@@ -12,7 +11,7 @@ const DEFAULT_FORM = {
   fromName: "EvaluPro",
   fromEmail: "",
   emailSubjectTemplate: "Copie d'évaluation — {examTitle}",
-  emailBodyTemplate: `Bonjour {studentName},
+  emailBodyTemplate: `Bonjour {studentFirstName},
 
 Veuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).
 
@@ -90,16 +89,14 @@ export default function AdminSmtp() {
   if (loading) return <div className="p-8 text-center text-gray-500">Chargement SMTP...</div>;
 
   return (
-    <div className="bg-gray-100 min-h-screen text-gray-800 font-sans flex flex-col">
-      <PageHeader
-        icon="fa-envelope"
-        iconBgClass="bg-emerald-600"
-        title="Configuration SMTP"
-        subtitle="Serveur d'envoi des copies"
-      />
-      <TopPageMenu />
-
-      <main className="flex-grow max-w-4xl mx-auto w-full p-6">
+    <div className="flex w-full flex-1 flex-col text-gray-800">
+      <main className="mx-auto w-full max-w-4xl flex-1 p-6">
+        <PageSectionTitle
+          icon="fa-envelope"
+          iconBgClass="bg-emerald-600"
+          title="Configuration SMTP"
+          subtitle="Serveur d'envoi des copies"
+        />
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm">{success}</div>}
 

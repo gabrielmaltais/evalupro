@@ -6,7 +6,8 @@ const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const Student = require("../models/Student");
 const { auth } = require("../middleware/auth");
 const { generateSummary } = require("../services/gemini");
-const { startBatchJob, getProgress } = require("../services/emailBatchService");
+const { startBatchJob, getProgress, sendOneEvaluationEmail } = require("../services/emailBatchService");
+const { studentFullNameFromDoc } = require("../utils/studentName");
 
 const router = express.Router();
 router.use(auth);
@@ -39,6 +40,10 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const payload = schema.parse(req.body);
+    if (payload.studentId) {
+      const st = await Student.findOne({ _id: payload.studentId, createdBy: req.user._id }).lean();
+      if (st) payload.studentName = studentFullNameFromDoc(st);
+    }
     const rubric = await Rubric.findById(payload.rubric);
     if (!rubric) return res.status(404).json({ message: "Rubric introuvable" });
     const totalScore = Object.values(payload.scores || {}).reduce((a, b) => a + Number(b), 0);
@@ -64,6 +69,11 @@ const batchSchema = z.object({
   skipAlreadySent: z.boolean().optional(),
   allowResendFailed: z.boolean().optional(),
   delayMs: z.number().int().min(0).max(10000).optional(),
+});
+
+const sendOneSchema = z.object({
+  evaluationId: z.string().min(1),
+  resend: z.boolean().optional(),
 });
 
 router.get("/email-targets", async (req, res) => {
@@ -105,6 +115,22 @@ router.post("/email-batches", async (req, res) => {
   }
 });
 
+router.post("/email-send-one", async (req, res) => {
+  try {
+    const body = sendOneSchema.parse(req.body);
+    const result = await sendOneEvaluationEmail({
+      owner: req.user,
+      evaluationId: body.evaluationId,
+      resend: body.resend === true,
+    });
+    if (result.alreadySent) return res.json({ ok: true, alreadySent: true, delivery: result.delivery });
+    res.json({ ok: true, sent: true, delivery: result.delivery });
+  } catch (error) {
+    const code = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 400;
+    res.status(code).json({ message: error.message || String(error) });
+  }
+});
+
 router.get("/email-batches/:jobId", async (req, res) => {
   const progress = getProgress(req.params.jobId);
   if (!progress) return res.status(404).json({ message: "Job introuvable" });
@@ -123,7 +149,7 @@ router.get("/email-deliveries", async (req, res) => {
       select: "studentName date rubric",
       populate: { path: "rubric", select: "title taskTitle version" },
     })
-    .populate("studentId", "name email group")
+    .populate("studentId", "name firstName lastName email group")
     .sort({ updatedAt: -1 })
     .limit(300);
   res.json(items);
@@ -182,6 +208,10 @@ router.put("/:id", async (req, res) => {
       item.studentId = undefined;
     }
     Object.assign(item, payload);
+    if (item.studentId) {
+      const st = await Student.findOne({ _id: item.studentId, createdBy: req.user._id }).lean();
+      if (st) item.studentName = studentFullNameFromDoc(st);
+    }
     await item.save();
     res.json(item);
   } catch (error) {

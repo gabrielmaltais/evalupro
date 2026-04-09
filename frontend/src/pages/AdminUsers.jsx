@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { api, getUserFromToken } from "../lib/api";
-import PageHeader from "../components/PageHeader";
-import TopPageMenu from "../components/TopPageMenu";
+import PageSectionTitle from "../components/PageSectionTitle";
 
 const DEFAULT_SMTP_EMAIL_SUBJECT = "Copie d'évaluation — {examTitle}";
-const DEFAULT_SMTP_EMAIL_BODY = `Bonjour {studentName},
+const DEFAULT_SMTP_EMAIL_BODY = `Bonjour {studentFirstName},
 
 Veuillez trouver ci-joint votre copie d'évaluation pour « {examTitle} » ({courseTitle}).
 
@@ -163,15 +162,14 @@ export default function AdminUsers() {
   if (loadingUsers && loadingSmtp) return <div className="p-8 text-center text-gray-500">Chargement administration...</div>;
 
   return (
-    <div className="bg-gray-100 dm-bg min-h-screen text-gray-800 dm-text-primary font-sans flex flex-col">
-      <PageHeader
-        icon="fa-screwdriver-wrench"
-        iconBgClass="bg-indigo-600"
-        title="Administration"
-        subtitle="Utilisateurs et SMTP"
-      />
-      <TopPageMenu />
-      <main className="flex-grow max-w-5xl mx-auto w-full py-8 px-4">
+    <div className="dm-text-primary flex w-full flex-1 flex-col text-gray-800 dm-bg">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+        <PageSectionTitle
+          icon="fa-screwdriver-wrench"
+          iconBgClass="bg-indigo-600"
+          title="Administration"
+          subtitle="Utilisateurs et SMTP"
+        />
 
       {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
       {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm"><i className="fa-solid fa-check-circle mr-2"></i>{success}</div>}
@@ -269,7 +267,7 @@ export default function AdminUsers() {
               <textarea rows={10} className="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" value={smtpForm.emailBodyTemplate} onChange={(e) => setSmtpForm({ ...smtpForm, emailBodyTemplate: e.target.value })} />
             </label>
             <p className="text-xs text-gray-500">
-              Variables : <code className="bg-gray-100 px-1 rounded">{"{studentName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{examTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{courseTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{teacherName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{group}"}</code>.
+              Variables : <code className="bg-gray-100 px-1 rounded">{"{studentFirstName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{studentLastName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{studentName}"}</code> (complet), <code className="bg-gray-100 px-1 rounded">{"{examTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{courseTitle}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{teacherName}"}</code>, <code className="bg-gray-100 px-1 rounded">{"{group}"}</code>.
             </p>
           </div>
           <div className="flex gap-6 text-sm">

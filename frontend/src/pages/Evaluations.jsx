@@ -1,19 +1,17 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, getUserFromToken } from "../lib/api";
-import TopPageMenu from "../components/TopPageMenu";
-import PageHeader from "../components/PageHeader";
+import { api } from "../lib/api";
+import PageSectionTitle from "../components/PageSectionTitle";
+import HubContextBar from "../components/HubContextBar";
+import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
+import { studentDisplayName } from "../lib/studentDisplay";
 
 function evalItemStudentId(it) {
-  if (!it?.studentId) return null;
-  if (typeof it.studentId === "object") return String(it.studentId._id ?? "");
-  return String(it.studentId);
+  return evalStudentId(it);
 }
 
 function evalItemRubricId(it) {
-  if (!it?.rubric) return null;
-  if (typeof it.rubric === "object") return String(it.rubric._id ?? "");
-  return String(it.rubric);
+  return evalRubricId(it);
 }
 
 /** Liste déroulante étudiants avec icônes (le <select> natif ne permet pas le HTML dans les options). */
@@ -39,7 +37,7 @@ function StudentSelectWithIcons({
       .sort(([a], [b]) => a.localeCompare(b, "fr"))
       .map(([groupName, list]) => [
         groupName,
-        [...list].sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr")),
+        [...list].sort((a, b) => studentDisplayName(a).localeCompare(studentDisplayName(b), "fr")),
       ]);
   }, [students]);
 
@@ -61,7 +59,7 @@ function StudentSelectWithIcons({
       if (!student) {
         onSelectStudent({ studentId: "", studentName: "" });
       } else {
-        onSelectStudent({ studentId: student._id, studentName: student.name || "" });
+        onSelectStudent({ studentId: student._id, studentName: studentDisplayName(student) });
       }
       setOpen(false);
     },
@@ -69,38 +67,38 @@ function StudentSelectWithIcons({
   );
 
   return (
-    <div className={wrapperClassName} ref={wrapRef}>
+    <div className={`${wrapperClassName}${open ? " z-[100]" : ""}`} ref={wrapRef}>
       <button
         type="button"
         id="student-select-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full h-10 px-3 box-border border border-gray-300 rounded-lg text-left text-sm flex items-center justify-between gap-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+        className="eval-form-control flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 text-left text-sm text-slate-900 outline-none ring-blue-500/0 box-border focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
       >
-        <span className="truncate flex items-center gap-2 min-w-0">
+        <span className="flex min-w-0 items-center gap-2 truncate">
           {selected ? (
             <>
               {showStatus && (
-                <span className="w-5 shrink-0 flex justify-center" aria-hidden>
+                <span className="flex w-5 shrink-0 justify-center" aria-hidden>
                   {correctedIdsForExam.has(String(selected._id)) ? (
-                    <i className="fa-solid fa-check text-green-600 text-sm" title="Corrigé pour cet examen" />
+                    <i className="fa-solid fa-check text-green-600 text-sm dark:text-green-400" title="Corrigé pour cet examen" />
                   ) : (
-                    <i className="fa-regular fa-circle text-amber-500 text-sm" title="Pas encore corrigé pour cet examen" />
+                    <i className="fa-regular fa-circle text-amber-500 text-sm dark:text-amber-400" title="Pas encore corrigé pour cet examen" />
                   )}
                 </span>
               )}
-              <span className="truncate font-medium text-gray-900">{selected.name}</span>
+              <span className="truncate font-medium">{studentDisplayName(selected)}</span>
             </>
           ) : (
-            <span className="text-gray-500">— Utilisateur libre —</span>
+            <span className="text-slate-600 dark:text-slate-300">— Utilisateur libre —</span>
           )}
         </span>
-        <i className={`fa-solid fa-chevron-down text-gray-400 text-xs shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+        <i className={`fa-solid fa-chevron-down shrink-0 text-xs text-slate-500 transition-transform dark:text-slate-400 ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
       {open && (
         <ul
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1"
+          className="absolute left-0 right-0 top-full z-[110] mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl ring-1 ring-black/5 dark:border-slate-500 dark:bg-slate-950 dark:ring-white/10"
           role="listbox"
           aria-labelledby="student-select-trigger"
         >
@@ -109,7 +107,7 @@ function StudentSelectWithIcons({
               type="button"
               role="option"
               aria-selected={!valueStudentId}
-              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 text-gray-600 border-b border-gray-100"
+              className="w-full border-b border-gray-100 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               onClick={() => pick(null)}
             >
               — Utilisateur libre —
@@ -117,35 +115,40 @@ function StudentSelectWithIcons({
           </li>
           {groupedStudents.map(([groupName, groupList]) => (
             <li key={groupName} role="none" className="pt-1">
-              <div className="px-3 py-1 text-[11px] font-bold italic text-gray-500 tracking-wide">{groupName}</div>
+              <div className="px-3 py-1 text-[11px] font-bold italic tracking-wide text-slate-500 dark:text-slate-400">
+                {groupName}
+              </div>
               <ul role="none">
                 {groupList.map((s) => {
                   const sid = String(s._id);
                   const corrected = showStatus && correctedIdsForExam.has(sid);
+                  const isSel = String(valueStudentId) === sid;
                   return (
                     <li key={s._id} role="none">
                       <button
                         type="button"
                         role="option"
-                        aria-selected={String(valueStudentId) === sid}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center gap-2.5 ${
-                          String(valueStudentId) === sid ? "bg-blue-50/80" : ""
+                        aria-selected={isSel}
+                        className={`mx-1 flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                          isSel
+                            ? "bg-blue-100 text-slate-900 dark:bg-indigo-900/85 dark:text-slate-50"
+                            : "text-slate-800 hover:bg-blue-50 dark:text-slate-100 dark:hover:bg-slate-800"
                         }`}
                         onClick={() => pick(s)}
                         title={showStatus ? (corrected ? "Corrigé pour cet examen" : "Pas encore corrigé") : undefined}
                       >
                         {showStatus ? (
-                          <span className="w-5 shrink-0 flex justify-center" aria-hidden>
+                          <span className="flex w-5 shrink-0 justify-center" aria-hidden>
                             {corrected ? (
-                              <i className="fa-solid fa-check text-green-600 text-sm" />
+                              <i className="fa-solid fa-check text-sm text-green-600 dark:text-green-400" />
                             ) : (
-                              <i className="fa-regular fa-circle text-amber-500 text-sm" />
+                              <i className="fa-regular fa-circle text-sm text-amber-600 dark:text-amber-400" />
                             )}
                           </span>
                         ) : (
                           <span className="w-5 shrink-0" aria-hidden />
                         )}
-                        <span className="truncate text-gray-900">{s.name}</span>
+                        <span className="min-w-0 truncate">{studentDisplayName(s)}</span>
                       </button>
                     </li>
                   );
@@ -167,7 +170,8 @@ export default function Evaluations() {
   const [form, setForm] = useState({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: "" });
   const [scores, setScores] = useState({});
   const [subScores, setSubScores] = useState({});
-  const [touched, setTouched] = useState({});
+  /** Par case : n’affiche le feedback rouge d’un sous-critère que si cette case a été manipulée (évite le bruit visuel au début de la correction). */
+  const [subCriteriaTouched, setSubCriteriaTouched] = useState({});
   const [comments, setComments] = useState({});
   const [showComment, setShowComment] = useState({});
   const [showDatePdf, setShowDatePdf] = useState(false);
@@ -176,14 +180,61 @@ export default function Evaluations() {
   const chartInstance = useRef(null);
   const pdfTemplateRef = useRef(null);
 
-  async function refresh() {
-    const [evaluations, rubricList, studentList] = await Promise.all([api.listEvaluations(), api.listRubrics(), api.listStudents()]);
-    setItems(evaluations.items || []);
-    setRubrics(rubricList);
-    setStudents(studentList);
-    if (!form.rubric && rubricList[0]) setForm((f) => ({ ...f, rubric: rubricList[0]._id }));
-  }
+  /** Onglet principal : correction, suivi par examen, envois de copies. */
+  const [evalPageTab, setEvalPageTab] = useState(() => {
+    if (typeof window === "undefined") return "corriger";
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "suivi" || t === "envois" || t === "corriger") return t;
+    return "corriger";
+  });
+  const [hubSelectedGroup, setHubSelectedGroup] = useState("");
+  const [groupDashboard, setGroupDashboard] = useState([]);
+  const [emailTargets, setEmailTargets] = useState({ groups: [], exams: [] });
+  const [deliveries, setDeliveries] = useState([]);
+  const [emailBatchConfig, setEmailBatchConfig] = useState({
+    group: "",
+    rubricId: "",
+    skipAlreadySent: true,
+    allowResendFailed: true,
+    delayMs: 700,
+  });
+  const [hubEvalSort, setHubEvalSort] = useState({ key: "name", dir: "asc" });
+  const [correctionModalRow, setCorrectionModalRow] = useState(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailJob, setEmailJob] = useState({ jobId: "", status: "", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+  const [hubSendBusyId, setHubSendBusyId] = useState(null);
 
+  async function refresh() {
+    try {
+      const [evaluations, rubricList, studentList, dashboard, targets, sends] = await Promise.all([
+        api.listEvaluations({ page: 1, limit: 2000 }),
+        api.listRubrics(),
+        api.listStudents(),
+        api.getStudentGroupDashboard(),
+        api.getEmailTargets(),
+        api.listEmailDeliveries(),
+      ]);
+      setItems(evaluations.items || []);
+      setRubrics(rubricList);
+      setStudents(studentList);
+      setGroupDashboard(dashboard || []);
+      setEmailTargets(targets || { groups: [], exams: [] });
+      setDeliveries(sends || []);
+      setHubSelectedGroup((prev) => prev || targets?.groups?.[0] || "");
+      setEmailBatchConfig((prev) => {
+        const examIds = new Set((targets?.exams || []).map((e) => String(e.rubricId)));
+        const rubricId = prev.rubricId && examIds.has(String(prev.rubricId)) ? prev.rubricId : "";
+        return {
+          ...prev,
+          group: prev.group || targets?.groups?.[0] || "",
+          rubricId,
+        };
+      });
+      if (!form.rubric && rubricList[0]) setForm((f) => ({ ...f, rubric: rubricList[0]._id }));
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e.message || e)));
@@ -237,6 +288,249 @@ export default function Evaluations() {
       return f;
     });
   }
+
+  const hubGroupedStudents = useMemo(() => {
+    const acc = {};
+    for (const s of students) {
+      const g = s.group || "Sans groupe";
+      if (!acc[g]) acc[g] = [];
+      acc[g].push(s);
+    }
+    return acc;
+  }, [students]);
+  const hubGroupKeys = Object.keys(hubGroupedStudents).sort();
+
+  const displayedGroupDashboard = useMemo(() => {
+    const map = new Map((groupDashboard || []).map((g) => [g.group, g]));
+    return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group));
+  }, [groupDashboard]);
+
+  const hubFilteredStudents = hubSelectedGroup ? hubGroupedStudents[hubSelectedGroup] || [] : students;
+
+  const examsForSend = useMemo(() => {
+    const exams = emailTargets.exams || [];
+    const rubricIdsWithCorrection = new Set();
+    items.forEach((it) => {
+      const sid = evalStudentId(it);
+      if (!sid) return;
+      const student = students.find((x) => String(x._id) === sid);
+      if (!student) return;
+      const g = student.group || "Sans groupe";
+      if (hubSelectedGroup && g !== hubSelectedGroup) return;
+      const rid = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : null;
+      if (rid) rubricIdsWithCorrection.add(rid);
+    });
+    return exams.filter((ex) => rubricIdsWithCorrection.has(String(ex.rubricId)));
+  }, [hubSelectedGroup, students, items, emailTargets.exams]);
+
+  useEffect(() => {
+    setEmailBatchConfig((prev) => {
+      if (!prev.rubricId) return prev;
+      const ok = examsForSend.some((e) => String(e.rubricId) === String(prev.rubricId));
+      if (ok) return prev;
+      return { ...prev, rubricId: "" };
+    });
+  }, [examsForSend]);
+
+  const selectedSendExam = useMemo(
+    () => examsForSend.find((x) => String(x.rubricId) === String(emailBatchConfig.rubricId)),
+    [examsForSend, emailBatchConfig.rubricId]
+  );
+
+  const hubEvalTableRows = useMemo(() => {
+    const rid = emailBatchConfig.rubricId;
+    if (!rid) return [];
+    const byEvalId = new Map();
+    for (const d of deliveries || []) {
+      const eid = String(d.evaluationId?._id ?? d.evaluationId ?? "");
+      if (!eid) continue;
+      const prev = byEvalId.get(eid);
+      const nextTs = new Date(d.updatedAt || d.createdAt || 0).getTime();
+      const prevTs = prev ? new Date(prev.updatedAt || prev.createdAt || 0).getTime() : -1;
+      if (!prev || nextTs >= prevTs) byEvalId.set(eid, d);
+    }
+    return hubFilteredStudents.map((s) => {
+      const ev = findLatestEvalForStudentRubric(s._id, rid, items);
+      const tm = ev?.totalMax ?? 0;
+      const ts = ev?.totalScore ?? 0;
+      const pctRow = tm > 0 ? (Number(ts) / Number(tm)) * 100 : null;
+      const dateStr = ev?.date ? String(ev.date).slice(0, 10) : "";
+      const evIdStr = ev?._id != null ? String(ev._id) : "";
+      const delivery = evIdStr ? byEvalId.get(evIdStr) ?? null : null;
+      return {
+        student: s,
+        evaluation: ev,
+        corrected: !!ev,
+        pct: pctRow,
+        dateStr,
+        delivery,
+      };
+    });
+  }, [hubFilteredStudents, items, emailBatchConfig.rubricId, deliveries]);
+
+  const hubEvalSortedRows = useMemo(() => {
+    const rows = [...hubEvalTableRows];
+    const { key, dir } = hubEvalSort;
+    const mult = dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (key) {
+        case "name":
+          cmp = studentDisplayName(a.student).localeCompare(studentDisplayName(b.student), "fr");
+          break;
+        case "status": {
+          const va = a.corrected ? 1 : 0;
+          const vb = b.corrected ? 1 : 0;
+          cmp = va - vb;
+          break;
+        }
+        case "date": {
+          const da = a.dateStr;
+          const db = b.dateStr;
+          if (!da && !db) cmp = 0;
+          else if (!da) cmp = 1;
+          else if (!db) cmp = -1;
+          else cmp = da.localeCompare(db);
+          break;
+        }
+        case "score": {
+          const na = a.pct == null ? -1 : a.pct;
+          const nb = b.pct == null ? -1 : b.pct;
+          cmp = na - nb;
+          break;
+        }
+        case "email": {
+          const rank = (r) => {
+            if (!r.corrected) return 0;
+            const mail = (r.student.email || "").trim();
+            if (!mail) return 1;
+            const st = r.delivery?.status;
+            if (!st) return 2;
+            if (st === "failed") return 3;
+            if (st === "queued") return 4;
+            if (st === "skipped") return 5;
+            if (st === "sent") return 6;
+            return 2;
+          };
+          cmp = rank(a) - rank(b);
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return mult * cmp;
+    });
+    return rows;
+  }, [hubEvalTableRows, hubEvalSort]);
+
+  function toggleHubEvalSort(nextKey) {
+    setHubEvalSort((prev) =>
+      prev.key === nextKey ? { key: nextKey, dir: prev.dir === "asc" ? "desc" : "asc" } : { key: nextKey, dir: "asc" }
+    );
+  }
+
+  async function sendEvalEmailFromHub(evaluationId) {
+    setError("");
+    const id = String(evaluationId);
+    setHubSendBusyId(id);
+    try {
+      let res = await api.sendEvaluationEmailOne(id);
+      if (res?.alreadySent) {
+        const ok = window.confirm(
+          "Cette copie a déjà été envoyée par courriel. Voulez-vous la renvoyer ?"
+        );
+        if (ok) res = await api.sendEvaluationEmailOne(id, { resend: true });
+      }
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    } finally {
+      setHubSendBusyId(null);
+    }
+  }
+
+  const enrollSendSummaries = useMemo(() => {
+    if (!hubSelectedGroup) return [];
+    const groupStudents = students.filter((s) => (s.group || "Sans groupe") === hubSelectedGroup);
+    if (!groupStudents.length) return [];
+    const groupStudentIds = new Set(groupStudents.map((s) => String(s._id)));
+    const withEmailCount = groupStudents.filter((s) => s.email).length;
+
+    return examsForSend.map((exam) => {
+      const rubricId = String(exam.rubricId);
+      const examKey = `${rubricId}:${exam.version ?? 1}`;
+
+      const correctedIds = new Set();
+      items.forEach((it) => {
+        const sid = evalStudentId(it);
+        if (!sid || !groupStudentIds.has(sid)) return;
+        const rid = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : null;
+        if (rid === rubricId) correctedIds.add(sid);
+      });
+
+      const totalStudents = groupStudents.length;
+      const correctedCount = correctedIds.size;
+      const allCorrected = totalStudents > 0 && correctedCount === totalStudents;
+      const noStudents = totalStudents === 0;
+
+      const sentCopies = deliveries.filter(
+        (d) => d.group === hubSelectedGroup && d.examKey === examKey && d.status === "sent"
+      ).length;
+
+      return {
+        examKey,
+        rubricId,
+        title: exam.taskTitle || exam.title,
+        courseTitle: exam.title,
+        version: exam.version,
+        totalStudents,
+        withEmailCount,
+        correctedCount,
+        allCorrected,
+        sentCopies,
+        noStudents,
+      };
+    });
+  }, [hubSelectedGroup, students, items, examsForSend, deliveries]);
+
+  const correctionModalLists = useMemo(() => {
+    if (!correctionModalRow || !hubSelectedGroup) return { corrected: [], pending: [], title: "" };
+    const rubricId = String(correctionModalRow.rubricId);
+    const groupStudents = students.filter((s) => (s.group || "Sans groupe") === hubSelectedGroup);
+    const groupStudentIds = new Set(groupStudents.map((s) => String(s._id)));
+    const correctedSet = new Set();
+    for (const it of items) {
+      const sid = evalStudentId(it);
+      if (!sid || !groupStudentIds.has(sid)) continue;
+      const rubId = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : null;
+      if (rubId === rubricId) correctedSet.add(sid);
+    }
+    const corrected = [];
+    const pending = [];
+    for (const s of groupStudents) {
+      const id = String(s._id);
+      if (correctedSet.has(id)) corrected.push(s);
+      else pending.push(s);
+    }
+    const cmp = (a, b) => studentDisplayName(a).localeCompare(studentDisplayName(b), "fr");
+    corrected.sort(cmp);
+    pending.sort(cmp);
+    return {
+      corrected,
+      pending,
+      title: correctionModalRow.title || "Examen",
+    };
+  }, [correctionModalRow, hubSelectedGroup, students, items]);
+
+  const visibleDeliveries = hubSelectedGroup
+    ? deliveries.filter((d) => d.group === hubSelectedGroup)
+    : deliveries;
+
+  const visibleDeliveriesForExam = useMemo(() => {
+    if (!emailBatchConfig.rubricId) return visibleDeliveries;
+    const prefix = `${emailBatchConfig.rubricId}:`;
+    return visibleDeliveries.filter((d) => String(d.examKey || "").startsWith(prefix));
+  }, [visibleDeliveries, emailBatchConfig.rubricId]);
 
   let totalMax = 0;
   let totalScore = 0;
@@ -296,16 +590,65 @@ export default function Evaluations() {
       });
       setScores(data.scores || {});
       setSubScores(data.subScores || {});
-      // Marquer comme touchés tous les critères qui ont un score ou des subScores
-      const restoredTouched = {};
-      if (data.scores) Object.keys(data.scores).forEach(k => { restoredTouched[k] = true; });
-      if (data.subScores) Object.keys(data.subScores).forEach(k => { restoredTouched[k] = true; });
-      setTouched(restoredTouched);
+      const restoredSubTouched = {};
+      if (data.subScores && typeof data.subScores === "object") {
+        Object.entries(data.subScores).forEach(([critKey, map]) => {
+          if (!map || typeof map !== "object") return;
+          restoredSubTouched[critKey] = {};
+          Object.keys(map).forEach((scId) => {
+            restoredSubTouched[critKey][scId] = true;
+          });
+        });
+      }
+      setSubCriteriaTouched(restoredSubTouched);
       setComments(data.comments || {});
       window.scrollTo(0, 0);
     } catch (e) {
       setError("Impossible de charger l'évaluation.");
     }
+  }
+
+  function clearDraftEvaluation(overrides = {}) {
+    const today = new Date().toISOString().slice(0, 10);
+    setForm((f) => ({
+      ...f,
+      ...overrides,
+      _id: undefined,
+      date: Object.prototype.hasOwnProperty.call(overrides, "date") ? overrides.date : today,
+      generalComment: Object.prototype.hasOwnProperty.call(overrides, "generalComment") ? overrides.generalComment : "",
+    }));
+    setScores({});
+    setSubScores({});
+    setSubCriteriaTouched({});
+    setComments({});
+  }
+
+  /** Charge la dernière copie pour l’étudiant + l’examen, ou prépare une nouvelle saisie. */
+  async function syncEvaluationForStudentAndRubric(studentId, studentName, rubricId) {
+    setError("");
+    if (!rubricId) {
+      if (!studentId) {
+        clearDraftEvaluation({ studentId: "", studentName: "", rubric: "" });
+      } else {
+        setForm((f) => ({ ...f, studentId, studentName: studentName || "" }));
+      }
+      return;
+    }
+    if (!studentId) {
+      clearDraftEvaluation({ studentId: "", studentName: "", rubric: rubricId });
+      return;
+    }
+    const latest = findLatestEvalForStudentRubric(studentId, rubricId, items);
+    if (latest) {
+      if (String(form._id) === String(latest._id)) return;
+      await loadEvaluation(latest._id);
+      return;
+    }
+    clearDraftEvaluation({
+      studentId,
+      studentName: studentName || "",
+      rubric: rubricId,
+    });
   }
 
   async function deleteEval(id) {
@@ -316,7 +659,7 @@ export default function Evaluations() {
         setForm({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: rubrics[0]?._id });
         setScores({});
         setSubScores({});
-        setTouched({});
+        setSubCriteriaTouched({});
         setComments({});
       }
       refresh();
@@ -327,15 +670,95 @@ export default function Evaluations() {
 
   const [autoDownload, setAutoDownload] = useState(false);
 
+  function setEvalTab(tab) {
+    setEvalPageTab(tab);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set("tab", tab);
+      return p;
+    }, { replace: true });
+  }
+
   useEffect(() => {
     const loadId = searchParams.get("load");
     const dl = searchParams.get("download");
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "suivi" || tabParam === "envois" || tabParam === "corriger") {
+      setEvalPageTab(tabParam);
+    }
     if (loadId) {
+      setEvalPageTab("corriger");
       loadEvaluation(loadId);
       if (dl === "true") setAutoDownload(true);
-      setSearchParams({});
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev);
+        p.delete("load");
+        p.delete("download");
+        p.set("tab", "corriger");
+        return p;
+      }, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  function openEmailSendModal() {
+    setError("");
+    if (!emailBatchConfig.rubricId) {
+      setError("Sélectionnez d'abord un examen pour l'envoi.");
+      return;
+    }
+    setEmailBatchConfig((prev) => ({
+      ...prev,
+      group: hubSelectedGroup || prev.group,
+    }));
+    setShowEmailModal(true);
+  }
+
+  async function startEmailBatch() {
+    try {
+      if (!emailBatchConfig.rubricId) {
+        setError("Aucun examen sélectionné.");
+        return;
+      }
+      const { jobId } = await api.startEmailBatch({
+        group: emailBatchConfig.group,
+        rubricId: emailBatchConfig.rubricId,
+        skipAlreadySent: emailBatchConfig.skipAlreadySent,
+        allowResendFailed: emailBatchConfig.allowResendFailed,
+        delayMs: Number(emailBatchConfig.delayMs || 700),
+      });
+      setEmailJob({ jobId, status: "queued", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+      setShowEmailModal(false);
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
+  async function retryFailed(jobId) {
+    try {
+      const res = await api.retryFailedEmailBatch(jobId, { delayMs: Number(emailBatchConfig.delayMs || 700) });
+      if (res?.jobId) setEmailJob({ jobId: res.jobId, status: "queued", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
+  useEffect(() => {
+    if (!emailJob.jobId) return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const progress = await api.getEmailBatchProgress(emailJob.jobId);
+        setEmailJob((prev) => ({ ...prev, ...progress, jobId: emailJob.jobId }));
+        if (progress.status === "completed" || progress.status === "failed") {
+          clearInterval(timer);
+          const sends = await api.listEmailDeliveries();
+          setDeliveries(sends || []);
+        }
+      } catch {
+        clearInterval(timer);
+      }
+    }, 1200);
+    return () => clearInterval(timer);
+  }, [emailJob.jobId]);
 
   useEffect(() => {
     if (autoDownload && form._id) {
@@ -381,13 +804,11 @@ export default function Evaluations() {
 
   function handleScore(id, val) {
     setScores(s => ({ ...s, [id]: parseFloat(val) }));
-    setTouched(t => ({ ...t, [id]: true }));
   }
 
   function handleLevelClick(cid, criterion, lvl) {
     const val = criterion.weight * lvl.maxPct;
     setScores(s => ({ ...s, [cid]: parseFloat(val) }));
-    setTouched(t => ({ ...t, [cid]: true }));
 
     // Si le critère a des sous-critères, gérer les cases auto
     if (criterion.subCriteria && criterion.subCriteria.length > 0) {
@@ -411,7 +832,10 @@ export default function Evaluations() {
   function handleSubScore(cid, scId, checked, criterion) {
     const newCState = { ...(subScores[cid] || {}), [scId]: checked };
     setSubScores(prev => ({ ...prev, [cid]: newCState }));
-    setTouched(t => ({ ...t, [cid]: true }));
+    setSubCriteriaTouched((t) => ({
+      ...t,
+      [cid]: { ...(t[cid] || {}), [scId]: true },
+    }));
 
     // Recalculer le score en sommant les sous-critères cochés
     let total = 0;
@@ -449,18 +873,37 @@ export default function Evaluations() {
     }, 100);
   }
 
+  const pageSubtitle = useMemo(() => {
+    if (evalPageTab === "suivi") return "Suivi d'évaluation par examen";
+    if (evalPageTab === "envois") return "Envois de copies par courriel";
+    return "Plateforme d'évaluation";
+  }, [evalPageTab]);
+
   return (
     <>
-      <PageHeader
-        icon="fa-graduation-cap"
-        iconBgClass="bg-blue-600"
-        title="ÉvaluPro"
-        subtitle="Plateforme d'évaluation"
-        showBack={false}
-      />
-      <TopPageMenu inHeader />
+      <main className="flex w-full flex-1 flex-col max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-4 space-y-6">
+        <PageSectionTitle
+          icon="fa-graduation-cap"
+          iconBgClass="bg-blue-600"
+          title="ÉvaluPro"
+          subtitle={pageSubtitle}
+        />
 
-      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{error}</div>
+        )}
+
+        {(evalPageTab === "suivi" || evalPageTab === "envois") && (
+          <HubContextBar
+            selectedGroup={hubSelectedGroup}
+            setSelectedGroup={setHubSelectedGroup}
+            groupKeys={hubGroupKeys}
+            stats={displayedGroupDashboard}
+          />
+        )}
+
+        {evalPageTab === "corriger" && (
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* LEFT COLUMN: Evaluation Form */}
         <div className="lg:col-span-8 space-y-6">
           <section className="-mt-2">
@@ -480,7 +923,10 @@ export default function Evaluations() {
                   </div>
                   <select
                     value={form.rubric}
-                    onChange={(e) => setForm({ ...form, rubric: e.target.value })}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      void syncEvaluationForStudentAndRubric(form.studentId, form.studentName, v);
+                    }}
                     className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs sm:text-sm outline-none bg-white font-semibold text-gray-800"
                   >
                     <option value="">-- Choisir une grille --</option>
@@ -495,10 +941,8 @@ export default function Evaluations() {
             </div>
           </section>
 
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
-
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-x-4 lg:items-start">
+          <div className="relative z-20 rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-x-4 lg:items-start">
               <div className="lg:col-span-3">
                 <label htmlFor="eval-student-group" className="block text-sm font-medium text-gray-700 mb-1 min-h-[1.25rem]">
                   Groupe
@@ -507,7 +951,7 @@ export default function Evaluations() {
                   id="eval-student-group"
                   value={studentPickerGroup}
                   onChange={(e) => onStudentPickerGroupChange(e.target.value)}
-                  className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                  className="eval-form-control w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white text-gray-900"
                 >
                   <option value="">Tous les groupes</option>
                   {studentGroupKeys.map((g) => (
@@ -524,21 +968,21 @@ export default function Evaluations() {
                 <StudentSelectWithIcons
                   students={studentsForPicker}
                   valueStudentId={form.studentId}
-                  onSelectStudent={({ studentId, studentName }) =>
-                    setForm((f) => ({ ...f, studentId, studentName }))
-                  }
+                  onSelectStudent={({ studentId, studentName }) => {
+                    void syncEvaluationForStudentAndRubric(studentId, studentName, form.rubric);
+                  }}
                   correctedIdsForExam={correctedStudentIdsForActiveExam}
                   hasActiveRubric={Boolean(form.rubric)}
                   wrapperClassName="relative w-full min-w-0"
                 />
                 {form.rubric && (
-                  <p className="text-xs text-gray-500 mt-2 flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-1 sm:gap-x-4 sm:gap-y-1">
+                  <p className="mt-2 flex flex-col gap-1 text-xs text-slate-600 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-1 dark:text-slate-300">
                     <span className="inline-flex items-center gap-1.5">
-                      <i className="fa-solid fa-check text-green-600 text-xs shrink-0" aria-hidden />
+                      <i className="fa-solid fa-check shrink-0 text-xs text-green-600 dark:text-green-400" aria-hidden />
                       copie déjà enregistrée pour l’examen actif
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      <i className="fa-regular fa-circle text-amber-500 text-xs shrink-0" aria-hidden />
+                      <i className="fa-regular fa-circle shrink-0 text-xs text-amber-500 dark:text-amber-400" aria-hidden />
                       pas encore de copie pour cet examen
                     </span>
                   </p>
@@ -552,7 +996,7 @@ export default function Evaluations() {
                   <input
                     id="eval-date-input"
                     type="date"
-                    className="w-full min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border"
+                    className="eval-form-control w-full min-w-0 h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm box-border bg-white text-gray-900"
                     value={form.date}
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
@@ -629,12 +1073,16 @@ export default function Evaluations() {
                             {c.subCriteria.map(sc => {
                               const isChecked = subScores[cid]?.[sc.id] || false;
                               return (
-                                <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50' : 'border-transparent hover:border-gray-100 hover:bg-gray-50'}`}>
-                                  <input type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0" />
-                                  <div className="flex flex-col">
-                                    <span className={`text-sm ${isChecked ? 'text-purple-700 font-semibold' : 'text-gray-700'}`}>{sc.label}</span>
-                                    <span className="text-xs text-gray-400">Valeur: {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
-                                    {!isChecked && sc.feedback && touched[cid] && <p className="text-xs text-red-500 mt-1 italic">⚠ {sc.feedback}</p>}
+                                <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : 'border-transparent hover:border-gray-100 hover:bg-gray-50 dark:hover:border-white/10 dark:hover:bg-white/[0.04]'}`}>
+                                  <input type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0 dark:border-slate-500 dark:bg-slate-800" />
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className={`text-sm ${isChecked ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
+                                    <span className="text-xs text-slate-600 dark:text-slate-300">Valeur : {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
+                                    {!isChecked && sc.feedback && subCriteriaTouched[cid]?.[sc.id] && (
+                                      <p className="text-xs text-red-700 dark:text-red-200 mt-1 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
+                                        ⚠ {sc.feedback}
+                                      </p>
+                                    )}
                                   </div>
                                 </label>
                               );
@@ -643,13 +1091,22 @@ export default function Evaluations() {
                         )}
 
                       </div>
-                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center">
-                        <p className="text-sm text-gray-600 italic leading-snug">{descText}</p>
-                        {c.subCriteria && c.subCriteria.length > 0 && touched[cid] && (() => {
-                          const missingFeedbacks = c.subCriteria.filter(sc => !subScores[cid]?.[sc.id] && sc.feedback).map(sc => sc.feedback);
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center dark:border-white/10">
+                        <p className="text-sm text-gray-700 dark:text-slate-200 italic leading-snug">{descText}</p>
+                        {c.subCriteria && c.subCriteria.length > 0 && (() => {
+                          const missingFeedbacks = c.subCriteria
+                            .filter(
+                              (sc) =>
+                                !subScores[cid]?.[sc.id] && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
+                            )
+                            .map((sc) => sc.feedback);
                           return missingFeedbacks.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
-                              {missingFeedbacks.map((fb, fbI) => <p key={fbI} className="text-xs text-red-500">✗ {fb}</p>)}
+                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 space-y-1.5">
+                              {missingFeedbacks.map((fb, fbI) => (
+                                <p key={fbI} className="text-xs text-red-700 dark:text-red-200 rounded-md border border-red-200/70 bg-red-50/90 px-2 py-1 dark:border-red-500/35 dark:bg-red-950/50 leading-snug">
+                                  ✗ {fb}
+                                </p>
+                              ))}
                             </div>
                           );
                         })()}
@@ -722,7 +1179,7 @@ export default function Evaluations() {
               <button onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3">
                 <i className="fa-solid fa-save"></i> Enregistrer l'évaluation
               </button>
-              <button onClick={handleDownloadPDF} className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3">
+              <button onClick={handleDownloadPDF} className="w-full bg-slate-600 hover:bg-slate-500 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 border border-slate-500/40 dark:bg-indigo-900/90 dark:hover:bg-indigo-800 dark:border-indigo-400/25">
                 <i className="fa-solid fa-file-pdf"></i> Enregistrer & Télécharger PDF
               </button>
               <button onClick={() => { if (window.confirm('Réinitialiser ?')) { setScores({}); setForm({ ...form, studentId: '', studentName: '', generalComment: '' }); setComments({}); } }} className="w-full bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-3">
@@ -731,11 +1188,596 @@ export default function Evaluations() {
             </div>
           </div>
         </div>
+      </div>
+        )}
+
+        {evalPageTab === "suivi" && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/10">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                Suivi d&apos;évaluation {hubSelectedGroup ? `• ${hubSelectedGroup}` : ""}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEvalTab("corriger")}
+                className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                Ouvrir l&apos;éditeur de correction
+              </button>
+            </div>
+            <div className="mb-4 rounded-xl border border-gray-200 bg-slate-50 p-4 dark:border-slate-600/60 dark:bg-slate-900/55">
+              <label
+                htmlFor="hub-eval-exam-select"
+                className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300"
+              >
+                Examen
+              </label>
+              <select
+                id="hub-eval-exam-select"
+                className="eval-form-control max-w-xl rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm dark:border-slate-500/50"
+                value={emailBatchConfig.rubricId}
+                onChange={(e) => setEmailBatchConfig((prev) => ({ ...prev, rubricId: e.target.value }))}
+              >
+                <option value="">— Choisir un examen —</option>
+                {examsForSend.map((ex) => (
+                  <option key={`ev-${ex.rubricId}-${ex.version ?? 1}`} value={String(ex.rubricId)}>
+                    {ex.taskTitle || ex.title} (v{ex.version ?? 1})
+                  </option>
+                ))}
+              </select>
+              {!emailBatchConfig.rubricId && (
+                <p className="mt-3 rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/40 dark:text-amber-100">
+                  Sélectionnez un examen pour afficher le tableau : une ligne par étudiant du périmètre actif (groupe ou tous), avec statut, date, note et actions.
+                </p>
+              )}
+              {emailBatchConfig.rubricId && examsForSend.length === 0 && (
+                <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">Aucun examen avec correction dans ce périmètre — importez ou corrigez d&apos;abord une copie.</p>
+              )}
+            </div>
+
+            {emailBatchConfig.rubricId && (
+              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm dark:border-slate-600/50">
+                <div className="max-h-[60vh] overflow-auto">
+                  <table className="w-full min-w-[880px] border-collapse text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] dark:bg-slate-800 dark:text-slate-100">
+                      <tr>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("name")}
+                            className="inline-flex items-center gap-1.5 rounded-lg -mx-1 px-1 py-0.5 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            Étudiant
+                            {hubEvalSort.key === "name" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-xs text-slate-400 dark:text-slate-500" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("status")}
+                            className="inline-flex items-center gap-1.5 rounded-lg -mx-1 px-1 py-0.5 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            Statut
+                            {hubEvalSort.key === "status" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-xs text-slate-400 dark:text-slate-500" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("date")}
+                            className="inline-flex items-center gap-1.5 rounded-lg -mx-1 px-1 py-0.5 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            Date
+                            {hubEvalSort.key === "date" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-xs text-slate-400 dark:text-slate-500" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("score")}
+                            className="inline-flex items-center gap-1.5 rounded-lg -mx-1 px-1 py-0.5 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            Résultat
+                            {hubEvalSort.key === "score" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-xs text-slate-400 dark:text-slate-500" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleHubEvalSort("email")}
+                            className="inline-flex items-center gap-1.5 rounded-lg -mx-1 px-1 py-0.5 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
+                          >
+                            Copie (courriel)
+                            {hubEvalSort.key === "email" ? (
+                              <i className={`fa-solid text-blue-600 text-xs ${hubEvalSort.dir === "asc" ? "fa-sort-up" : "fa-sort-down"}`} aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-sort text-xs text-slate-400 dark:text-slate-500" aria-hidden />
+                            )}
+                          </button>
+                        </th>
+                        <th scope="col" className="px-4 py-3 font-semibold text-right whitespace-nowrap">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700/80">
+                      {hubEvalSortedRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                            Aucun étudiant pour ce filtre (groupe actif ou liste vide).
+                          </td>
+                        </tr>
+                      ) : (
+                        hubEvalSortedRows.map((row) => {
+                          const evId = row.evaluation?._id;
+                          const sendBusy = evId != null && hubSendBusyId != null && String(hubSendBusyId) === String(evId);
+                          const hasMail = !!(row.student.email || "").trim();
+                          const st = row.delivery?.status;
+                          const canSendMail =
+                            !!row.evaluation && hasMail && st !== "queued" && !sendBusy;
+                          return (
+                          <tr
+                            key={row.student._id}
+                            className="transition-colors even:bg-slate-50/60 hover:bg-blue-50/40 dark:even:bg-slate-800/35 dark:hover:bg-indigo-950/40"
+                          >
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{studentDisplayName(row.student)}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  row.corrected
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                                    : "bg-amber-100 text-amber-900 dark:bg-amber-950/45 dark:text-amber-100"
+                                }`}
+                              >
+                                {row.corrected ? "Corrigé" : "À corriger"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 tabular-nums text-slate-700 dark:text-slate-300">{row.dateStr || "—"}</td>
+                            <td className="px-4 py-3">
+                              {row.evaluation ? (
+                                <span className="tabular-nums">
+                                  <span className="font-semibold text-blue-800 dark:text-blue-300">
+                                    {row.evaluation.totalScore}/{row.evaluation.totalMax}
+                                  </span>
+                                  {row.pct != null && (
+                                    <span className="ml-2 text-slate-500 dark:text-slate-400">({Math.round(row.pct)}%)</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <div className="flex flex-col items-start gap-2">
+                                {!row.corrected ? (
+                                  <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+                                ) : !hasMail ? (
+                                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                    Pas d&apos;e-mail
+                                  </span>
+                                ) : st === "sent" ? (
+                                  <span
+                                    className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                                    title={row.delivery?.sentAt ? String(row.delivery.sentAt) : undefined}
+                                  >
+                                    Envoyé
+                                  </span>
+                                ) : st === "failed" ? (
+                                  <span
+                                    className="inline-flex max-w-[14rem] rounded-full px-2.5 py-1 text-xs font-semibold bg-red-100 text-red-900 dark:bg-red-950/45 dark:text-red-100"
+                                    title={row.delivery?.lastError || undefined}
+                                  >
+                                    Échec
+                                  </span>
+                                ) : st === "queued" ? (
+                                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold bg-amber-100 text-amber-900 dark:bg-amber-950/45 dark:text-amber-100">
+                                    En file
+                                  </span>
+                                ) : st === "skipped" ? (
+                                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                    Ignoré
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                                    Non envoyé
+                                  </span>
+                                )}
+                                {row.evaluation && (
+                                  <button
+                                    type="button"
+                                    disabled={!canSendMail}
+                                    onClick={() => sendEvalEmailFromHub(row.evaluation._id)}
+                                    className="rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-blue-500/40 dark:text-blue-300 dark:hover:bg-blue-950/50"
+                                  >
+                                    {sendBusy ? "Envoi…" : "Envoyer"}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {row.evaluation ? (
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  <Link
+                                    to={`/evaluations?load=${row.evaluation._id}&tab=corriger`}
+                                    className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                  >
+                                    Voir
+                                  </Link>
+                                  <Link
+                                    to={`/evaluations?load=${row.evaluation._id}&download=true&tab=corriger`}
+                                    className="text-slate-700 hover:underline dark:text-slate-300"
+                                  >
+                                    PDF
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteEval(row.evaluation._id)}
+                                    className="text-red-600 hover:underline"
+                                  >
+                                    Suppr.
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+                              )}
+                            </td>
+                          </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {evalPageTab === "envois" && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/10">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Envois de copies</h2>
+                <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                  {hubSelectedGroup
+                    ? `Groupe « ${hubSelectedGroup} » — cliquez une carte d’examen pour la sélectionner, puis « Nouvel envoi »`
+                    : "Tous les groupes — sélectionnez un groupe pour le détail par examen"}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/admin/users"
+                  className="rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-50 dark:border-emerald-500/35 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                >
+                  Administration
+                </Link>
+                <button
+                  type="button"
+                  onClick={openEmailSendModal}
+                  disabled={!emailBatchConfig.rubricId || !examsForSend.length}
+                  title={!emailBatchConfig.rubricId ? "Sélectionnez d’abord un examen (carte)" : ""}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-3 rounded-lg"
+                >
+                  <i className="fa-solid fa-paper-plane mr-2" aria-hidden />
+                  Nouvel envoi
+                </button>
+              </div>
+            </div>
+
+            {!hubSelectedGroup && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/35 dark:text-amber-100">
+                Choisissez un <strong>groupe actif</strong> dans la barre du haut pour afficher, par examen, combien d&apos;étudiants sont corrigés et combien de copies ont été envoyées.
+              </div>
+            )}
+
+            {hubSelectedGroup && examsForSend.length === 0 && (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-200">
+                Aucun examen avec des corrections pour le groupe « {hubSelectedGroup} ». Seuls les examens avec au moins une copie corrigée apparaissent en cartes.
+              </div>
+            )}
+
+            {hubSelectedGroup && enrollSendSummaries.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                {enrollSendSummaries.map((row) => (
+                  <div
+                    key={row.examKey}
+                    className={`rounded-xl border transition-all dark:border-slate-600 ${
+                      String(emailBatchConfig.rubricId) === String(row.rubricId)
+                        ? "border-blue-500 bg-blue-50/80 ring-2 ring-blue-200 dark:border-blue-500 dark:bg-blue-950/40 dark:ring-blue-500/40"
+                        : "border-slate-200 bg-slate-100/90 dark:bg-slate-900/70"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setEmailBatchConfig((prev) => ({ ...prev, rubricId: row.rubricId }));
+                      }}
+                      className="w-full rounded-t-xl p-4 pb-2 text-left transition-colors hover:bg-white/50 dark:hover:bg-slate-800/80"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">{row.title}</div>
+                          <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                            {[row.courseTitle && row.courseTitle !== row.title ? row.courseTitle : null, `v${row.version}`].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-lg px-2 py-1 text-xs font-bold ${
+                            row.noStudents
+                              ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                              : row.allCorrected
+                                ? "bg-green-100 text-green-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                                : "bg-orange-100 text-orange-900 dark:bg-orange-950/45 dark:text-orange-100"
+                          }`}
+                        >
+                          {row.noStudents ? "Aucun étudiant" : row.allCorrected ? "Tous corrigés" : "Correction incomplète"}
+                        </span>
+                      </div>
+                    </button>
+                    <div className="grid grid-cols-2 gap-2 px-4 pb-4 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setCorrectionModalRow(row)}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:border-blue-400 hover:bg-blue-50/70 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-600 dark:bg-slate-950/60 dark:hover:bg-indigo-950/50 dark:focus:ring-blue-600/50"
+                        title="Voir la liste des étudiants corrigés et à corriger"
+                      >
+                        <div className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Étudiants corrigés</div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100">
+                          {row.correctedCount}/{row.totalStudents}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-blue-600 dark:text-blue-400">Cliquer pour le détail</div>
+                      </button>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-600 dark:bg-slate-950/60">
+                        <div className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">Copies envoyées</div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100">{row.sentCopies}</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{row.withEmailCount} avec email</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!!emailJob.jobId && (
+              <div className="mb-4 rounded-lg border border-slate-200 p-3 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-200">
+                <div className="mb-1 font-semibold text-slate-800 dark:text-slate-100">
+                  Job {emailJob.jobId} ({emailJob.status || "queued"})
+                </div>
+                <div>
+                  {emailJob.processed}/{emailJob.total} traités • envoyés {emailJob.sent || 0} • échecs {emailJob.failed || 0} • ignorés {emailJob.skipped || 0}
+                </div>
+              </div>
+            )}
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Historique des envois</h3>
+              {emailBatchConfig.rubricId && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">Filtré sur l&apos;examen sélectionné</span>
+              )}
+            </div>
+            <ul className="max-h-[60vh] divide-y divide-slate-200 overflow-y-auto dark:divide-slate-700">
+              {visibleDeliveriesForExam.map((d) => {
+                const examLabel = d.evaluationId?.rubric?.taskTitle || d.evaluationId?.rubric?.title || d.examKey;
+                return (
+                  <li key={d._id} className="flex items-center justify-between py-2 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {(d.studentId && studentDisplayName(d.studentId)) || d.evaluationId?.studentName || "Étudiant"}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                        {d.group || "Sans groupe"} · {examLabel}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div
+                        className={`font-semibold ${
+                          d.status === "sent"
+                            ? "text-green-600 dark:text-green-400"
+                            : d.status === "failed"
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {d.status}
+                      </div>
+                      {d.status === "failed" && d.jobId && (
+                        <button
+                          type="button"
+                          onClick={() => retryFailed(d.jobId)}
+                          className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          Relancer erreurs
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+              {visibleDeliveriesForExam.length === 0 && (
+                <li className="py-2 text-sm text-slate-500 dark:text-slate-400">
+                  {visibleDeliveries.length === 0
+                    ? `Aucun envoi journalisé${hubSelectedGroup ? " pour ce groupe" : ""}.`
+                    : "Aucun envoi pour l'examen sélectionné."}
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
       </main>
+
+      {correctionModalRow && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => e.target === e.currentTarget && setCorrectionModalRow(null)}
+          role="presentation"
+        >
+          <div
+            className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-2xl border border-gray-200 bg-white shadow-2xl dark:!bg-slate-900 dark:border-slate-600"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-slate-700">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Étudiants corrigés · détail</h2>
+                <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+                  {correctionModalLists.title}
+                  {hubSelectedGroup ? ` · groupe « ${hubSelectedGroup} »` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCorrectionModalRow(null)}
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Fermer"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+            <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-2">
+              <div className="flex min-h-0 flex-col rounded-xl border border-emerald-200/90 bg-emerald-50/50 p-3 dark:border-emerald-500/30 dark:bg-emerald-950/35 dark:ring-1 dark:ring-emerald-500/10">
+                <h3 className="mb-2 shrink-0 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                  Corrigés ({correctionModalLists.corrected.length})
+                </h3>
+                <ul className="modal-student-list max-h-[min(40vh,320px)] divide-y divide-emerald-200/70 overflow-y-auto pr-1 text-sm dark:divide-emerald-800/50">
+                  {correctionModalLists.corrected.map((s) => (
+                    <li key={s._id} className="py-2.5 text-slate-800 dark:text-slate-100">
+                      {studentDisplayName(s)}
+                      {s.email ? <span className="mt-0.5 block text-xs text-slate-600 dark:text-slate-400">{s.email}</span> : null}
+                    </li>
+                  ))}
+                  {correctionModalLists.corrected.length === 0 && (
+                    <li className="py-2 text-xs text-slate-500 dark:text-slate-400">Aucun pour cet examen.</li>
+                  )}
+                </ul>
+              </div>
+              <div className="flex min-h-0 flex-col rounded-xl border border-amber-200/90 bg-amber-50/50 p-3 dark:border-amber-500/35 dark:bg-amber-950/40 dark:ring-1 dark:ring-amber-500/10">
+                <h3 className="mb-2 shrink-0 text-sm font-semibold text-amber-950 dark:text-amber-100">
+                  Pas encore corrigés ({correctionModalLists.pending.length})
+                </h3>
+                <ul className="modal-student-list max-h-[min(40vh,320px)] divide-y divide-amber-200/80 overflow-y-auto pr-1 text-sm dark:divide-amber-800/45">
+                  {correctionModalLists.pending.map((s) => (
+                    <li key={s._id} className="py-2.5 text-slate-800 dark:text-slate-100">
+                      {studentDisplayName(s)}
+                      {s.email ? <span className="mt-0.5 block text-xs text-slate-600 dark:text-slate-400">{s.email}</span> : null}
+                    </li>
+                  ))}
+                  {correctionModalLists.pending.length === 0 && (
+                    <li className="py-2 text-xs text-slate-500 dark:text-slate-400">Tous sont corrigés.</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+            <div className="flex shrink-0 justify-end rounded-b-2xl border-t border-gray-100 bg-slate-50 px-6 py-3 dark:border-slate-700 dark:bg-slate-950/80">
+              <button
+                type="button"
+                onClick={() => setCorrectionModalRow(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-800 shadow-sm hover:bg-slate-50 dark:!bg-slate-800 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEmailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowEmailModal(false)}
+          role="presentation"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-800">Envoi des copies par lot</h2>
+              <button type="button" onClick={() => setShowEmailModal(false)} className="text-gray-400 hover:text-gray-600" aria-label="Fermer">
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-sm">
+                <div className="text-xs font-semibold uppercase text-emerald-800 mb-1">Examen</div>
+                <div className="font-medium text-gray-900">
+                  {selectedSendExam ? `${selectedSendExam.taskTitle || selectedSendExam.title} (v${selectedSendExam.version})` : "—"}
+                </div>
+                {selectedSendExam?.title && selectedSendExam?.taskTitle && selectedSendExam.title !== selectedSendExam.taskTitle && (
+                  <div className="text-xs text-gray-600 mt-1">{selectedSendExam.title}</div>
+                )}
+              </div>
+              <label className="text-sm block">
+                Groupe destinataire
+                <select
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={emailBatchConfig.group}
+                  onChange={(e) => setEmailBatchConfig({ ...emailBatchConfig, group: e.target.value })}
+                >
+                  {emailTargets.groups.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={emailBatchConfig.skipAlreadySent}
+                  onChange={(e) => setEmailBatchConfig({ ...emailBatchConfig, skipAlreadySent: e.target.checked })}
+                />
+                Ignorer les copies déjà envoyées
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={emailBatchConfig.allowResendFailed}
+                  onChange={(e) => setEmailBatchConfig({ ...emailBatchConfig, allowResendFailed: e.target.checked })}
+                />
+                Relancer les copies en erreur
+              </label>
+              <label className="text-sm">
+                Délai entre chaque email (ms)
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  value={emailBatchConfig.delayMs}
+                  onChange={(e) => setEmailBatchConfig({ ...emailBatchConfig, delayMs: Number(e.target.value || 0) })}
+                />
+              </label>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl">
+              <button type="button" onClick={() => setShowEmailModal(false)} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-100">
+                Fermer
+              </button>
+              <button type="button" onClick={startEmailBatch} className="px-5 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">
+                Lancer l&apos;envoi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PDF TEMPLATE */}
       <div ref={pdfTemplateRef} className="hidden">
-        <div id="pdf-content" className="p-8 bg-white max-w-4xl mx-auto text-gray-800">
+        <div
+          id="pdf-content"
+          className="pdf-forced-light p-8 bg-white max-w-4xl mx-auto text-gray-800"
+        >
           <div className="flex justify-between items-end border-b-2 border-gray-800 pb-4 mb-8">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{selectedRubric?.title}</h1>
@@ -796,9 +1838,16 @@ export default function Evaluations() {
                             <div key={sc.id}>
                               <div className="flex items-center gap-2 text-xs">
                                 <span className={`inline-block w-3.5 h-3.5 border rounded-sm flex-shrink-0 text-center leading-3 ${isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 bg-white'}`}>{isChecked ? '✓' : ''}</span>
-                                <span className={isChecked ? 'text-gray-800 font-medium' : 'text-gray-400'}>{sc.label} ({sc.pts > 0 ? '+' : ''}{sc.pts} pts)</span>
+                                <span className={isChecked ? "text-gray-800 font-medium" : "text-gray-600"}>
+                                  {sc.label} ({sc.pts > 0 ? "+" : ""}
+                                  {sc.pts} pts)
+                                </span>
                               </div>
-                              {!isChecked && sc.feedback && <p className="text-xs text-red-500 ml-6 italic mt-0.5">⚠ {sc.feedback}</p>}
+                              {!isChecked && sc.feedback && (
+                                <p className="text-xs text-red-700 ml-6 italic mt-0.5 rounded border border-red-200 bg-red-50 px-2 py-1 leading-snug">
+                                  ⚠ {sc.feedback}
+                                </p>
+                              )}
                             </div>
                           );
                         })}
