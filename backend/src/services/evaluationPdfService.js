@@ -208,9 +208,27 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       ensureSpace(doc, 46, 6);
 
       const rowTop = doc.y;
-      const rowPage = doc.page;
       const textLeft = left + 14;
+      const stripeColor = criterionStripeColor(c);
       let cursorY = rowTop + 4;
+      let stripeStartY = rowTop;
+      let stripeEndY = rowTop + 2;
+      const flushStripeForCurrentPage = () => {
+        const h = Math.max(2, stripeEndY - stripeStartY);
+        doc.save();
+        doc.rect(left, stripeStartY, 4, h).fill(stripeColor);
+        doc.restore();
+      };
+      const ensureCursorSpaceForCriterion = (neededHeight) => {
+        if (cursorY + neededHeight > getPageBottomY()) {
+          stripeEndY = Math.max(stripeEndY, getPageBottomY());
+          flushStripeForCurrentPage();
+          doc.addPage();
+          cursorY = doc.y;
+          stripeStartY = cursorY;
+          stripeEndY = cursorY + 2;
+        }
+      };
 
       doc.font("Helvetica-Bold").fontSize(11).fillColor("#1f2937").text(c.title || "Critère", textLeft, cursorY, { width: pageWidth - 100 });
       doc.font("Helvetica-Bold").fontSize(11).fillColor("#111827").text(String(s), left + pageWidth - 86, cursorY, { width: 36, align: "right" });
@@ -219,6 +237,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       cursorY += 16;
       doc.fontSize(9).fillColor("#4b5563").text(descText, textLeft, cursorY, { width: pageWidth - 24 });
       cursorY += 14;
+      stripeEndY = Math.max(stripeEndY, cursorY);
 
       if (c.subCriteria && c.subCriteria.length) {
         const chkSize = 8;
@@ -226,7 +245,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
         const labelX = textLeft + chkSize + chkGap + 2;
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
-          cursorY = ensureCursorSpace(cursorY, 18);
+          ensureCursorSpaceForCriterion(18);
           const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
           const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
           doc.font("Helvetica").fontSize(8);
@@ -235,6 +254,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
           const boxY = cursorY + (rowH - chkSize) / 2;
           drawCheckbox(doc, textLeft, boxY, chkSize, isChecked);
           doc.fillColor(isChecked ? "#1f2937" : "#9ca3af").text(labelText, labelX, cursorY, { width: labelW });
+          stripeEndY = Math.max(stripeEndY, cursorY + rowH + 2);
           cursorY += rowH + 4;
 
           if (!isChecked && sc.feedback) {
@@ -244,32 +264,28 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
             doc.fontSize(8);
             const fbTextH = doc.heightOfString(fbText, { width: boxInnerW - pad * 2 });
             const fbH = fbTextH + pad * 2;
-            cursorY = ensureCursorSpace(cursorY, fbH + 8);
+            ensureCursorSpaceForCriterion(fbH + 8);
             const fbX = textLeft + 10;
             const fbY = cursorY;
             doc.rect(fbX, fbY, pageWidth - 28, fbH).fillAndStroke("#fef2f2", "#fecaca");
             doc.fillColor("#b91c1c").text(fbText, fbX + pad, fbY + pad, { width: boxInnerW - pad * 2 });
+            stripeEndY = Math.max(stripeEndY, fbY + fbH + 2);
             cursorY = fbY + fbH + 6;
           }
         });
       }
 
       if (commentLine) {
-        cursorY = ensureCursorSpace(cursorY, 16);
+        ensureCursorSpaceForCriterion(16);
         doc.font("Helvetica-Oblique").fontSize(8).fillColor("#6b7280").text(`Note: ${commentLine}`, textLeft, cursorY + 2, { width: pageWidth - 24 });
+        stripeEndY = Math.max(stripeEndY, cursorY + 14);
         doc.font("Helvetica");
         cursorY += 14;
       }
 
       const blockBottom = cursorY + 6;
-      const stripeH = Math.max(28, blockBottom - rowTop);
-      // Si le critère se poursuit sur une autre page, on n'étire pas la bande verticale
-      // entre deux pages pour éviter les artefacts d'espacement.
-      if (doc.page === rowPage) {
-        doc.save();
-        doc.rect(left, rowTop, 4, stripeH).fill(criterionStripeColor(c));
-        doc.restore();
-      }
+      stripeEndY = Math.max(stripeEndY, blockBottom);
+      flushStripeForCurrentPage();
 
       doc.y = blockBottom > getPageBottomY() ? getPageBottomY() : blockBottom;
       if (doc.y >= getPageBottomY()) {
