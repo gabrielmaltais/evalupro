@@ -11,6 +11,8 @@ const rubricSchema = z.object({
   taskTitle: z.string().min(1),
   version: z.number().int().min(1),
   isActive: z.boolean().optional(),
+  group: z.string().optional(),
+  groups: z.array(z.string()).optional(),
   criteria: z.array(
     z.object({
       id: z.string().min(1),
@@ -34,7 +36,12 @@ router.get("/", async (_req, res) => {
 router.post("/", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = rubricSchema.parse(req.body);
-    if (payload.isActive) await Rubric.updateMany({}, { isActive: false });
+    if ((!payload.groups || payload.groups.length === 0) && payload.group) {
+      payload.groups = [payload.group];
+    }
+    if (payload.groups) {
+      payload.groups = Array.from(new Set(payload.groups.map((g) => String(g || "").trim()).filter(Boolean)));
+    }
     const item = await Rubric.create({ ...payload, createdBy: req.user._id });
     res.status(201).json(item);
   } catch (error) {
@@ -45,7 +52,11 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
 router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = rubricSchema.partial().parse(req.body);
-    if (payload.isActive) await Rubric.updateMany({ _id: { $ne: req.params.id } }, { isActive: false });
+    if (payload.groups) {
+      payload.groups = Array.from(new Set(payload.groups.map((g) => String(g || "").trim()).filter(Boolean)));
+    } else if (payload.group != null) {
+      payload.groups = payload.group ? [payload.group] : [];
+    }
     const item = await Rubric.findByIdAndUpdate(req.params.id, payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
     res.json(item);

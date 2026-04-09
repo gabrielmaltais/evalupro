@@ -37,6 +37,8 @@ const rubricSchema = new mongoose.Schema(
     taskTitle: { type: String, required: true },
     version: { type: Number, required: true, min: 1 },
     isActive: { type: Boolean, default: false },
+    group: { type: String, default: "" },
+    groups: { type: [String], default: [] },
     criteria: { type: [criterionSchema], default: [] },
     feedbackMessages: {
       type: [{ minPct: Number, maxPct: Number, message: String }],

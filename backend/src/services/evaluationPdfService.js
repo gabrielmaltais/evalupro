@@ -116,6 +116,57 @@ function drawCheckbox(doc, x, y, size, isChecked) {
   }
 }
 
+function ensureSpace(doc, neededHeight, extraBottom = 0) {
+  const available = doc.page.height - doc.page.margins.bottom - doc.y - extraBottom;
+  if (neededHeight > available) {
+    doc.addPage();
+  }
+}
+
+function estimateCriterionHeight(doc, criterion, scoreValue, descText, commentLine, subScoreBlock, pageWidth) {
+  const textLeft = doc.page.margins.left + 14;
+  const titleW = pageWidth - 100;
+  const descW = pageWidth - 24;
+  let h = 4; // top offset inside row
+
+  doc.font("Helvetica-Bold").fontSize(11);
+  h += doc.heightOfString(criterion.title || "Critère", { width: titleW });
+  h += 5;
+
+  doc.font("Helvetica").fontSize(9);
+  h += doc.heightOfString(descText, { width: descW });
+  h += 6;
+
+  if (criterion.subCriteria && criterion.subCriteria.length) {
+    const chkSize = 8;
+    const chkGap = 4;
+    const labelW = pageWidth - 24 - chkSize - chkGap - 2;
+    criterion.subCriteria.forEach((sc) => {
+      const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
+      const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
+      doc.font("Helvetica").fontSize(8);
+      const labelH = doc.heightOfString(labelText, { width: labelW });
+      const rowH = Math.max(chkSize, labelH);
+      h += rowH + 4;
+
+      if (!isChecked && sc.feedback) {
+        const pad = 4;
+        const fbText = `⚠ ${sc.feedback}`;
+        const fbTextH = doc.heightOfString(fbText, { width: pageWidth - 36 - pad * 2 });
+        h += fbTextH + pad * 2 + 6;
+      }
+    });
+  }
+
+  if (commentLine) {
+    doc.font("Helvetica-Oblique").fontSize(8);
+    h += doc.heightOfString(`Note: ${commentLine}`, { width: pageWidth - 24 }) + 4;
+    doc.font("Helvetica");
+  }
+
+  return Math.max(34, h + 8);
+}
+
 /**
  * Aligne le rendu sur le template #pdf-content de Evaluations.jsx (export manuel).
  * showDatePdf côté UI n'est pas persisté : on n'affiche pas la date (comportement par défaut de la page).
@@ -186,6 +237,9 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       const s = getScore(scores, cid);
       const descText = levelDescription(c, s, scores, cid);
       const commentLine = comments[cid] || comments[String(cid)];
+      const subScoreBlock = getSubBlock(subScores, cid);
+      const estimatedBlockH = estimateCriterionHeight(doc, c, s, descText, commentLine, subScoreBlock, pageWidth);
+      ensureSpace(doc, estimatedBlockH, 6);
 
       const rowTop = doc.y;
       const textLeft = left + 14;
@@ -200,13 +254,12 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       cursorY += 14;
 
       if (c.subCriteria && c.subCriteria.length) {
-        const block = getSubBlock(subScores, cid);
         const chkSize = 8;
         const chkGap = 4;
         const labelX = textLeft + chkSize + chkGap + 2;
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
-          const isChecked = !!(block[sc.id] || block[String(sc.id)]);
+          const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
           const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
           doc.font("Helvetica").fontSize(8);
           const labelH = doc.heightOfString(labelText, { width: labelW });
@@ -251,6 +304,13 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
 
     // Synthèse enseignant
     if (evaluation.generalComment) {
+      doc.fontSize(10);
+      const summaryH = 44 + doc.heightOfString(evaluation.generalComment, {
+        width: pageWidth,
+        align: "justify",
+      });
+      ensureSpace(doc, summaryH, 6);
+
       doc.moveDown(0.8);
       doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#e5e7eb").stroke();
       doc.moveDown(0.6);
@@ -265,15 +325,21 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
     // Rétroaction finale (feedbackMessages)
     const match = pickFeedbackMessage(rubric, finalPct);
     if (match && match.message) {
+      doc.fontSize(10);
+      const feedbackTextH = doc.heightOfString(match.message, { width: pageWidth - 20 });
+      const feedbackH = Math.max(36, feedbackTextH + 16) + 20;
+      ensureSpace(doc, feedbackH, 6);
+
       doc.moveDown(1);
       doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#e5e7eb").stroke();
       doc.moveDown(0.8);
       const bandTop = doc.y;
       const colors = feedbackBandColors(finalPct);
-      doc.rect(left + 3, bandTop, pageWidth - 3, 36).fillAndStroke(colors.bg, colors.bg);
-      doc.rect(left, bandTop, 4, 36).fillAndStroke(colors.border, colors.border);
+      const bandH = Math.max(36, feedbackTextH + 16);
+      doc.rect(left + 3, bandTop, pageWidth - 3, bandH).fillAndStroke(colors.bg, colors.bg);
+      doc.rect(left, bandTop, 4, bandH).fillAndStroke(colors.border, colors.border);
       doc.fontSize(10).fillColor(colors.text).text(match.message, left + 14, bandTop + 10, { width: pageWidth - 20 });
-      doc.y = bandTop + 44;
+      doc.y = bandTop + bandH + 8;
     }
 
     doc.end();

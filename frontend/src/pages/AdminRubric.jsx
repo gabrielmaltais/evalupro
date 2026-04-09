@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import PageSectionTitle from "../components/PageSectionTitle";
@@ -17,12 +17,15 @@ const DEFAULT_CRITERION = {
 
 export default function AdminRubric() {
   const [rubrics, setRubrics] = useState([]);
+  const [groupOptions, setGroupOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   
   // Form State
   const [title, setTitle] = useState("Nouvelle Grille");
   const [taskTitle, setTaskTitle] = useState("Tâche Finale");
   const [version, setVersion] = useState(1);
+  const [groups, setGroups] = useState([]);
+  const [showGroupsDropdown, setShowGroupsDropdown] = useState(false);
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -37,6 +40,7 @@ export default function AdminRubric() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [savedSnapshot, setSavedSnapshot] = useState("");
 
   // AI Modal state
   const [showAIModal, setShowAIModal] = useState(false);
@@ -67,8 +71,12 @@ export default function AdminRubric() {
 
   async function refresh() {
     try {
-      const data = await api.listRubrics();
+      const [data, dashboard] = await Promise.all([
+        api.listRubrics(),
+        api.getStudentGroupDashboard(),
+      ]);
       setRubrics(data);
+      setGroupOptions((dashboard || []).map((x) => x.group).filter(Boolean));
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -78,17 +86,56 @@ export default function AdminRubric() {
     refresh();
   }, []);
 
+  function buildSnapshot(next = {}) {
+    const snap = {
+      selectedId: next.selectedId ?? selectedId ?? null,
+      title: next.title ?? title,
+      taskTitle: next.taskTitle ?? taskTitle,
+      version: next.version ?? version,
+      groups: next.groups ?? groups,
+      isActive: next.isActive ?? isActive,
+      criteria: next.criteria ?? criteria,
+      feedbackMessages: next.feedbackMessages ?? feedbackMessages,
+    };
+    return JSON.stringify(snap);
+  }
+
+  const hasUnsavedChanges = useMemo(
+    () => buildSnapshot() !== savedSnapshot,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedId, title, taskTitle, version, groups, isActive, criteria, feedbackMessages, savedSnapshot]
+  );
+
+  useEffect(() => {
+    if (savedSnapshot) return;
+    setSavedSnapshot(buildSnapshot());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedSnapshot]);
+
   function selectRubric(r) {
     setSelectedId(r._id);
     setTitle(r.title || "");
     setTaskTitle(r.taskTitle || "");
     setVersion((r.version || 1) + 1); // Auto increment version for new save
+    setGroups(Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []));
     setCriteria(r.criteria || []);
     setIsActive(r.isActive !== false);
     setFeedbackMessages(r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
     setConfirmDelete(false);
+    setSavedSnapshot(
+      buildSnapshot({
+        selectedId: r._id,
+        title: r.title || "",
+        taskTitle: r.taskTitle || "",
+        version: (r.version || 1) + 1,
+        groups: Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []),
+        isActive: r.isActive !== false,
+        criteria: r.criteria || [],
+        feedbackMessages: r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK,
+      })
+    );
   }
 
   function startNew() {
@@ -96,12 +143,25 @@ export default function AdminRubric() {
     setTitle("Nouvelle Grille");
     setTaskTitle("Tâche");
     setVersion(1);
+    setGroups([]);
     setCriteria([{ ...DEFAULT_CRITERION, id: "c1" }]);
     setIsActive(true);
     setFeedbackMessages(DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
     setConfirmDelete(false);
+    setSavedSnapshot(
+      buildSnapshot({
+        selectedId: null,
+        title: "Nouvelle Grille",
+        taskTitle: "Tâche",
+        version: 1,
+        groups: [],
+        isActive: true,
+        criteria: [{ ...DEFAULT_CRITERION, id: "c1" }],
+        feedbackMessages: DEFAULT_FEEDBACK,
+      })
+    );
   }
 
   async function save() {
@@ -109,13 +169,14 @@ export default function AdminRubric() {
     setSuccess("");
     try {
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, criteria, isActive, feedbackMessages });
+        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages });
         setSuccess("Grille modifiée avec succès !");
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, criteria, isActive, feedbackMessages });
+        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages });
         setSelectedId(newRubric._id);
         setSuccess("Nouvelle grille créée avec succès !");
       }
+      setSavedSnapshot(buildSnapshot());
       await refresh();
     } catch (e) {
       setError(String(e.message || e));
@@ -197,7 +258,7 @@ export default function AdminRubric() {
   }
 
   function exportJSON() {
-    const data = { title, taskTitle, version, criteria, isActive, feedbackMessages };
+    const data = { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
     const a = document.createElement('a');
     a.href = dataStr;
@@ -392,8 +453,10 @@ export default function AdminRubric() {
       if (json.feedbackMessages && Array.isArray(json.feedbackMessages) && json.feedbackMessages.length > 0) {
         setFeedbackMessages(json.feedbackMessages);
       }
+      setGroups(Array.isArray(json.groups) && json.groups.length ? json.groups : (json.group ? [json.group] : []));
       setSuccess("Grille importée ! Modifiez-la si besoin, puis Enregistrez.");
       setError("");
+      setSavedSnapshot("");
       return true;
     }
     setError("Le JSON ne contient pas de critères valides.");
@@ -473,7 +536,18 @@ export default function AdminRubric() {
                     <div className="font-semibold text-sm text-gray-800 line-clamp-2">{r.taskTitle || r.title || 'Nouvelle Grille'}</div>
                     <div className="text-xs text-gray-500 flex justify-between mt-1 items-center">
                       <span className="truncate pr-2" title={r.title}>{r.title} (v{r.version})</span>
-                      {r.isActive && <span className="text-green-500 font-medium flex-shrink-0">Active</span>}
+                      <div className="flex items-center gap-2">
+                        {(Array.isArray(r.groups) && r.groups.length > 0) && (
+                          <span className="text-slate-500 text-[11px] font-medium truncate max-w-[10rem]" title={r.groups.join(", ")}>
+                            {r.groups.join(", ")}
+                          </span>
+                        )}
+                        {r.isActive ? (
+                          <span className="text-green-500 font-medium flex-shrink-0">Active</span>
+                        ) : (
+                          <span className="text-gray-400 font-medium flex-shrink-0">Inactive</span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 </li>
@@ -485,11 +559,34 @@ export default function AdminRubric() {
 
         {/* RIGHT COLUMN: Editor */}
         <div className="lg:col-span-3 space-y-6">
-          {error && <div className="bg-red-50 text-red-600 p-4 rounded-lg text-sm border border-red-100"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
-          {success && <div className="bg-green-50 text-green-600 p-4 rounded-lg text-sm border border-green-100"><i className="fa-solid fa-check mr-2"></i>{success}</div>}
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
+          {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-check mr-2"></i>{success}</div>}
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">Paramètres Généraux</h2>
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="text-xl font-bold text-gray-800">Paramètres Généraux</h2>
+              <div className="flex items-center gap-3">
+                {hasUnsavedChanges ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
+                    <i className="fa-solid fa-circle-exclamation" />
+                    Modifications non enregistrées
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                    <i className="fa-solid fa-check" />
+                    Tout est enregistré
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={!hasUnsavedChanges}
+                  className="bg-gray-900 hover:bg-black dark:bg-emerald-500 dark:hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-950 font-semibold py-2.5 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500/60"
+                >
+                  <i className="fa-solid fa-save"></i> Enregistrer
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Titre du Cours</label>
@@ -502,6 +599,55 @@ export default function AdminRubric() {
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Version (Sera enregistrée comme nouvelle)</label>
                   <input type="number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={version} onChange={e => setVersion(Number(e.target.value))} />
+              </div>
+              <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Groupes associés (optionnel, multiple)</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowGroupsDropdown((v) => !v)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between"
+                    >
+                      <span className="truncate text-sm text-gray-800">
+                        {groups.length ? groups.join(", ") : "Choisir un ou plusieurs groupes"}
+                      </span>
+                      <i className={`fa-solid ${showGroupsDropdown ? "fa-chevron-up" : "fa-chevron-down"} text-xs text-gray-500`} />
+                    </button>
+                    {showGroupsDropdown && (
+                      <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg p-1">
+                        {groupOptions.length === 0 && (
+                          <div className="px-2 py-1.5 text-xs text-gray-500">Aucun groupe disponible</div>
+                        )}
+                        {groupOptions.map((g) => {
+                          const checked = groups.includes(g);
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => {
+                                setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+                              }}
+                              className="w-full px-2 py-1.5 text-left text-sm hover:bg-gray-50 rounded flex items-center gap-2"
+                            >
+                              <i className={`fa-solid ${checked ? "fa-check-square text-blue-600" : "fa-square text-gray-300"}`} />
+                              <span>{g}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">Cliquez pour cocher/décocher plusieurs groupes.</p>
+              </div>
+              <div className="flex items-end">
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                  />
+                  Grille active (visible dans Corriger)
+                </label>
               </div>
             </div>
           </div>
@@ -638,7 +784,7 @@ export default function AdminRubric() {
                 ) : (
                     <div></div>
                 )}
-                <button type="button" onClick={save} className="bg-gray-900 hover:bg-black text-white font-medium py-3 px-8 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2">
+                <button type="button" onClick={save} className="bg-gray-900 hover:bg-black dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-slate-950 font-semibold py-3 px-8 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500/60">
                     <i className="fa-solid fa-save"></i> Enregistrer cette Grille
                 </button>
             </div>

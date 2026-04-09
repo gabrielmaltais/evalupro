@@ -1,29 +1,53 @@
-export default function HubContextBar({ selectedGroup, setSelectedGroup, groupKeys, stats }) {
-  const active = stats.find((s) => s.group === selectedGroup);
+export default function HubContextBar({
+  selectedGroup,
+  setSelectedGroup,
+  groupKeys,
+  selectedExamId,
+  setSelectedExamId,
+  examOptions,
+  stats,
+}) {
   return (
     <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 dark:border-indigo-500/25 dark:from-slate-900/90 dark:to-indigo-950/70">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Groupe actif</span>
-          <select
-            value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
-            className="eval-form-control rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-indigo-500/35"
-          >
-            <option value="">Tous les groupes</option>
-            {groupKeys.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Groupe actif</span>
+            <select
+              value={selectedGroup}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+              className="eval-form-control w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-indigo-500/35"
+            >
+              <option value="">Tous les groupes</option>
+              {groupKeys.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0">
+            <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Examen</span>
+            <select
+              value={selectedExamId || ""}
+              onChange={(e) => setSelectedExamId(e.target.value)}
+              className="eval-form-control w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-indigo-500/35"
+            >
+              <option value="">— Choisir un examen —</option>
+              {(examOptions || []).map((ex) => (
+                <option key={`hub-exam-${ex.rubricId}-${ex.version ?? 1}`} value={String(ex.rubricId)}>
+                  {ex.taskTitle || ex.title} (v{ex.version ?? 1})
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:w-[420px]">
           {[
-            ["Étudiants", active?.students ?? "-"],
-            ["Évaluations", active?.evaluations ?? "-"],
-            ["Moyenne", active ? `${active.avgPct}%` : "-"],
-            ["Envois sent/failed", active ? `${active.sent}/${active.failed}` : "-"],
+            ["Étudiants", stats?.students ?? "-"],
+            ["Copies corrigées", stats?.correctedLabel ?? "-"],
+            ["Moyenne", stats?.avgPct != null ? `${stats.avgPct}%` : "-"],
+            ["Envois sent/failed", stats?.sentFailed ?? "-"],
           ].map(([label, val]) => (
             <div
               key={label}
