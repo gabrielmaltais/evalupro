@@ -169,6 +169,7 @@ export default function Evaluations() {
   const HUB_LAST_GROUP_STORAGE_KEY = "evaluations:hub-last-group";
   const HUB_LAST_EXAM_STORAGE_KEY = "evaluations:hub-last-exam";
   const EMAIL_ACTIVE_JOB_STORAGE_KEY = "evaluations:active-email-job-id";
+  const EMAIL_LAST_LOG_JOB_STORAGE_KEY = "evaluations:last-email-log-job-id";
   const EVAL_DATE_PREFS_STORAGE_KEY = "evaluations:date-prefs-by-group-rubric";
   const [searchParams, setSearchParams] = useSearchParams();
   const [rubrics, setRubrics] = useState([]);
@@ -272,6 +273,18 @@ export default function Evaluations() {
       };
     } catch {
       return { jobId: "", status: "", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 };
+    }
+  });
+  const [logJobId, setLogJobId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return (
+        localStorage.getItem(EMAIL_ACTIVE_JOB_STORAGE_KEY) ||
+        localStorage.getItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY) ||
+        ""
+      );
+    } catch {
+      return "";
     }
   });
   const [hubSendBusyId, setHubSendBusyId] = useState(null);
@@ -799,6 +812,15 @@ export default function Evaluations() {
         );
         if (ok) res = await api.sendEvaluationEmailOne(id, { resend: true });
       }
+      const oneSendJobId = String(res?.delivery?.jobId || "");
+      if (oneSendJobId) {
+        setLogJobId(oneSendJobId);
+        try {
+          localStorage.setItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY, oneSendJobId);
+        } catch {
+          // no-op
+        }
+      }
       await refresh();
     } catch (e) {
       setError(String(e.message || e));
@@ -921,15 +943,41 @@ export default function Evaluations() {
   }, [visibleDeliveries, emailBatchConfig.rubricId]);
 
   const emailJobLogs = useMemo(() => {
-    if (!emailJob.jobId) return [];
-    return visibleDeliveriesForExam
-      .filter((d) => String(d.jobId || "") === String(emailJob.jobId))
+    const effectiveJobId =
+      logJobId ||
+      visibleDeliveriesForExam.find((d) => d.jobId)?.jobId ||
+      visibleDeliveries.find((d) => d.jobId)?.jobId ||
+      "";
+    if (!effectiveJobId) return [];
+    // Ne pas filtrer par examen ici : le jobId peut provenir d’un envoi alors qu’un autre
+    // examen est sélectionné dans le hub, ou l’examKey peut différer légèrement (version).
+    return visibleDeliveries
+      .filter((d) => String(d.jobId || "") === String(effectiveJobId))
       .sort((a, b) => {
         const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
         const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
         return tb - ta;
       });
-  }, [visibleDeliveriesForExam, emailJob.jobId]);
+  }, [visibleDeliveries, visibleDeliveriesForExam, logJobId]);
+
+  const effectiveLogJobId = useMemo(
+    () =>
+      logJobId ||
+      visibleDeliveriesForExam.find((d) => d.jobId)?.jobId ||
+      visibleDeliveries.find((d) => d.jobId)?.jobId ||
+      "",
+    [logJobId, visibleDeliveriesForExam, visibleDeliveries]
+  );
+
+  useEffect(() => {
+    if (!effectiveLogJobId || logJobId === effectiveLogJobId) return;
+    setLogJobId(String(effectiveLogJobId));
+    try {
+      localStorage.setItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY, String(effectiveLogJobId));
+    } catch {
+      // no-op
+    }
+  }, [effectiveLogJobId, logJobId]);
 
   let totalMax = 0;
   let totalScore = 0;
@@ -1157,8 +1205,10 @@ export default function Evaluations() {
         delayMs: Number(emailBatchConfig.delayMs || 700),
       });
       setEmailJob({ jobId, status: "queued", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+      setLogJobId(jobId);
       try {
         localStorage.setItem(EMAIL_ACTIVE_JOB_STORAGE_KEY, jobId);
+        localStorage.setItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY, jobId);
       } catch {
         // no-op
       }
@@ -1173,8 +1223,10 @@ export default function Evaluations() {
       const res = await api.retryFailedEmailBatch(jobId, { delayMs: Number(emailBatchConfig.delayMs || 700) });
       if (res?.jobId) {
         setEmailJob({ jobId: res.jobId, status: "queued", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+        setLogJobId(res.jobId);
         try {
           localStorage.setItem(EMAIL_ACTIVE_JOB_STORAGE_KEY, res.jobId);
+          localStorage.setItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY, res.jobId);
         } catch {
           // no-op
         }
@@ -1186,8 +1238,10 @@ export default function Evaluations() {
 
   function clearEmailLogs() {
     setEmailJob({ jobId: "", status: "", processed: 0, total: 0, sent: 0, failed: 0, skipped: 0 });
+    setLogJobId("");
     try {
       localStorage.removeItem(EMAIL_ACTIVE_JOB_STORAGE_KEY);
+      localStorage.removeItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY);
     } catch {
       // no-op
     }
@@ -1199,11 +1253,13 @@ export default function Evaluations() {
       try {
         const progress = await api.getEmailBatchProgress(emailJob.jobId);
         setEmailJob((prev) => ({ ...prev, ...progress, jobId: emailJob.jobId }));
+        setLogJobId(emailJob.jobId);
         const sends = await api.listEmailDeliveries();
         setDeliveries(sends || []);
         if (progress.status === "completed" || progress.status === "failed") {
           try {
             localStorage.removeItem(EMAIL_ACTIVE_JOB_STORAGE_KEY);
+            localStorage.setItem(EMAIL_LAST_LOG_JOB_STORAGE_KEY, emailJob.jobId);
           } catch {
             // no-op
           }
@@ -2053,11 +2109,11 @@ export default function Evaluations() {
                 </div>
               </div>
             )}
-            {!!emailJob.jobId && (
+            {!!effectiveLogJobId && (
               <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 shadow-sm dark:border-slate-600/50">
                 <div className="flex items-center justify-between bg-slate-100 px-4 py-2 dark:bg-slate-800">
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                    Logs envoi en cours
+                    Logs envoi {emailJob.jobId ? "en cours" : "récents"}
                   </div>
                   <button
                     type="button"

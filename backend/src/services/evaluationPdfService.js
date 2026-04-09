@@ -123,50 +123,6 @@ function ensureSpace(doc, neededHeight, extraBottom = 0) {
   }
 }
 
-function estimateCriterionHeight(doc, criterion, scoreValue, descText, commentLine, subScoreBlock, pageWidth) {
-  const textLeft = doc.page.margins.left + 14;
-  const titleW = pageWidth - 100;
-  const descW = pageWidth - 24;
-  let h = 4; // top offset inside row
-
-  doc.font("Helvetica-Bold").fontSize(11);
-  h += doc.heightOfString(criterion.title || "Critère", { width: titleW });
-  h += 5;
-
-  doc.font("Helvetica").fontSize(9);
-  h += doc.heightOfString(descText, { width: descW });
-  h += 6;
-
-  if (criterion.subCriteria && criterion.subCriteria.length) {
-    const chkSize = 8;
-    const chkGap = 4;
-    const labelW = pageWidth - 24 - chkSize - chkGap - 2;
-    criterion.subCriteria.forEach((sc) => {
-      const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
-      const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
-      doc.font("Helvetica").fontSize(8);
-      const labelH = doc.heightOfString(labelText, { width: labelW });
-      const rowH = Math.max(chkSize, labelH);
-      h += rowH + 4;
-
-      if (!isChecked && sc.feedback) {
-        const pad = 4;
-        const fbText = `⚠ ${sc.feedback}`;
-        const fbTextH = doc.heightOfString(fbText, { width: pageWidth - 36 - pad * 2 });
-        h += fbTextH + pad * 2 + 6;
-      }
-    });
-  }
-
-  if (commentLine) {
-    doc.font("Helvetica-Oblique").fontSize(8);
-    h += doc.heightOfString(`Note: ${commentLine}`, { width: pageWidth - 24 }) + 4;
-    doc.font("Helvetica");
-  }
-
-  return Math.max(34, h + 8);
-}
-
 /**
  * Aligne le rendu sur le template #pdf-content de Evaluations.jsx (export manuel).
  * showDatePdf côté UI n'est pas persisté : on n'affiche pas la date (comportement par défaut de la page).
@@ -190,6 +146,15 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
     const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const left = doc.page.margins.left;
     let y = doc.page.margins.top;
+    const bottomBuffer = 6;
+    const getPageBottomY = () => doc.page.height - doc.page.margins.bottom - bottomBuffer;
+    const ensureCursorSpace = (cursorY, neededHeight) => {
+      if (cursorY + neededHeight > getPageBottomY()) {
+        doc.addPage();
+        return doc.y;
+      }
+      return cursorY;
+    };
 
     // En-tête : hauteurs dynamiques (évite le chevauchement titre / sous-titre si le titre passe sur 2 lignes)
     const split = 0.58;
@@ -238,10 +203,12 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       const descText = levelDescription(c, s, scores, cid);
       const commentLine = comments[cid] || comments[String(cid)];
       const subScoreBlock = getSubBlock(subScores, cid);
-      const estimatedBlockH = estimateCriterionHeight(doc, c, s, descText, commentLine, subScoreBlock, pageWidth);
-      ensureSpace(doc, estimatedBlockH, 6);
+      // Évite les grands blancs: on n'impose pas tout le critère sur une nouvelle page.
+      // On garantit seulement l'espace minimal pour l'entête du critère.
+      ensureSpace(doc, 46, 6);
 
       const rowTop = doc.y;
+      const rowPage = doc.page;
       const textLeft = left + 14;
       let cursorY = rowTop + 4;
 
@@ -259,6 +226,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
         const labelX = textLeft + chkSize + chkGap + 2;
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
+          cursorY = ensureCursorSpace(cursorY, 18);
           const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
           const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
           doc.font("Helvetica").fontSize(8);
@@ -276,6 +244,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
             doc.fontSize(8);
             const fbTextH = doc.heightOfString(fbText, { width: boxInnerW - pad * 2 });
             const fbH = fbTextH + pad * 2;
+            cursorY = ensureCursorSpace(cursorY, fbH + 8);
             const fbX = textLeft + 10;
             const fbY = cursorY;
             doc.rect(fbX, fbY, pageWidth - 28, fbH).fillAndStroke("#fef2f2", "#fecaca");
@@ -286,6 +255,7 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       }
 
       if (commentLine) {
+        cursorY = ensureCursorSpace(cursorY, 16);
         doc.font("Helvetica-Oblique").fontSize(8).fillColor("#6b7280").text(`Note: ${commentLine}`, textLeft, cursorY + 2, { width: pageWidth - 24 });
         doc.font("Helvetica");
         cursorY += 14;
@@ -293,11 +263,18 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
 
       const blockBottom = cursorY + 6;
       const stripeH = Math.max(28, blockBottom - rowTop);
-      doc.save();
-      doc.rect(left, rowTop, 4, stripeH).fill(criterionStripeColor(c));
-      doc.restore();
+      // Si le critère se poursuit sur une autre page, on n'étire pas la bande verticale
+      // entre deux pages pour éviter les artefacts d'espacement.
+      if (doc.page === rowPage) {
+        doc.save();
+        doc.rect(left, rowTop, 4, stripeH).fill(criterionStripeColor(c));
+        doc.restore();
+      }
 
-      doc.y = blockBottom;
+      doc.y = blockBottom > getPageBottomY() ? getPageBottomY() : blockBottom;
+      if (doc.y >= getPageBottomY()) {
+        doc.addPage();
+      }
       doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#f3f4f6").lineWidth(0.5).stroke();
       doc.moveDown(0.6);
     });
