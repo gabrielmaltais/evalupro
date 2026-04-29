@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { distributePoints, normalizeImportedRubric } from "../lib/rubricTemplate";
 import PageSectionTitle from "../components/PageSectionTitle";
 
 const DEFAULT_CRITERION = {
@@ -55,13 +56,10 @@ export default function AdminRubric() {
     sousCritereFeedback: true,
     sousCritereFeedbackStyle: "court",
     inclureFeedbackGlobal: true,
-    nombreTranches: "5",
     tonFeedback: "encourageant",
     palette: "arc-en-ciel",
     idsSemantics: false,
-    inclurePonderations: true,
     inclureExemples: true,
-    genererPrompt: true,
     contexte: "",
     niveauEtudiants: "collegial",
     critereParQuestion: true,
@@ -271,8 +269,22 @@ export default function AdminRubric() {
   function buildAITemplate() {
     const cfg = aiConfig;
     const LABELS = {
-      fr: { title: "Nom du cours ou du sujet principal", taskTitle: "Titre spécifique de la tâche ou du laboratoire", criterionName: "Nom du critère évalué (ex: Configuration NAT)", weight: "Nombre de points pour ce critère", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Point technique précis (ex: Ping fonctionnel entre hôte A et B)", subFeedback: "Le ping entre les machines A et B n'est pas fonctionnel. Vérifiez l'adressage IP et les routes statiques.", feedbackMsg: "Message de rétroaction affiché à l'élève pour cette tranche de score.", promptIntro: "Génère une grille d'évaluation complète en JSON pour le cours/la tâche suivant(e) en respectant STRICTEMENT la structure et les directives du gabarit fourni." },
-      en: { title: "Course Name", taskTitle: "Task or Lab Title", criterionName: "Criterion Name (e.g. NAT Configuration)", weight: "Points for this criterion", colors: "border-blue-500 | border-green-500 | border-red-500 | border-purple-500 | border-orange-500 | border-gray-500", subLabel: "Specific technical task (e.g. Ping functional between Host A and B)", subFeedback: "The ping between machines A and B is not functional. Check IP addressing and static routes.", feedbackMsg: "Feedback message displayed to the student for this score range.", promptIntro: "Generate a complete evaluation rubric JSON for the following course/task, strictly following the structure and directives of this template." },
+      fr: {
+        title: "Nom du cours ou du sujet principal",
+        taskTitle: "Titre de la tâche, du laboratoire ou de l'examen",
+        criterionName: "Question",
+        subLabel: "Élément observable à corriger",
+        subFeedback: "Expliquez précisément quoi corriger si cet élément n'est pas réussi.",
+        feedbackMsg: "Message de rétroaction affiché à l'élève pour cette tranche de score.",
+      },
+      en: {
+        title: "Course or main topic",
+        taskTitle: "Task, lab, or exam title",
+        criterionName: "Question",
+        subLabel: "Observable grading item",
+        subFeedback: "Explain exactly what to fix if this item is not completed.",
+        feedbackMsg: "Feedback displayed to the student for this score range.",
+      },
     };
     const L = LABELS[cfg.langue] || LABELS.fr;
 
@@ -303,35 +315,34 @@ export default function AdminRubric() {
       ? (parseInt(cfg.nbQuestions) || 4)
       : (parseInt(cfg.nbCriteres) || 4);
     const nbCriteres = Math.max(1, Math.min(50, requestedCount));
+    const weights = distributePoints(100, nbCriteres);
 
     const buildCriterion = (i) => {
+      const weight = weights[i];
       const levels = niveauxBase.map(nv => ({
-        label: `[${nv.label}] — Nommer ce niveau selon le contexte`,
+        label: nv.label,
         maxPct: nv.maxPct,
         desc: cfg.inclureExemples
-          ? `${nv.desc}. [EXEMPLE CONCRET AU CONTEXTE : décrivez un comportement, une production ou un résultat observable attendu à ce niveau]`
+          ? `${nv.desc}. Remplacer par un exemple concret et observable lié à cette question.`
           : `${nv.desc}.`,
       }));
       const criterion = {
         id: makeId("c", i + 1),
-        title: `[${L.criterionName}] — Critère ${i + 1}`,
-        weight: Math.round(100 / nbCriteres),
-        ...(cfg.inclurePonderations ? { "_weight_note": `${L.weight}. Ajustez pour que la somme totale = 100 pts.` } : {}),
+        title: `${L.criterionName} ${i + 1} - remplacer par l'intitule exact`,
+        weight,
         color: palette[i % palette.length],
-        "_color_options": L.colors,
         levels,
       };
       if (cfg.inclureSousCriteres) {
         const fbStyle = cfg.sousCritereFeedbackStyle === "verbeux"
-          ? `${L.subFeedback} Vérifiez les étapes : 1) ..., 2) ..., 3) .... Consultez la documentation de référence section [X].`
+          ? `${L.subFeedback} Ajoutez 2 ou 3 conseils concrets et actionnables.`
           : L.subFeedback;
+        const subPoints = distributePoints(weight, 3);
         criterion.subCriteria = [
-          { id: makeId("sc", `${i+1}-1`), label: `[${L.subLabel}] — Point technique 1`, pts: 2, ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
-          { id: makeId("sc", `${i+1}-2`), label: `[${L.subLabel}] — Point technique 2`, pts: 1.5, ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
+          { id: makeId("sc", `${i+1}-1`), label: `${L.subLabel} 1`, pts: subPoints[0], ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
+          { id: makeId("sc", `${i+1}-2`), label: `${L.subLabel} 2`, pts: subPoints[1], ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
+          { id: makeId("sc", `${i+1}-3`), label: `${L.subLabel} 3`, pts: subPoints[2], ...(cfg.sousCritereFeedback ? { feedback: fbStyle } : {}) },
         ];
-        criterion["_subCriteria_note"] = cfg.sousCritereFeedback
-          ? "Le champ 'feedback' s'affiche quand la case N'EST PAS cochée. Rédigez un commentaire constructif spécifique à l'erreur. 'pts' peut être positif (bonus) ou négatif (pénalité)."
-          : "Ajoutez autant de sous-critères que nécessaire. 'pts' peut être positif (bonus) ou négatif (pénalité).";
       }
       return criterion;
     };
@@ -343,77 +354,11 @@ export default function AdminRubric() {
       message: `[TON: ${TON[cfg.tonFeedback]}] — Niveau ${cfg.niveauEtudiants}. Rédigez un message motivant/explicatif pour un étudiant ayant obtenu entre ${min}% et ${max}%. Le ton doit rester professionnel, constructif et respectueux en tout temps (aucune formulation familière, sarcastique ou dénigrante). ${L.feedbackMsg}`,
     })) : undefined;
 
-    const promptFinal = cfg.genererPrompt ? [
-      L.promptIntro,
-      "",
-      `**Contexte pédagogique** : ${cfg.contexte || "[COMPLÉTEZ : décrivez brièvement le cours, la technologie évaluée ou la tâche demandée]"}`,
-      `**Niveau des étudiants** : ${cfg.niveauEtudiants === "collegial" ? "Niveau collégial / technique" : cfg.niveauEtudiants === "universitaire" ? "Niveau universitaire / avancé" : "Niveau secondaire / débutant"}`,
-      `**Langue de la grille** : ${cfg.langue === "fr" ? "Français" : "Anglais"}`,
-      "",
-      "**Exigences de génération** :",
-      cfg.critereParQuestion
-        ? `- IMPORTANT : Générer 1 critère par question (donc exactement ${nbCriteres} critères pour ${parseInt(cfg.nbQuestions) || nbCriteres} questions)`
-        : "- Les critères ne sont pas forcément liés 1:1 aux questions",
-      `- Générer exactement ${nbCriteres} critères d'évaluation pertinents au contexte`,
-      `- Chaque critère doit avoir exactement ${cfg.niveaux} niveaux de performance`,
-      `- La somme de tous les 'weight' doit être EXACTEMENT 100`,
-      cfg.inclureSousCriteres ? `- Inclure des sous-critères (cases à cocher techniques) pour CHAQUE critère${cfg.sousCritereFeedback ? `, avec un champ 'feedback' constructif de style "${cfg.sousCritereFeedbackStyle}" pour chaque case non cochée` : ""}` : "- Ne pas inclure de champ 'subCriteria'",
-      cfg.inclureFeedbackGlobal ? `- Inclure 5 messages 'feedbackMessages' couvrant 0% à 100%, ton : ${cfg.tonFeedback}` : "- Ne pas inclure de champ 'feedbackMessages'",
-      cfg.inclureFeedbackGlobal ? "- Le ton doit être strictement professionnel et respectueux, y compris en mode direct (interdit: moqueries, familiarités, jugements de valeur, sarcasmes)." : "",
-      `- Palette de couleurs à utiliser : ${L.colors}`,
-      cfg.inclureExemples ? "- Chaque niveau (desc) doit contenir UN EXEMPLE CONCRET et observable lié au contexte" : "",
-      "- Respecter STRICTEMENT la structure JSON du gabarit fourni (noms de champs, types de valeurs)",
-      "",
-      "**CONTRAINTE ABSOLUE** : Retournez UNIQUEMENT le JSON valide, sans texte, sans balises markdown, sans commentaires. Le fichier doit être directement importable dans ÉvaluPro.",
-    ].filter(Boolean).join("\n") : undefined;
-
     return {
-      "_META": {
-        generateur: "ÉvaluPro — Gabarit IA v2.0",
-        version_schema: "2.0",
-        date_generation: new Date().toISOString().slice(0, 10),
-        configuration_utilisee: {
-          langue: cfg.langue,
-          niveaux_par_critere: parseInt(cfg.niveaux),
-          mode_critere_par_question: cfg.critereParQuestion,
-          nombre_questions: cfg.critereParQuestion ? (parseInt(cfg.nbQuestions) || nbCriteres) : null,
-          nombre_criteres_demandes: nbCriteres,
-          avec_sous_criteres: cfg.inclureSousCriteres,
-          feedback_sous_criteres: cfg.inclureSousCriteres ? cfg.sousCritereFeedback : false,
-          style_feedback_sc: cfg.inclureSousCriteres && cfg.sousCritereFeedback ? cfg.sousCritereFeedbackStyle : "n/a",
-          avec_retroaction_globale: cfg.inclureFeedbackGlobal,
-          tranches_retroaction: cfg.inclureFeedbackGlobal ? 5 : 0,
-          ton_retroaction: cfg.inclureFeedbackGlobal ? cfg.tonFeedback : "n/a",
-          niveau_etudiants: cfg.niveauEtudiants,
-          palette: cfg.palette,
-        }
-      },
-      "_INSTRUCTIONS_IA": [
-        "RÈGLE 1 — STRUCTURE : Conservez EXACTEMENT les noms de champs. Supprimez les champs commençant par '_' (ils sont des instructions).",
-        "RÈGLE 2 — IDS : Chaque 'id' doit être UNIQUE dans tout le document. Remplacez les [MOT-CLE] par des noms sémantiques si applicable.",
-        "RÈGLE 3 — MAXPCT : Les valeurs 'maxPct' dans 'levels' vont de 0 à 1 (ex: 0.75 = 75%). Le niveau maximum DOIT avoir maxPct: 1.",
-        "RÈGLE 4 — WEIGHT : La SOMME de tous les 'weight' doit obligatoirement être égale à 100.",
-        "RÈGLE 5 — COULEURS : Utilisez UNIQUEMENT les valeurs autorisées pour 'color' (voir _color_options).",
-        "RÈGLE 6 — FEEDBACK SC : Le champ 'feedback' dans subCriteria s'affiche quand la case N'EST PAS cochée. Soyez précis et constructif.",
-        "RÈGLE 7 — FEEDBACK GLOBAL : Les 'feedbackMessages' couvrent de 0 à 100%. Les plages ne doivent pas se chevaucher.",
-        "RÈGLE 8 — CONTENU : Remplacez TOUS les textes entre crochets [ ] par de vraies valeurs contextuelles.",
-        "RÈGLE 9 — COHÉRENCE : Les niveaux de performance doivent être progressifs et cohérents entre tous les critères.",
-        "RÈGLE 10 — SORTIE : Retournez UNIQUEMENT le JSON (title, taskTitle, criteria, feedbackMessages si applicable). Sans les champs _META, _INSTRUCTIONS_IA, _SCHEMA_VALIDATION, _PROMPT.",
-      ],
-      "_SCHEMA_VALIDATION": {
-        champs_requis_racine: ["title", "taskTitle", "criteria"],
-        champs_requis_critere: ["id", "title", "weight", "color", "levels"],
-        champs_requis_niveau: ["label", "maxPct", "desc"],
-        champs_optionnels_critere: cfg.inclureSousCriteres ? ["subCriteria"] : [],
-        couleurs_valides: ["border-blue-500","border-green-500","border-red-500","border-purple-500","border-orange-500","border-gray-500","border-indigo-500","border-cyan-500","border-yellow-500"],
-        maxPct_plage: [0, 1],
-        weight_total_attendu: 100,
-      },
       title: L.title,
       taskTitle: L.taskTitle,
       criteria: criteriaExamples,
       ...(feedbackMessages ? { feedbackMessages } : {}),
-      ...(promptFinal ? { "_PROMPT_PRET_A_UTILISER": promptFinal } : {}),
     };
   }
 
@@ -438,28 +383,28 @@ export default function AdminRubric() {
       setTimeout(() => setAiCopySuccess(false), 2200);
       setSuccess("Gabarit IA copié dans le presse-papiers.");
       setError("");
-    } catch (_e) {
+    } catch {
       setError("Impossible de copier automatiquement. Vérifiez les permissions du navigateur.");
     }
   }
 
   function applyImportedRubric(json) {
-    if (json.criteria && Array.isArray(json.criteria)) {
-      setTitle(json.title || json.courseTitle || "Grille Importée");
-      setTaskTitle(json.taskTitle || "Travail Final");
-      setCriteria(json.criteria);
+    const result = normalizeImportedRubric(json, { defaultFeedbackMessages: DEFAULT_FEEDBACK });
+    if (result.ok) {
+      const imported = result.rubric;
+      setTitle(imported.title);
+      setTaskTitle(imported.taskTitle);
+      setCriteria(imported.criteria);
       setVersion(1);
       setSelectedId(null);
-      if (json.feedbackMessages && Array.isArray(json.feedbackMessages) && json.feedbackMessages.length > 0) {
-        setFeedbackMessages(json.feedbackMessages);
-      }
-      setGroups(Array.isArray(json.groups) && json.groups.length ? json.groups : (json.group ? [json.group] : []));
-      setSuccess("Grille importée ! Modifiez-la si besoin, puis Enregistrez.");
+      setFeedbackMessages(imported.feedbackMessages);
+      setGroups(imported.groups);
+      setSuccess(`Grille importée et normalisée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts.`);
       setError("");
       setSavedSnapshot("");
       return true;
     }
-    setError("Le JSON ne contient pas de critères valides.");
+    setError(result.error);
     return false;
   }
 
@@ -471,7 +416,7 @@ export default function AdminRubric() {
       try {
         const json = JSON.parse(evt.target.result);
         applyImportedRubric(json);
-      } catch (_err) {
+      } catch {
         setError("Erreur de lecture du fichier JSON.");
       }
       e.target.value = null;
@@ -487,7 +432,7 @@ export default function AdminRubric() {
         setShowPasteJsonModal(false);
         setPastedJsonText("");
       }
-    } catch (_e) {
+    } catch {
       setError("JSON invalide. Vérifiez la syntaxe avant d'importer.");
     }
   }
@@ -874,8 +819,7 @@ export default function AdminRubric() {
                         ? { nbQuestions: e.target.value }
                         : { nbCriteres: e.target.value })
                     })}
-                    disabled={aiConfig.critereParQuestion}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none ${aiConfig.critereParQuestion ? "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed" : "border-gray-300 focus:ring-2 focus:ring-orange-400"}`}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
                     placeholder={aiConfig.critereParQuestion ? "Ex: 10 questions = 10 critères" : "Ex: 4 critères"}
                   />
                   <p className="text-[11px] text-gray-500 mt-1">
@@ -951,10 +895,8 @@ export default function AdminRubric() {
                     <p className="text-xs font-bold text-gray-600 uppercase mb-2">⚙️ Options avancées</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        ["inclurePonderations","Inclure note sur les poids"],
                         ["inclureExemples","Exemples concrets dans les niveaux"],
                         ["idsSemantics","IDs sémantiques (ex: c-nat-1)"],
-                        ["genererPrompt","Générer le prompt prêt-à-copier"],
                       ].map(([key, label]) => (
                         <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
                           <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-4 h-4 rounded text-purple-600 accent-purple-600" />
