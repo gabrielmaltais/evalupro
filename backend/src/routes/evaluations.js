@@ -208,6 +208,17 @@ router.put("/:id", async (req, res) => {
       item.studentId = undefined;
     }
     Object.assign(item, payload);
+    if (payload.rubric) {
+      const rubricExists = await Rubric.findById(item.rubric).select("_id criteria");
+      if (!rubricExists) return res.status(404).json({ message: "Rubric introuvable" });
+    }
+
+    // Recalcul des totaux après modification pour garder le suivi/envois synchronisés.
+    const nextScores = item.scores ? Object.values(item.scores.toObject?.() || item.scores || {}) : [];
+    item.totalScore = nextScores.reduce((sum, v) => sum + Number(v || 0), 0);
+    const rubricForTotals = await Rubric.findById(item.rubric).select("criteria");
+    item.totalMax = (rubricForTotals?.criteria || []).reduce((sum, c) => sum + Number(c.weight || 0), 0);
+
     if (item.studentId) {
       const st = await Student.findOne({ _id: item.studentId, createdBy: req.user._id }).lean();
       if (st) item.studentName = studentFullNameFromDoc(st);

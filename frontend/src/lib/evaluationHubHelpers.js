@@ -11,7 +11,7 @@ export function evalRubricId(it) {
   return String(it.rubric);
 }
 
-/** Si plusieurs copies pour le même étudiant et la même grille, on retient la plus récente par date. */
+/** Si plusieurs copies pour le même étudiant et la même grille, on retient la plus récemment modifiée. */
 export function findLatestEvalForStudentRubric(studentId, rubricId, itemsList) {
   const sid = String(studentId);
   const rid = String(rubricId);
@@ -21,6 +21,10 @@ export function findLatestEvalForStudentRubric(studentId, rubricId, itemsList) {
     return eSid === sid && eRid === rid;
   });
   if (!matches.length) return null;
-  matches.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""), "fr"));
+  matches.sort((a, b) => {
+    const ta = new Date(a.updatedAt || a.createdAt || a.date || 0).getTime();
+    const tb = new Date(b.updatedAt || b.createdAt || b.date || 0).getTime();
+    return tb - ta;
+  });
   return matches[0];
 }

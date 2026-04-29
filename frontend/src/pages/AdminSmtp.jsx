@@ -20,6 +20,16 @@ Cordialement,
   isActive: true,
 };
 
+const TEMPLATE_VARIABLES = [
+  "{studentFirstName}",
+  "{studentLastName}",
+  "{studentName}",
+  "{examTitle}",
+  "{courseTitle}",
+  "{teacherName}",
+  "{group}",
+];
+
 export default function AdminSmtp() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [error, setError] = useState("");
@@ -130,6 +140,19 @@ export default function AdminSmtp() {
           <label className="text-sm block">Corps du message
             <textarea rows={8} className="mt-1 w-full border rounded-lg px-3 py-2 font-mono text-sm" value={form.emailBodyTemplate} onChange={(e) => setForm({ ...form, emailBodyTemplate: e.target.value })} />
           </label>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-800">Variables disponibles pour les templates</div>
+            <p className="mt-1 text-xs text-slate-600">
+              Utilise ces variables dans l&apos;objet et le corps, par exemple: <span className="font-mono">Bonjour {"{studentFirstName}"}</span>.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TEMPLATE_VARIABLES.map((variable) => (
+                <code key={variable} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+                  {variable}
+                </code>
+              ))}
+            </div>
+          </div>
           <div className="flex gap-6 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.secure} onChange={(e) => setForm({ ...form, secure: e.target.checked })} />Connexion sécurisée (SSL/TLS)</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Configuration active</label>
