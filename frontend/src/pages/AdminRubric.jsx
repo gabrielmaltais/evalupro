@@ -4,6 +4,13 @@ import { api } from "../lib/api";
 import { distributePoints, normalizeImportedRubric } from "../lib/rubricTemplate";
 import PageSectionTitle from "../components/PageSectionTitle";
 
+/** Si le JSON vient du gabarit IA enveloppé, extraire la grille importable. */
+function unwrapAiTemplateEnvelope(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  if (raw.template_a_remplir && typeof raw.template_a_remplir === "object") return raw.template_a_remplir;
+  return raw;
+}
+
 const DEFAULT_CRITERION = {
   id: "cx",
   title: "Nouveau Critère",
@@ -63,8 +70,8 @@ export default function AdminRubric() {
     instructionsIa: "",
     niveauEtudiants: "collegial",
     critereParQuestion: true,
-    nbQuestions: "4",
     nbCriteres: "4",
+    lierElementsCompetence: false,
   });
 
   async function refresh() {
@@ -83,6 +90,12 @@ export default function AdminRubric() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    if (aiConfig.lierElementsCompetence && !aiConfig.inclureSousCriteres) {
+      setAiConfig((c) => ({ ...c, inclureSousCriteres: true }));
+    }
+  }, [aiConfig.lierElementsCompetence, aiConfig.inclureSousCriteres]);
 
   function buildSnapshot(next = {}) {
     const snap = {
@@ -302,13 +315,6 @@ export default function AdminRubric() {
     const TRANCHES_5 = [[0,60],[60,75],[75,85],[85,95],[95,100]];
     const tranches = TRANCHES_5;
 
-    const TON = {
-      encourageant: "Encourageant et motivant, tout en restant professionnel et respectueux — valorisez les efforts, 2-3 phrases chaleureuses",
-      formel: "Formel et académique — ton neutre, précis, professionnel, 1-2 phrases factuelles",
-      direct: "Direct et concis — 1 phrase claire, professionnelle et respectueuse, sans sarcasme, sans familiarité, sans jugement",
-      verbeux: "Très détaillé — 4-6 phrases, conseils concrets et actionnables, vocabulaire professionnel et respectueux",
-    };
-
     const makeId = (prefix, n) => cfg.idsSemantics ? `${prefix}-[MOT-CLE-${n}]` : `${prefix}${n}`;
 
     const autoOnePerQuestion = cfg.critereParQuestion;
@@ -322,43 +328,87 @@ export default function AdminRubric() {
 
     const teacherNotes = String(cfg.instructionsIa || "").trim();
     const isEn = cfg.langue === "en";
-    const instructionsForModel = {
-      criteriaCount: autoOnePerQuestion
+    const criteriaCountGuidance =
+      cfg.lierElementsCompetence && autoOnePerQuestion
         ? (isEn
-          ? "Create exactly as many objects in `criteria` as there are graded questions (or distinct scored parts) in the exam. The template below shows only ONE example row — repeat the same structure for every question."
-          : "Créer exactement autant d'objets dans `criteria` qu'il y a de questions (ou de parties notées distinctes) dans l'énoncé. Ce gabarit ne montre qu'UNE ligne d'exemple — reproduire la même structure pour chaque question.")
-        : (isEn
-          ? `Create exactly ${nbCriteres} criteria in \`criteria\`, aligned with the exam whenever it makes sense.`
-          : `Créer exactement ${nbCriteres} critères dans \`criteria\`, alignés sur l'énoncé lorsque c'est pertinent.`),
-      pointsAndWeights: autoOnePerQuestion
-        ? (isEn
-          ? "Each `weight` MUST match the points assigned to that question in the exam. The sum of all `weights` MUST equal the exam total (not necessarily 100). The value 0 here is only a placeholder in the single example row."
-          : "Chaque `weight` DOIT reprendre les points de la question correspondante dans l'énoncé. La somme des `weight` DOIT égaler le total de l'examen (pas forcément 100). La valeur 0 sur l'exemple unique n'est qu'un substitut.")
-        : (isEn
-          ? "Replace every `weight` with the real points from the exam. The template weights are an illustrative split out of 100 — discard them if they disagree with the exam. The sum of `weights` MUST equal the exam total."
-          : "Remplacer chaque `weight` par les points réels de l'énoncé. Les pondérations ci-dessous sont une répartition fictive sur 100 pour l'aperçu : ne pas les garder si elles contredisent l'examen. La somme des `weight` doit égaler le total de l'examen."),
-      ...(cfg.inclureSousCriteres
-        ? {
-            subCriteriaSum: isEn
-              ? "If `subCriteria` are used, the sum of `pts` for each criterion must equal that criterion's `weight`."
-              : "Si `subCriteria` est utilisé, la somme des `pts` doit égaler le `weight` du critère parent.",
-          }
-        : {}),
-      ...(teacherNotes ? { teacherInstructions: teacherNotes } : {}),
-    };
+          ? "Create as many `criteria` objects as there are competency elements from the course plan that this exam assesses. The template below shows only ONE example row — repeat the same structure for each competency element."
+          : "Créer autant d'objets dans `criteria` qu'il y a d'éléments de compétence du plan de cours à couvrir par cet examen. Ce gabarit ne montre qu'UNE ligne d'exemple — reproduire la même structure pour chaque élément de compétence.")
+        : cfg.lierElementsCompetence && !autoOnePerQuestion
+          ? (isEn
+            ? `Create exactly ${nbCriteres} criteria in \`criteria\`, each aligned with a competency element from the course plan whenever possible.`
+            : `Créer exactement ${nbCriteres} critères dans \`criteria\`, chacun aligné sur un élément de compétence du plan de cours lorsque c'est pertinent.`)
+          : autoOnePerQuestion
+            ? (isEn
+              ? "Create exactly as many objects in `criteria` as there are graded questions (or distinct scored parts) in the exam. The template below shows only ONE example row — repeat the same structure for every question."
+              : "Créer exactement autant d'objets dans `criteria` qu'il y a de questions (ou de parties notées distinctes) dans l'énoncé. Ce gabarit ne montre qu'UNE ligne d'exemple — reproduire la même structure pour chaque question.")
+            : (isEn
+              ? `Create exactly ${nbCriteres} criteria in \`criteria\`, aligned with the exam whenever it makes sense.`
+              : `Créer exactement ${nbCriteres} critères dans \`criteria\`, alignés sur l'énoncé lorsque c'est pertinent.`);
+    const pointsGuidance = autoOnePerQuestion
+      ? (isEn
+        ? "Each `weight` MUST match the points assigned to that question in the exam. The sum of all `weights` MUST equal the exam total (not necessarily 100). The value 0 here is only a placeholder in the single example row."
+        : "Chaque `weight` DOIT reprendre les points de la question correspondante dans l'énoncé. La somme des `weight` DOIT égaler le total de l'examen (pas forcément 100). La valeur 0 sur l'exemple unique n'est qu'un substitut.")
+      : (isEn
+        ? "Replace every `weight` with the real points from the exam. The template weights are an illustrative split out of 100 — discard them if they disagree with the exam. The sum of `weights` MUST equal the exam total."
+        : "Remplacer chaque `weight` par les points réels de l'énoncé. Les pondérations ci-dessous sont une répartition fictive sur 100 pour l'aperçu : ne pas les garder si elles contredisent l'examen. La somme des `weight` doit égaler le total de l'examen.");
+    const subCriteriaSumGuidance = cfg.inclureSousCriteres
+      ? (isEn
+        ? "If `subCriteria` are used, the sum of `pts` for each criterion must equal that criterion's `weight`."
+        : "Si `subCriteria` est utilisé, la somme des `pts` doit égaler le `weight` du critère parent.")
+      : "";
+
+    const strategieBase = isEn
+      ? "Create one `criteria` per main exam question and use `subCriteria` for sub-questions."
+      : "Crée un criteria pour chaque question principale de l'examen et utilise les subCriteria pour les sous-questions.";
+
+    const STRATEGIE_EVALUATION_COMPETENCES_FR =
+      "STRATÉGIE D'ÉVALUATION : Tu dois mapper les objets 'criteria' aux Éléments de compétence trouvés dans le plan de cours. Ensuite, utilise les 'subCriteria' pour lister les tâches ou consignes spécifiques du travail pratique qui permettent d'évaluer cette compétence.";
+    const STRATEGIE_EVALUATION_COMPETENCES_EN =
+      "EVALUATION STRATEGY: You must map the 'criteria' objects to the competency elements found in the course plan. Then use 'subCriteria' to list the specific tasks or instructions from the practical work that allow this competency to be assessed.";
+
+    const strategie_evaluation = cfg.lierElementsCompetence
+      ? (isEn ? STRATEGIE_EVALUATION_COMPETENCES_EN : STRATEGIE_EVALUATION_COMPETENCES_FR)
+      : [strategieBase, "", criteriaCountGuidance, "", pointsGuidance, subCriteriaSumGuidance ? `\n${subCriteriaSumGuidance}` : ""]
+          .join("\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+
+    const role = isEn ? "Expert in college-level educational technology" : "Expert en technopédagogie collégiale";
+    const regle_absolue_format = isEn
+      ? 'You must extract and complete the \'template_a_remplir\' object below. Your final answer must be ONLY the completed JSON (starting with { "title": ... }). Do NOT include this \'_prompt_configuration\' object in your final answer.'
+      : 'Tu dois extraire et remplir l\'objet \'template_a_remplir\' ci-dessous. Ta réponse finale doit être UNIQUEMENT le JSON rempli (commençant par { "title": ... }). N\'inclus SURTOUT PAS cet objet \'_prompt_configuration\' dans ta réponse finale.';
+    const regles_mathematiques = isEn
+      ? "The sum of 'weight' must equal the exam's total points. The sum of 'pts' in 'subCriteria' must exactly equal the parent criterion's 'weight'."
+      : "La somme des 'weight' doit égaler le total des points de l'examen. La somme des 'pts' des 'subCriteria' doit égaler exactement le 'weight' du 'criteria' parent.";
+    const regles_feedback = isEn
+      ? "Write 5 personalized feedback messages (feedbackMessages), one per score band. The tone must be encouraging, motivating, professional, and respectful. Use a polite, professional register. NEVER copy instructional or placeholder text into the generated messages."
+      : "Rédige 5 messages de rétroaction (feedbackMessages) personnalisés pour chaque tranche de note. Le ton doit être encourageant, motivant, professionnel et respectueux. Utilise le vouvoiement. Ne copie JAMAIS de texte d'instruction dans les messages générés.";
+
+    const critTitleLabel = cfg.lierElementsCompetence
+      ? (isEn ? "Competency element" : "Élément de compétence")
+      : L.criterionName;
 
     const buildCriterion = (i) => {
       const weight = weights[i];
-      const levels = niveauxBase.map(nv => ({
+      const criterionTitleExample = cfg.lierElementsCompetence
+        ? (isEn ? `Name of competency element ${i + 1}` : `Nom de l'élément de compétence ${i + 1}`)
+        : `${critTitleLabel} ${i + 1} - remplacer par l'intitule exact`;
+      const levels = niveauxBase.map((nv) => ({
         label: nv.label,
         maxPct: nv.maxPct,
         desc: cfg.inclureExemples
-          ? `${nv.desc}. Remplacer par un exemple concret et observable lié à cette question.`
+          ? cfg.lierElementsCompetence
+            ? (isEn
+              ? `${nv.desc}. Replace with a concrete observable example linked to this competency element.`
+              : `${nv.desc}. Remplacer par un exemple concret et observable lié à cet élément de compétence.`)
+            : (isEn
+              ? `${nv.desc}. Replace with a concrete observable example linked to this question.`
+              : `${nv.desc}. Remplacer par un exemple concret et observable lié à cette question.`)
           : `${nv.desc}.`,
       }));
       const criterion = {
         id: makeId("c", i + 1),
-        title: `${L.criterionName} ${i + 1} - remplacer par l'intitule exact`,
+        title: criterionTitleExample,
         weight,
         color: palette[i % palette.length],
         levels,
@@ -378,18 +428,30 @@ export default function AdminRubric() {
     };
     const criteriaExamples = Array.from({ length: nbCriteres }, (_, i) => buildCriterion(i));
 
+    const feedbackPlaceholder = isEn ? "Generate the feedback message here" : "Générer le message de rétroaction ici";
     const feedbackMessages = cfg.inclureFeedbackGlobal ? tranches.map(([min, max]) => ({
       minPct: min,
       maxPct: max,
-      message: `[TON: ${TON[cfg.tonFeedback]}] — Niveau ${cfg.niveauEtudiants}. Rédigez un message motivant/explicatif pour un étudiant ayant obtenu entre ${min}% et ${max}%. Le ton doit rester professionnel, constructif et respectueux en tout temps (aucune formulation familière, sarcastique ou dénigrante). ${L.feedbackMsg}`,
+      message: feedbackPlaceholder,
     })) : undefined;
 
-    return {
+    const template_a_remplir = {
       title: L.title,
       taskTitle: L.taskTitle,
-      instructionsForModel,
       criteria: criteriaExamples,
       ...(feedbackMessages ? { feedbackMessages } : {}),
+    };
+
+    return {
+      _prompt_configuration: {
+        role,
+        regle_absolue_format,
+        strategie_evaluation,
+        regles_mathematiques,
+        ...(cfg.inclureFeedbackGlobal ? { regles_feedback } : {}),
+        instructions_specifiques_utilisateur: teacherNotes || null,
+      },
+      template_a_remplir,
     };
   }
 
@@ -420,7 +482,7 @@ export default function AdminRubric() {
   }
 
   function applyImportedRubric(json) {
-    const result = normalizeImportedRubric(json, { defaultFeedbackMessages: DEFAULT_FEEDBACK });
+    const result = normalizeImportedRubric(unwrapAiTemplateEnvelope(json), { defaultFeedbackMessages: DEFAULT_FEEDBACK });
     if (result.ok) {
       const imported = result.rubric;
       setTitle(imported.title);
@@ -432,7 +494,8 @@ export default function AdminRubric() {
       setGroups(imported.groups);
       setSuccess(`Grille importée et normalisée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts.`);
       setError("");
-      setSavedSnapshot("");
+      /* Ne pas réinitialiser savedSnapshot : sinon l'effet synchrone réécrit le snapshot avec le
+         formulaire importé et l'UI affiche « tout enregistré » alors qu'aucun POST n'a eu lieu. */
       return true;
     }
     setError(result.error);
@@ -771,204 +834,246 @@ export default function AdminRubric() {
 
       {/* AI TEMPLATE MODAL */}
       {showAIModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={(e) => e.target === e.currentTarget && setShowAIModal(false)}>
-          <div className="ai-modal-shell bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="ai-modal-header flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-robot text-purple-600"></i> Configurateur de Gabarit IA</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Personnalisez les options pour générer un gabarit JSON optimal</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-3" onClick={(e) => e.target === e.currentTarget && setShowAIModal(false)}>
+          <div className="ai-modal-shell flex max-h-[min(90vh,700px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200/90 bg-white shadow-2xl">
+            <div className="ai-modal-header flex flex-shrink-0 items-start justify-between gap-2 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/80 px-3 py-2.5 sm:px-4">
+              <div className="min-w-0 pr-1">
+                <h2 className="text-sm sm:text-base font-bold text-gray-800 flex items-center gap-1.5"><i className="fa-solid fa-robot text-indigo-600 flex-shrink-0 text-[15px] sm:text-base"></i> Configurateur de Gabarit IA</h2>
+                <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">Personnalisez les options pour générer un gabarit JSON adapté.</p>
               </div>
-              <button onClick={() => setShowAIModal(false)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fa-solid fa-xmark"></i></button>
+              <button type="button" onClick={() => setShowAIModal(false)} className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-white/80 hover:text-gray-700" aria-label="Fermer"><i className="fa-solid fa-xmark text-base"></i></button>
             </div>
 
-            <div className="ai-modal-body p-6 space-y-6">
+            <div className="ai-modal-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-3.5 space-y-3.5">
 
               {/* Instructions IA (lue par le modèle avec le gabarit) */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2"><i className="fa-solid fa-wand-magic-sparkles mr-1 text-blue-500"></i> Instructions pour l&apos;IA</label>
-                <textarea rows={3} placeholder="Ex: Viser la même découpe que l'énoncé officiel. Ton formel. Insister sur la conformité aux consignes de remise." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400 resize-none" value={aiConfig.instructionsIa} onChange={e => setAiConfig({...aiConfig, instructionsIa: e.target.value})} />
-                <p className="text-[11px] text-gray-500 mt-1">Ces consignes sont incluses dans le JSON du gabarit (champ dédié) pour le modèle qui le complète.</p>
-              </div>
+              <section className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-800"><i className="fa-solid fa-wand-magic-sparkles mr-1 text-indigo-500 text-[11px]"></i> Instructions pour l&apos;IA</label>
+                <textarea rows={2} placeholder="Ex: Viser la même découpe que l'énoncé officiel. Ton formel. Insister sur la conformité aux consignes de remise." className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-300 resize-none" value={aiConfig.instructionsIa} onChange={e => setAiConfig({...aiConfig, instructionsIa: e.target.value})} />
+                <p className="text-[10px] text-gray-500 leading-snug">Copiées dans <code className="text-[9px] bg-gray-100 text-gray-700 px-1 py-px rounded border border-gray-200/80">_prompt_configuration.instructions_specifiques_utilisateur</code>.</p>
+              </section>
 
-              <div className="grid grid-cols-2 gap-4">
+              <section className="rounded-lg border border-emerald-200/90 bg-emerald-50/60 px-3 py-2.5 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <label htmlFor="lier-competence-toggle" className="text-xs font-bold text-emerald-950 cursor-pointer leading-snug pr-1">
+                    Lier l&apos;évaluation aux éléments de compétence (recommandé pour les travaux pratiques)
+                  </label>
+                  <button
+                    id="lier-competence-toggle"
+                    type="button"
+                    aria-pressed={aiConfig.lierElementsCompetence}
+                    onClick={() => {
+                      const next = !aiConfig.lierElementsCompetence;
+                      setAiConfig({
+                        ...aiConfig,
+                        lierElementsCompetence: next,
+                        ...(next ? { inclureSousCriteres: true } : {}),
+                      });
+                    }}
+                    className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${aiConfig.lierElementsCompetence ? "bg-emerald-600" : "bg-gray-300"}`}
+                  >
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${aiConfig.lierElementsCompetence ? "translate-x-5" : "translate-x-1"}`} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-emerald-900/90 leading-snug border-t border-emerald-200/60 pt-2">
+                  {aiConfig.lierElementsCompetence
+                    ? "Stratégie du gabarit : compétences du plan de cours → critères ; tâches d&apos;examen → sous-critères."
+                    : "Stratégie par défaut : une question principale → un critère ; sous-questions → sous-critères (examens classiques)."}
+                </p>
+              </section>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                 {/* Langue */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🌐 Langue du gabarit</label>
-                  <div className="flex gap-2">
-                    {[["fr","🇫🇷 Français"],["en","🇬🇧 English"]].map(([v,l]) => (
-                      <button key={v} onClick={() => setAiConfig({...aiConfig, langue: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.langue === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Langue du gabarit</label>
+                  <div className="flex gap-1.5">
+                    {[["fr","Français"],["en","English"]].map(([v,l]) => (
+                      <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, langue: v})} className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-semibold border transition-all ${aiConfig.langue === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{l}</button>
                     ))}
                   </div>
                 </div>
                 {/* Niveau étudiants */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎓 Niveau des étudiants</label>
-                  <div className="flex gap-2">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Niveau des étudiants</label>
+                  <div className="flex flex-wrap gap-1.5">
                     {[["secondaire","Secondaire"],["collegial","Collégial"],["universitaire","Universitaire"]].map(([v,l]) => (
-                      <button key={v} onClick={() => setAiConfig({...aiConfig, niveauEtudiants: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.niveauEtudiants === v ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{l}</button>
+                      <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, niveauEtudiants: v})} className={`min-w-0 flex-1 py-1 px-1.5 rounded-lg text-[11px] font-semibold border transition-all ${aiConfig.niveauEtudiants === v ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{l}</button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-purple-800 flex items-center gap-2"><i className="fa-solid fa-sliders"></i> Mode avancé</p>
-                  <p className="text-xs text-purple-700">Affiche les réglages détaillés liés à chaque section.</p>
+              <section className="rounded-lg border border-gray-200 bg-slate-50/90 px-3 py-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-gray-800 flex items-center gap-1.5"><i className="fa-solid fa-sliders text-indigo-600 text-[11px]"></i> Mode avancé</p>
+                  <p className="text-[10px] text-gray-600 mt-0.5 leading-snug">Réglages détaillés par section.</p>
                 </div>
-                <button onClick={() => setShowAIAdvanced(!showAIAdvanced)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showAIAdvanced ? 'bg-purple-600' : 'bg-gray-300'}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAIAdvanced ? 'translate-x-6' : 'translate-x-1'}`} />
+                <button type="button" onClick={() => setShowAIAdvanced(!showAIAdvanced)} className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${showAIAdvanced ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${showAIAdvanced ? 'translate-x-5' : 'translate-x-1'}`} />
                 </button>
-              </div>
+              </section>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 items-start">
                 {/* Niveaux */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">📊 Niveaux de performance</label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                <div className="space-y-1.5 rounded-lg border border-gray-200/90 bg-white p-2.5">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Niveaux de performance</label>
+                  <div className="grid grid-cols-2 gap-1">
                     {[["2","2 — Échec/Réussite"],["3","3 — Standard"],["4","4 — Graduel"],["5","5 — Granulaire"]].map(([v,l]) => (
-                      <button key={v} onClick={() => setAiConfig({...aiConfig, niveaux: v})} className={`py-1.5 px-2 rounded-lg text-xs font-medium border transition-all text-left ${aiConfig.niveaux === v ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'}`}>{l}</button>
+                      <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, niveaux: v})} className={`py-1 px-1.5 rounded-md text-[10px] font-medium border transition-all text-left leading-tight ${aiConfig.niveaux === v ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-50/80 text-gray-700 border-gray-200 hover:border-gray-300'}`}>{l}</button>
                     ))}
                   </div>
                 </div>
                 {/* Nb critères */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🔢 Nombre de questions / critères</label>
-                  <div className="flex items-center justify-between mb-2 p-2 rounded-lg border border-orange-200 bg-orange-50">
-                    <span className="text-xs font-medium text-orange-800">1 critère = 1 question</span>
-                    <button onClick={() => setAiConfig({...aiConfig, critereParQuestion: !aiConfig.critereParQuestion})} className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${aiConfig.critereParQuestion ? 'bg-orange-500' : 'bg-gray-300'}`}>
-                      <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${aiConfig.critereParQuestion ? 'translate-x-5' : 'translate-x-1'}`} />
+                <div className="space-y-1.5 rounded-lg border border-gray-200/90 bg-white p-2.5 flex flex-col">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Nombre de questions / critères</label>
+                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg border border-amber-200/80 bg-amber-50/90">
+                    <span className="text-[11px] font-semibold text-amber-950 leading-tight">1 critère = 1 question</span>
+                    <button type="button" onClick={() => setAiConfig({...aiConfig, critereParQuestion: !aiConfig.critereParQuestion})} className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${aiConfig.critereParQuestion ? 'bg-amber-500' : 'bg-gray-300'}`}>
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${aiConfig.critereParQuestion ? 'translate-x-5' : 'translate-x-1'}`} />
                     </button>
                   </div>
+                  {!aiConfig.critereParQuestion && (
                   <input
                     type="number"
                     min="1"
                     max="50"
-                    disabled={aiConfig.critereParQuestion}
-                    value={aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres}
+                    value={aiConfig.nbCriteres}
                     onChange={e => setAiConfig({
                       ...aiConfig,
-                      ...(aiConfig.critereParQuestion
-                        ? { nbQuestions: e.target.value }
-                        : { nbCriteres: e.target.value })
+                      nbCriteres: e.target.value,
                     })}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400 ${aiConfig.critereParQuestion ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed" : "border-gray-300 focus:ring-orange-400"}`}
-                    placeholder={aiConfig.critereParQuestion ? "Désactivé — déduit de l'examen" : "Ex: 4 critères"}
+                    className="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-amber-400/70"
+                    placeholder="Ex: 4 critères"
                   />
-                  <p className="text-[11px] text-gray-500 mt-1">
+                  )}
+                  <p className="text-[10px] text-gray-600 mt-auto pt-0.5 leading-snug">
                     {aiConfig.critereParQuestion
-                      ? "Mode automatique : le gabarit indique au modèle de créer un critère par question de l'énoncé. La valeur affichée ci-dessus n'est pas utilisée."
+                      ? "Mode automatique : le gabarit indique au modèle de créer un critère par question de l'énoncé."
                       : "Mode personnalisé : définissez un nombre de critères ; le gabarit rappelle toutefois d'aligner les points sur l'énoncé."}
                   </p>
                 </div>
               </div>
 
               {/* Sous-critères */}
-              <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-bold text-gray-700">✅ Sous-critères (cases à cocher techniques)</label>
-                  <button onClick={() => setAiConfig({...aiConfig, inclureSousCriteres: !aiConfig.inclureSousCriteres})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiConfig.inclureSousCriteres ? 'bg-purple-600' : 'bg-gray-300'}`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureSousCriteres ? 'translate-x-6' : 'translate-x-1'}`} />
+              <section className="rounded-lg border border-gray-200/90 bg-slate-50/70 p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-gray-800 leading-snug">Sous-critères (cases à cocher techniques)</label>
+                  <button
+                    type="button"
+                    disabled={aiConfig.lierElementsCompetence}
+                    aria-disabled={aiConfig.lierElementsCompetence}
+                    title={aiConfig.lierElementsCompetence ? "Obligatoire lorsque l'évaluation est liée aux compétences" : undefined}
+                    onClick={() => {
+                      if (aiConfig.lierElementsCompetence) return;
+                      setAiConfig({ ...aiConfig, inclureSousCriteres: !aiConfig.inclureSousCriteres });
+                    }}
+                    className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${aiConfig.inclureSousCriteres ? "bg-indigo-600" : "bg-gray-300"} ${aiConfig.lierElementsCompetence ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${aiConfig.inclureSousCriteres ? "translate-x-5" : "translate-x-1"}`} />
                   </button>
                 </div>
+                {aiConfig.lierElementsCompetence && (
+                  <p className="text-[10px] text-gray-600 leading-snug border-l-2 border-indigo-300 pl-2">Sous-critères activés automatiquement pour les tâches d&apos;examen sous chaque élément de compétence.</p>
+                )}
                 {showAIAdvanced && aiConfig.inclureSousCriteres && (
-                  <div className="space-y-2 pl-2 border-l-2 border-purple-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600">Inclure un feedback par sous-critère non coché</span>
-                      <button onClick={() => setAiConfig({...aiConfig, sousCritereFeedback: !aiConfig.sousCritereFeedback})} className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${aiConfig.sousCritereFeedback ? 'bg-purple-500' : 'bg-gray-300'}`}>
-                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${aiConfig.sousCritereFeedback ? 'translate-x-5' : 'translate-x-1'}`} />
+                  <div className="space-y-2 pl-1.5 border-l-2 border-indigo-200/80">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-gray-700 leading-snug">Feedback si sous-critère non coché</span>
+                      <button type="button" onClick={() => setAiConfig({...aiConfig, sousCritereFeedback: !aiConfig.sousCritereFeedback})} className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${aiConfig.sousCritereFeedback ? 'bg-indigo-500' : 'bg-gray-300'}`}>
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${aiConfig.sousCritereFeedback ? 'translate-x-5' : 'translate-x-1'}`} />
                       </button>
                     </div>
                     {aiConfig.sousCritereFeedback && (
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Style du feedback :</p>
-                        <div className="flex gap-2">
+                        <p className="text-[10px] text-gray-500 mb-1">Style du feedback :</p>
+                        <div className="flex gap-1.5">
                           {[["court","Court (1 phrase)"],["verbeux","Détaillé (2-3 phrases)"]].map(([v,l]) => (
-                            <button key={v} onClick={() => setAiConfig({...aiConfig, sousCritereFeedbackStyle: v})} className={`flex-1 py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.sousCritereFeedbackStyle === v ? 'bg-purple-100 text-purple-700 border-purple-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
+                            <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, sousCritereFeedbackStyle: v})} className={`flex-1 py-1 px-1.5 rounded-md text-[10px] font-medium border transition-all ${aiConfig.sousCritereFeedbackStyle === v ? 'bg-indigo-100 text-indigo-800 border-indigo-400' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
                           ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
-              </div>
+              </section>
 
               {/* Rétroaction globale */}
-              <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-bold text-gray-700">💬 Rétroactions globales (feedbackMessages)</label>
-                  <button onClick={() => setAiConfig({...aiConfig, inclureFeedbackGlobal: !aiConfig.inclureFeedbackGlobal})} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiConfig.inclureFeedbackGlobal ? 'bg-blue-600' : 'bg-gray-300'}`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiConfig.inclureFeedbackGlobal ? 'translate-x-6' : 'translate-x-1'}`} />
+              <section className="rounded-lg border border-gray-200/90 bg-slate-50/70 p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-gray-800 leading-snug">Rétroactions globales (feedbackMessages)</label>
+                  <button type="button" onClick={() => setAiConfig({...aiConfig, inclureFeedbackGlobal: !aiConfig.inclureFeedbackGlobal})} className={`relative inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full transition-colors ${aiConfig.inclureFeedbackGlobal ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform ${aiConfig.inclureFeedbackGlobal ? 'translate-x-5' : 'translate-x-1'}`} />
                   </button>
                 </div>
                 {showAIAdvanced && aiConfig.inclureFeedbackGlobal && (
-                  <div className="space-y-3 pl-2 border-l-2 border-blue-200">
+                  <div className="space-y-2 pl-1.5 border-l-2 border-indigo-200/80">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Nombre de tranches :</p>
-                      <div className="py-1.5 px-2 rounded text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200 inline-block">
+                      <p className="text-[10px] text-gray-500 mb-1">Nombre de tranches :</p>
+                      <div className="py-1 px-2 rounded-md text-[10px] font-medium border bg-white text-gray-700 border-gray-200 inline-block">
                         5 tranches (fixe)
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Ton de la rétroaction :</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[["encourageant","😊 Encourageant"],["formel","📋 Formel"],["direct","⚡ Direct professionnel"],["verbeux","📝 Verbeux"]].map(([v,l]) => (
-                          <button key={v} onClick={() => setAiConfig({...aiConfig, tonFeedback: v})} className={`py-1.5 px-2 rounded text-xs font-medium border transition-all ${aiConfig.tonFeedback === v ? 'bg-blue-100 text-blue-700 border-blue-400' : 'bg-white text-gray-500 border-gray-200'}`}>{l}</button>
+                      <p className="text-[10px] text-gray-500 mb-1">Ton de la rétroaction :</p>
+                      <div className="grid grid-cols-2 gap-1">
+                        {[["encourageant","Encourageant"],["formel","Formel"],["direct","Direct pro."],["verbeux","Verbeux"]].map(([v,l]) => (
+                          <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, tonFeedback: v})} className={`py-1 px-1.5 rounded-md text-[10px] font-medium border transition-all ${aiConfig.tonFeedback === v ? 'bg-indigo-100 text-indigo-800 border-indigo-400' : 'bg-white text-gray-600 border-gray-200'}`}>{l}</button>
                         ))}
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-1">Tous les tons restent professionnels et respectueux, même en mode direct.</p>
+                      <p className="text-[10px] text-gray-500 mt-1 leading-snug">Tous les tons restent professionnels et respectueux.</p>
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
 
               {showAIAdvanced && (
-                <>
+                <div className="space-y-3 rounded-lg border border-dashed border-gray-300 bg-white p-2.5">
                   <div>
-                    <p className="text-xs font-bold text-gray-600 uppercase mb-2">⚙️ Options avancées</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Options avancées</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {[
                         ["inclureExemples","Exemples concrets dans les niveaux"],
                         ["idsSemantics","IDs sémantiques (ex: c-nat-1)"],
                       ].map(([key, label]) => (
-                        <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 border border-gray-100">
-                          <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-4 h-4 rounded text-purple-600 accent-purple-600" />
-                          <span className="text-xs text-gray-700">{label}</span>
+                        <label key={key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:bg-gray-50/80 transition-colors">
+                          <input type="checkbox" checked={aiConfig[key]} onChange={e => setAiConfig({...aiConfig, [key]: e.target.checked})} className="w-3.5 h-3.5 rounded text-indigo-600 accent-indigo-600" />
+                          <span className="text-[10px] text-gray-800 leading-snug">{label}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">🎨 Palette de couleurs</label>
-                    <div className="flex gap-2">
-                      {[["arc-en-ciel","🌈 Arc-en-ciel"],["mono","🔵 Monotone"],["chaleur","🔥 Chaleur"],["cool","❄️ Cool"]].map(([v,l]) => (
-                        <button key={v} onClick={() => setAiConfig({...aiConfig, palette: v})} className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-medium border transition-all ${aiConfig.palette === v ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'}`}>{l}</button>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Palette de couleurs</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                      {[["arc-en-ciel","Arc-en-ciel"],["mono","Monotone"],["chaleur","Chaleur"],["cool","Cool"]].map(([v,l]) => (
+                        <button key={v} type="button" onClick={() => setAiConfig({...aiConfig, palette: v})} className={`py-1 px-1 rounded-md text-[10px] font-semibold border transition-all ${aiConfig.palette === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300'}`}>{l}</button>
                       ))}
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
             </div>
 
-            <div className="ai-modal-footer px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
-              <div className="text-xs text-gray-400">
-                <i className="fa-solid fa-circle-info mr-1"></i>
+            <div className="ai-modal-footer flex flex-shrink-0 flex-col gap-2 border-t border-gray-200 bg-slate-50/90 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:px-4 rounded-b-xl">
+              <div className="min-w-0 flex-1 text-[10px] text-gray-500 leading-snug order-2 sm:order-1">
+                <i className="fa-solid fa-circle-info mr-0.5 flex-shrink-0 text-gray-400"></i>
                 {aiConfig.critereParQuestion
                   ? "Critères : auto (1 par question d'examen)"
                   : `${Math.max(1, Math.min(50, parseInt(aiConfig.nbCriteres, 10) || 4))} critères`} · {aiConfig.niveaux} niveaux
                 {aiConfig.inclureSousCriteres ? " · Sous-critères" : ""}
                 {aiConfig.inclureFeedbackGlobal ? " · 5 rétroactions" : ""}
+                {aiConfig.lierElementsCompetence ? " · Compétences (TP)" : " · Par questions"}
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowAIModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition">Annuler</button>
-                <button onClick={copyAITemplateToClipboard} className={`px-4 py-2 text-sm font-semibold text-white rounded-lg shadow transition flex items-center gap-2 ${aiCopySuccess ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
-                  <i className={`fa-solid ${aiCopySuccess ? "fa-check" : "fa-copy"}`}></i>
+              <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1 sm:gap-1.5 order-1 sm:order-2">
+                <button type="button" onClick={() => setShowAIModal(false)} className="whitespace-nowrap px-2 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition sm:px-3">Annuler</button>
+                <button type="button" onClick={copyAITemplateToClipboard} className={`whitespace-nowrap px-2 py-1.5 text-xs font-semibold text-white rounded-lg shadow-sm transition flex items-center justify-center gap-1 sm:gap-1.5 sm:px-3 ${aiCopySuccess ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
+                  <i className={`fa-solid text-[11px] ${aiCopySuccess ? "fa-check" : "fa-copy"}`}></i>
                   {aiCopySuccess ? "Copié !" : "Copier le JSON"}
                 </button>
-                <button onClick={downloadAITemplate} className="px-6 py-2 text-sm font-semibold bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow transition flex items-center gap-2">
-                  <i className="fa-solid fa-download"></i> Télécharger le gabarit
+                <button type="button" onClick={downloadAITemplate} className="whitespace-nowrap px-2 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white rounded-lg shadow-sm transition flex items-center justify-center gap-1 sm:gap-1.5 sm:px-3">
+                  <i className="fa-solid fa-download text-[11px]"></i> Télécharger
                 </button>
               </div>
             </div>
