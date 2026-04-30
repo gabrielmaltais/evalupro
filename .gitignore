@@ -1,4 +1,4 @@
-# Dépendances Note.js
+# Dépendances Node.js
 node_modules/
 
 # Builds et rendus
@@ -20,6 +20,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Artefacts locaux / debug (à ne pas versionner)
+app_logs*.txt
+/health.txt
+/network_inspect.json
+/eval.html
 
 # Fichiers OS et Editeurs
 .DS_Store
