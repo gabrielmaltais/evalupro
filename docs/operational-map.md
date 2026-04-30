@@ -65,7 +65,7 @@ Cette carte sert de guide rapide pour savoir où investiguer selon le type de qu
 - `frontend/src/pages/Evaluations.jsx`: forte complexité (état UI + calculs + PDF + historique).
 - `frontend/src/lib/api.js`: effets transverses sur 401 (déconnexion/redirection globale).
 - `backend/src/routes/evaluations.js`: logique métier critique + dépendance Gemini.
-- `backend/src/server.js`: bootstrap sensible (création admin par défaut).
+- `backend/src/server.js`: bootstrap sensible (création admin initial ; variables `ADMIN_INITIAL_*` dans `.env` / Docker).
 
 ## 5) Routine de validation après changement
 

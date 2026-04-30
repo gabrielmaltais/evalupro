@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   evalupro-db:
     image: mongo:6-jammy
@@ -18,6 +16,9 @@ services:
       - PORT=4000
       - MONGODB_URI=mongodb://evalupro-db:27017/evalupro
       - JWT_SECRET=change_this_to_a_secure_random_string_in_production
+      # Première installation : admin créé uniquement si la base est vide (voir README)
+      - ADMIN_INITIAL_EMAIL=admin
+      - ADMIN_INITIAL_PASSWORD=ChangeThisPasswordImmediately1
     depends_on:
       - evalupro-db
 

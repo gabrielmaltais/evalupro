@@ -12,6 +12,22 @@ Application web moderne de création de grilles d'évaluation, notation d'étudi
 
 ---
 
+## Première connexion (compte administrateur)
+
+Lors du **tout premier démarrage**, si la base MongoDB ne contient encore **aucun** utilisateur avec le rôle `admin`, l’application crée automatiquement un administrateur :
+
+| Variable | Rôle | Valeur par défaut si non définie |
+|----------|------|----------------------------------|
+| `ADMIN_INITIAL_EMAIL` | Identifiant de connexion | `admin` |
+| `ADMIN_INITIAL_PASSWORD` | Mot de passe initial | `AdminPro1` |
+| `ADMIN_INITIAL_NAME` | Nom affiché | `Administrateur` |
+
+**En production**, définissez impérativement `JWT_SECRET`, `ADMIN_INITIAL_EMAIL` et `ADMIN_INITIAL_PASSWORD` (long et aléatoire) dans votre `docker-compose` ou vos secrets d’orchestration, puis **changez le mot de passe** après la première connexion (Paramètres du compte). Les valeurs par défaut sont documentées dans le code à des fins de prise en main uniquement.
+
+Référence des variables : [`backend/.env.example`](backend/.env.example).
+
+---
+
 ## 🚀 Installation & Déploiement (Production)
 
 L'application est conteneurisée et disponible publiquement sur Docker Hub (`gabrielmaltais/evalupro:latest`). Le backend (Node.js/Express) fournit l'API tout en servant statiquement l'interface React.
@@ -20,12 +36,17 @@ L'application est conteneurisée et disponible publiquement sur Docker Hub (`gab
 - Serveur avec **Docker** et **Docker Compose** d'installés.
 
 ### Étape 1 : Le fichier Docker Compose
-Sur votre serveur de production, créez un dossier `evalupro` puis ajoutez-y ce fichier `docker-compose.yml` :
+Sur votre serveur de production, créez un dossier `evalupro` puis copiez le fichier [`docker-compose.yml`](docker-compose.yml) du dépôt (ou utilisez l’extrait ci‑dessous, équivalent) :
 
 ```yaml
-version: '3.8'
-
 services:
+  evalupro-db:
+    image: mongo:6-jammy
+    container_name: evalupro_db
+    restart: unless-stopped
+    volumes:
+      - evalupro_mongo_data:/data/db
+
   evalupro-app:
     image: gabrielmaltais/evalupro:latest
     container_name: evalupro_app
@@ -35,22 +56,17 @@ services:
     environment:
       - PORT=4000
       - MONGODB_URI=mongodb://evalupro-db:27017/evalupro
-      - JWT_SECRET=votre_cle_de_securite_super_secrete
+      - JWT_SECRET=votre_cle_longue_et_aleatoire
+      - ADMIN_INITIAL_EMAIL=admin
+      - ADMIN_INITIAL_PASSWORD=votre_mot_de_passe_initial_fort
     depends_on:
       - evalupro-db
-
-  evalupro-db:
-    image: mongo:6-jammy
-    container_name: evalupro_db
-    restart: unless-stopped
-    volumes:
-      - evalupro_mongo_data:/data/db
 
 volumes:
   evalupro_mongo_data:
 ```
 
-🚨 **Important :** N'oubliez pas de modifier la variable `JWT_SECRET` pour une phrase ou structure très longue et aléatoire afin de sécuriser vos sessions.
+🚨 **Important :** personnalisez `JWT_SECRET`, `ADMIN_INITIAL_PASSWORD` (et idéalement `ADMIN_INITIAL_EMAIL`) avant d’exposer l’app sur Internet.
 
 ### Étape 2 : Démarrage
 
@@ -92,3 +108,13 @@ npm run dev
 ## Carte technique rapide
 
 Pour naviguer efficacement dans le projet (points d'entrée, flux auth/scoring/RBAC, zones à risque, routine de vérification), consulter [`docs/operational-map.md`](docs/operational-map.md).
+
+## Dépôt public / sécurité
+
+- Ne commitez pas de fichier `.env` réel : ils sont listés dans [`.gitignore`](.gitignore).
+- Un workflow GitHub Actions construit l’image Docker et exécute un [smoke test](.github/workflows/docker-publish.yml) après le push sur `main`.
+- Signalement de problèmes de sécurité : voir [`SECURITY.md`](SECURITY.md).
+
+## Licence
+
+MIT — voir [`LICENSE`](LICENSE).
