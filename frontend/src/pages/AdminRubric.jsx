@@ -60,7 +60,7 @@ export default function AdminRubric() {
     palette: "arc-en-ciel",
     idsSemantics: false,
     inclureExemples: true,
-    contexte: "",
+    instructionsIa: "",
     niveauEtudiants: "collegial",
     critereParQuestion: true,
     nbQuestions: "4",
@@ -311,11 +311,41 @@ export default function AdminRubric() {
 
     const makeId = (prefix, n) => cfg.idsSemantics ? `${prefix}-[MOT-CLE-${n}]` : `${prefix}${n}`;
 
-    const requestedCount = cfg.critereParQuestion
-      ? (parseInt(cfg.nbQuestions) || 4)
-      : (parseInt(cfg.nbCriteres) || 4);
-    const nbCriteres = Math.max(1, Math.min(50, requestedCount));
-    const weights = distributePoints(100, nbCriteres);
+    const autoOnePerQuestion = cfg.critereParQuestion;
+    const requestedManual = parseInt(cfg.nbCriteres, 10) || 4;
+    const nbCriteres = autoOnePerQuestion
+      ? 1
+      : Math.max(1, Math.min(50, requestedManual));
+    const weights = autoOnePerQuestion
+      ? [0]
+      : distributePoints(100, nbCriteres);
+
+    const teacherNotes = String(cfg.instructionsIa || "").trim();
+    const isEn = cfg.langue === "en";
+    const instructionsForModel = {
+      criteriaCount: autoOnePerQuestion
+        ? (isEn
+          ? "Create exactly as many objects in `criteria` as there are graded questions (or distinct scored parts) in the exam. The template below shows only ONE example row — repeat the same structure for every question."
+          : "Créer exactement autant d'objets dans `criteria` qu'il y a de questions (ou de parties notées distinctes) dans l'énoncé. Ce gabarit ne montre qu'UNE ligne d'exemple — reproduire la même structure pour chaque question.")
+        : (isEn
+          ? `Create exactly ${nbCriteres} criteria in \`criteria\`, aligned with the exam whenever it makes sense.`
+          : `Créer exactement ${nbCriteres} critères dans \`criteria\`, alignés sur l'énoncé lorsque c'est pertinent.`),
+      pointsAndWeights: autoOnePerQuestion
+        ? (isEn
+          ? "Each `weight` MUST match the points assigned to that question in the exam. The sum of all `weights` MUST equal the exam total (not necessarily 100). The value 0 here is only a placeholder in the single example row."
+          : "Chaque `weight` DOIT reprendre les points de la question correspondante dans l'énoncé. La somme des `weight` DOIT égaler le total de l'examen (pas forcément 100). La valeur 0 sur l'exemple unique n'est qu'un substitut.")
+        : (isEn
+          ? "Replace every `weight` with the real points from the exam. The template weights are an illustrative split out of 100 — discard them if they disagree with the exam. The sum of `weights` MUST equal the exam total."
+          : "Remplacer chaque `weight` par les points réels de l'énoncé. Les pondérations ci-dessous sont une répartition fictive sur 100 pour l'aperçu : ne pas les garder si elles contredisent l'examen. La somme des `weight` doit égaler le total de l'examen."),
+      ...(cfg.inclureSousCriteres
+        ? {
+            subCriteriaSum: isEn
+              ? "If `subCriteria` are used, the sum of `pts` for each criterion must equal that criterion's `weight`."
+              : "Si `subCriteria` est utilisé, la somme des `pts` doit égaler le `weight` du critère parent.",
+          }
+        : {}),
+      ...(teacherNotes ? { teacherInstructions: teacherNotes } : {}),
+    };
 
     const buildCriterion = (i) => {
       const weight = weights[i];
@@ -357,6 +387,7 @@ export default function AdminRubric() {
     return {
       title: L.title,
       taskTitle: L.taskTitle,
+      instructionsForModel,
       criteria: criteriaExamples,
       ...(feedbackMessages ? { feedbackMessages } : {}),
     };
@@ -752,10 +783,11 @@ export default function AdminRubric() {
 
             <div className="ai-modal-body p-6 space-y-6">
 
-              {/* Contexte */}
+              {/* Instructions IA (lue par le modèle avec le gabarit) */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2"><i className="fa-solid fa-book-open mr-1 text-blue-500"></i> Contexte pédagogique (optionnel)</label>
-                <textarea rows={2} placeholder="Ex: Laboratoire de configuration NAT/PAT sur routeurs Cisco, niveau 2e année techniques informatique" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400 resize-none" value={aiConfig.contexte} onChange={e => setAiConfig({...aiConfig, contexte: e.target.value})} />
+                <label className="block text-sm font-bold text-gray-700 mb-2"><i className="fa-solid fa-wand-magic-sparkles mr-1 text-blue-500"></i> Instructions pour l&apos;IA</label>
+                <textarea rows={3} placeholder="Ex: Viser la même découpe que l'énoncé officiel. Ton formel. Insister sur la conformité aux consignes de remise." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-400 resize-none" value={aiConfig.instructionsIa} onChange={e => setAiConfig({...aiConfig, instructionsIa: e.target.value})} />
+                <p className="text-[11px] text-gray-500 mt-1">Ces consignes sont incluses dans le JSON du gabarit (champ dédié) pour le modèle qui le complète.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -812,6 +844,7 @@ export default function AdminRubric() {
                     type="number"
                     min="1"
                     max="50"
+                    disabled={aiConfig.critereParQuestion}
                     value={aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres}
                     onChange={e => setAiConfig({
                       ...aiConfig,
@@ -819,13 +852,13 @@ export default function AdminRubric() {
                         ? { nbQuestions: e.target.value }
                         : { nbCriteres: e.target.value })
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400"
-                    placeholder={aiConfig.critereParQuestion ? "Ex: 10 questions = 10 critères" : "Ex: 4 critères"}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400 ${aiConfig.critereParQuestion ? "border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed" : "border-gray-300 focus:ring-orange-400"}`}
+                    placeholder={aiConfig.critereParQuestion ? "Désactivé — déduit de l'examen" : "Ex: 4 critères"}
                   />
                   <p className="text-[11px] text-gray-500 mt-1">
                     {aiConfig.critereParQuestion
-                      ? "Mode par défaut: le nombre de critères sera identique au nombre de questions."
-                      : "Mode personnalisé: définissez un nombre de critères indépendant du nombre de questions."}
+                      ? "Mode automatique : le gabarit indique au modèle de créer un critère par question de l'énoncé. La valeur affichée ci-dessus n'est pas utilisée."
+                      : "Mode personnalisé : définissez un nombre de critères ; le gabarit rappelle toutefois d'aligner les points sur l'énoncé."}
                   </p>
                 </div>
               </div>
@@ -922,7 +955,9 @@ export default function AdminRubric() {
             <div className="ai-modal-footer px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center gap-3 rounded-b-2xl">
               <div className="text-xs text-gray-400">
                 <i className="fa-solid fa-circle-info mr-1"></i>
-                {Math.max(1, Math.min(50, parseInt(aiConfig.critereParQuestion ? aiConfig.nbQuestions : aiConfig.nbCriteres) || 4))} critères · {aiConfig.niveaux} niveaux
+                {aiConfig.critereParQuestion
+                  ? "Critères : auto (1 par question d'examen)"
+                  : `${Math.max(1, Math.min(50, parseInt(aiConfig.nbCriteres, 10) || 4))} critères`} · {aiConfig.niveaux} niveaux
                 {aiConfig.inclureSousCriteres ? " · Sous-critères" : ""}
                 {aiConfig.inclureFeedbackGlobal ? " · 5 rétroactions" : ""}
               </div>
