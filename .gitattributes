@@ -1,0 +1,2 @@
+# Workflows YAML: UTF-8 + LF pour GitHub Actions
+*.yml text eol=lf
