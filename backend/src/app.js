@@ -10,6 +10,7 @@ const evaluationRoutes = require("./routes/evaluations");
 const studentRoutes = require("./routes/students");
 const userRoutes = require("./routes/users");
 const adminSmtpRoutes = require("./routes/adminSmtp");
+const groupStyleRoutes = require("./routes/groupStyles");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
@@ -32,6 +33,7 @@ app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminSmtpRoutes);
+app.use("/api/group-styles", groupStyleRoutes);
 
 // Pour le déploiement monolithique : Servir les fichiers statiques React
 const path = require("path");

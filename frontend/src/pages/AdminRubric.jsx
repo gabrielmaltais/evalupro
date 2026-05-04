@@ -27,6 +27,10 @@ export default function AdminRubric() {
   const [rubrics, setRubrics] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [rubricSearch, setRubricSearch] = useState("");
+  const [rubricFilterGroup, setRubricFilterGroup] = useState("");
+  const [rubricFilterStatus, setRubricFilterStatus] = useState("all");
+  const [rubricSortBy, setRubricSortBy] = useState("updatedAt_desc");
   
   // Form State
   const [title, setTitle] = useState("Nouvelle Grille");
@@ -532,6 +536,30 @@ export default function AdminRubric() {
   }
 
   const totalPoints = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
+  const filteredRubrics = useMemo(() => {
+    const q = rubricSearch.trim().toLowerCase();
+    const out = rubrics.filter((r) => {
+      if (rubricFilterStatus === "active" && !r.isActive) return false;
+      if (rubricFilterStatus === "inactive" && r.isActive) return false;
+      if (rubricFilterGroup) {
+        const list = Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []);
+        if (!list.includes(rubricFilterGroup)) return false;
+      }
+      if (!q) return true;
+      const hay = [r.title, r.taskTitle, (Array.isArray(r.groups) ? r.groups.join(" ") : r.group || "")].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+    out.sort((a, b) => {
+      if (rubricSortBy === "task_asc") return String(a.taskTitle || "").localeCompare(String(b.taskTitle || ""), "fr");
+      if (rubricSortBy === "task_desc") return String(b.taskTitle || "").localeCompare(String(a.taskTitle || ""), "fr");
+      if (rubricSortBy === "version_desc") return Number(b.version || 0) - Number(a.version || 0);
+      if (rubricSortBy === "version_asc") return Number(a.version || 0) - Number(b.version || 0);
+      const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    return out;
+  }, [rubrics, rubricSearch, rubricFilterGroup, rubricFilterStatus, rubricSortBy]);
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -568,8 +596,54 @@ export default function AdminRubric() {
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <h3 className="bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 border-b border-gray-100">Grilles Enregistrées</h3>
+            <div className="space-y-2 border-b border-gray-100 bg-white px-3 py-3">
+              <input
+                type="text"
+                value={rubricSearch}
+                onChange={(e) => setRubricSearch(e.target.value)}
+                placeholder="Rechercher une grille, un cours, un groupe..."
+                className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={rubricFilterStatus}
+                  onChange={(e) => setRubricFilterStatus(e.target.value)}
+                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                >
+                  <option value="all">Tous statuts</option>
+                  <option value="active">Actives</option>
+                  <option value="inactive">Inactives</option>
+                </select>
+                <select
+                  value={rubricFilterGroup}
+                  onChange={(e) => setRubricFilterGroup(e.target.value)}
+                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                >
+                  <option value="">Tous groupes</option>
+                  {groupOptions.map((g) => (
+                    <option key={`flt-${g}`} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={rubricSortBy}
+                  onChange={(e) => setRubricSortBy(e.target.value)}
+                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                >
+                  <option value="updatedAt_desc">Récents</option>
+                  <option value="task_asc">Tâche A → Z</option>
+                  <option value="task_desc">Tâche Z → A</option>
+                  <option value="version_desc">Version décroissante</option>
+                  <option value="version_asc">Version croissante</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                {filteredRubrics.length} / {rubrics.length} grille(s) affichée(s)
+              </p>
+            </div>
             <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
-              {rubrics.map(r => (
+              {filteredRubrics.map(r => (
                 <li key={r._id}>
                   <button type="button" onClick={() => selectRubric(r)} className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selectedId === r._id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}>
                     <div className="font-semibold text-sm text-gray-800 line-clamp-2">{r.taskTitle || r.title || 'Nouvelle Grille'}</div>
@@ -591,7 +665,7 @@ export default function AdminRubric() {
                   </button>
                 </li>
               ))}
-              {rubrics.length === 0 && <li className="p-4 text-sm text-gray-500 text-center">Aucune grille.</li>}
+              {filteredRubrics.length === 0 && <li className="p-4 text-sm text-gray-500 text-center">Aucune grille pour ce filtre.</li>}
             </ul>
           </div>
         </div>

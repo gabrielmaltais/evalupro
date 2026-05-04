@@ -14,6 +14,9 @@ const evaluationSchema = new mongoose.Schema(
     totalMax: { type: Number, default: 0 },
     rubric: { type: mongoose.Schema.Types.ObjectId, ref: "Rubric", required: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    /** Repère visuel optionnel (pastille / icône) pour tri visuel en correction */
+    markerColor: { type: String, default: "" },
+    markerIcon: { type: String, default: "" },
   },
   { timestamps: true }
 );

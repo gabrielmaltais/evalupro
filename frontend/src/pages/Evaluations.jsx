@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import PageSectionTitle from "../components/PageSectionTitle";
 import HubContextBar from "../components/HubContextBar";
+import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
 
@@ -26,6 +27,7 @@ function StudentSelectWithIcons({
   onSelectStudent,
   correctedIdsForExam,
   hasActiveRubric,
+  groupStyleByLabel = {},
   wrapperClassName = "relative flex-1 min-w-0",
 }) {
   const [open, setOpen] = useState(false);
@@ -120,8 +122,12 @@ function StudentSelectWithIcons({
           </li>
           {groupedStudents.map(([groupName, groupList]) => (
             <li key={groupName} role="none" className="pt-1">
-              <div className="px-3 py-1 text-[11px] font-bold italic tracking-wide text-slate-500 dark:text-slate-400">
-                {groupName}
+              <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-bold italic tracking-wide text-slate-500 dark:text-slate-400">
+                <MarkerBadge
+                  color={groupStyleByLabel[groupName]?.color}
+                  icon={groupStyleByLabel[groupName]?.icon}
+                />
+                <span>{groupName}</span>
               </div>
               <ul role="none">
                 {groupList.map((s) => {
@@ -180,7 +186,15 @@ export default function Evaluations() {
   const [rubrics, setRubrics] = useState([]);
   const [students, setStudents] = useState([]);
   const [items, setItems] = useState([]); // Historique
-  const [form, setForm] = useState({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: "" });
+  const [form, setForm] = useState({
+    studentId: "",
+    studentName: "",
+    date: new Date().toISOString().slice(0, 10),
+    generalComment: "",
+    rubric: "",
+    markerColor: "",
+    markerIcon: "",
+  });
   const [teamCorrectionMode, setTeamCorrectionMode] = useState(false);
   const [teamSelectedStudentIds, setTeamSelectedStudentIds] = useState([]);
   const [scores, setScores] = useState({});
@@ -219,6 +233,8 @@ export default function Evaluations() {
         rubric: next.form?.rubric ?? form.rubric ?? "",
         date: next.form?.date ?? form.date ?? "",
         generalComment: next.form?.generalComment ?? form.generalComment ?? "",
+        markerColor: next.form?.markerColor ?? form.markerColor ?? "",
+        markerIcon: next.form?.markerIcon ?? form.markerIcon ?? "",
       },
       scores: next.scores ?? scores,
       subScores: next.subScores ?? subScores,
@@ -245,6 +261,7 @@ export default function Evaluations() {
     }
   });
   const [groupDashboard, setGroupDashboard] = useState([]);
+  const [groupStyles, setGroupStyles] = useState([]);
   const [emailTargets, setEmailTargets] = useState({ groups: [], exams: [] });
   const [deliveries, setDeliveries] = useState([]);
   const [emailBatchConfig, setEmailBatchConfig] = useState({
@@ -358,13 +375,14 @@ export default function Evaluations() {
 
   async function refresh() {
     try {
-      const [evaluations, rubricList, studentList, dashboard, targets, sends] = await Promise.all([
+      const [evaluations, rubricList, studentList, dashboard, targets, sends, styleList] = await Promise.all([
         api.listEvaluations({ page: 1, limit: 2000 }),
         api.listRubrics(),
         api.listStudents(),
         api.getStudentGroupDashboard(),
         api.getEmailTargets(),
         api.listEmailDeliveries(),
+        api.listGroupStyles(),
       ]);
       setItems(evaluations.items || []);
       setRubrics(rubricList);
@@ -372,6 +390,7 @@ export default function Evaluations() {
       setGroupDashboard(dashboard || []);
       setEmailTargets(targets || { groups: [], exams: [] });
       setDeliveries(sends || []);
+      setGroupStyles(styleList || []);
       setHubSelectedGroup((prev) => prev || targets?.groups?.[0] || "");
       setEmailBatchConfig((prev) => {
         const examIds = new Set((targets?.exams || []).map((e) => String(e.rubricId)));
@@ -594,6 +613,14 @@ export default function Evaluations() {
   }, [students]);
   const hubGroupKeys = Object.keys(hubGroupedStudents).sort();
 
+  const groupStyleByLabel = useMemo(() => {
+    const m = {};
+    for (const s of groupStyles || []) {
+      if (s?.groupKey) m[s.groupKey] = { color: s.color || "", icon: s.icon || "" };
+    }
+    return m;
+  }, [groupStyles]);
+
   const hubFilteredStudents = hubSelectedGroup ? hubGroupedStudents[hubSelectedGroup] || [] : students;
 
   const examsForSend = useMemo(() => {
@@ -670,6 +697,24 @@ export default function Evaluations() {
     }
     return examsForSend;
   }, [evalPageTab, activeRubricsForCorrection, examsForSend]);
+  const hubExamGroupMarkers = useMemo(() => {
+    const byRubric = {};
+    const studentGroupById = new Map(students.map((s) => [String(s._id), normalizeGroupLabel(s.group)]));
+    for (const it of items) {
+      const rid = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : "";
+      if (!rid) continue;
+      const sid = evalStudentId(it);
+      const gl = sid ? studentGroupById.get(String(sid)) || "Sans groupe" : "Sans groupe";
+      const gs = groupStyleByLabel[gl];
+      if (!gs || (!gs.color && !gs.icon)) continue;
+      if (!byRubric[rid]) byRubric[rid] = [];
+      const k = `${gs.color || ""}::${gs.icon || ""}`;
+      if (!byRubric[rid].some((x) => `${x.color || ""}::${x.icon || ""}` === k)) {
+        byRubric[rid].push({ color: gs.color || "", icon: gs.icon || "", groupLabel: gl });
+      }
+    }
+    return byRubric;
+  }, [items, students, groupStyleByLabel]);
 
   const hubBarStats = useMemo(() => {
     const totalStudents = hubFilteredStudents.length;
@@ -1078,7 +1123,9 @@ export default function Evaluations() {
         studentName: data.studentName || "",
         date: data.date.slice(0, 10),
         generalComment: data.generalComment || "",
-        rubric: typeof data.rubric === 'object' ? data.rubric._id : data.rubric
+        rubric: typeof data.rubric === 'object' ? data.rubric._id : data.rubric,
+        markerColor: data.markerColor || "",
+        markerIcon: data.markerIcon || "",
       });
       setScores(data.scores || {});
       setSubScores(data.subScores || {});
@@ -1102,6 +1149,8 @@ export default function Evaluations() {
           date: data.date.slice(0, 10),
           generalComment: data.generalComment || "",
           rubric: typeof data.rubric === "object" ? data.rubric._id : data.rubric,
+          markerColor: data.markerColor || "",
+          markerIcon: data.markerIcon || "",
         },
         scores: data.scores || {},
         subScores: data.subScores || {},
@@ -1126,6 +1175,8 @@ export default function Evaluations() {
       _id: undefined,
       date: nextDate,
       generalComment: Object.prototype.hasOwnProperty.call(overrides, "generalComment") ? overrides.generalComment : "",
+      markerColor: Object.prototype.hasOwnProperty.call(overrides, "markerColor") ? overrides.markerColor : "",
+      markerIcon: Object.prototype.hasOwnProperty.call(overrides, "markerIcon") ? overrides.markerIcon : "",
     }));
     setScores({});
     setSubScores({});
@@ -1137,6 +1188,8 @@ export default function Evaluations() {
       _id: undefined,
       date: nextDate,
       generalComment: Object.prototype.hasOwnProperty.call(overrides, "generalComment") ? overrides.generalComment : "",
+      markerColor: Object.prototype.hasOwnProperty.call(overrides, "markerColor") ? overrides.markerColor : "",
+      markerIcon: Object.prototype.hasOwnProperty.call(overrides, "markerIcon") ? overrides.markerIcon : "",
     };
     lastCommittedEvalRef.current = captureEvalSnapshot({
       form: nextForm,
@@ -1179,7 +1232,15 @@ export default function Evaluations() {
     try {
       await api.deleteEvaluation(id);
       if (form._id === id) {
-        setForm({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: rubrics[0]?._id });
+        setForm({
+          studentId: "",
+          studentName: "",
+          date: new Date().toISOString().slice(0, 10),
+          generalComment: "",
+          rubric: rubrics[0]?._id,
+          markerColor: "",
+          markerIcon: "",
+        });
         setScores({});
         setSubScores({});
         setSubCriteriaTouched({});
@@ -1551,6 +1612,7 @@ export default function Evaluations() {
               onStudentPickerGroupChange(nextGroup);
             }}
             groupKeys={hubGroupKeys}
+            activeGroupStyle={hubSelectedGroup ? groupStyleByLabel[hubSelectedGroup] : null}
             selectedExamId={selectedHubExamId}
             setSelectedExamId={(rubricId) => {
               const nextRubricId = String(rubricId || "");
@@ -1564,6 +1626,7 @@ export default function Evaluations() {
               setHasManualSuiviExamSelection(true);
             }}
             examOptions={hubExamOptions}
+            examGroupMarkers={hubExamGroupMarkers}
             stats={hubBarStats}
           />
         )}
@@ -1694,6 +1757,18 @@ export default function Evaluations() {
               <h3 className="text-lg font-bold text-gray-800">Synthèse & Commentaires Généraux</h3>
             </div>
             <textarea disabled={!canEditEvaluation} rows="6" className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" placeholder="Observations générales sur le travail..." value={form.generalComment} onChange={e => setForm({ ...form, generalComment: e.target.value })}></textarea>
+            <div className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-slate-900/40">
+              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                Repère visuel de cette copie (optionnel)
+              </h4>
+              <MarkerStyleControls
+                idPrefix="eval-marker"
+                disabled={!canEditEvaluation}
+                color={form.markerColor}
+                icon={form.markerIcon}
+                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+              />
+            </div>
             <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500" htmlFor="eval-date-input">Date de l&apos;évaluation</label>
@@ -1739,8 +1814,22 @@ export default function Evaluations() {
                     : items
               ).slice(0, 10).map((it) => (
                 <li key={it._id} className="py-2 flex justify-between items-center group">
-                  <div className="flex-1 cursor-pointer" onClick={() => loadEvaluation(it._id)}>
-                    <p className="text-sm text-gray-800 hover:text-blue-600 transition"><strong>{it.studentName}</strong> <span className="text-gray-400 mx-2">•</span> {it.date}</p>
+                  <div className="flex flex-1 cursor-pointer items-center gap-2" onClick={() => loadEvaluation(it._id)}>
+                    {(() => {
+                      const sid = evalStudentId(it);
+                      const stu = sid ? students.find((s) => String(s._id) === String(sid)) : null;
+                      const gl = normalizeGroupLabel(stu?.group);
+                      const gst = groupStyleByLabel[gl];
+                      return (
+                        <>
+                          <MarkerBadge color={gst?.color} icon={gst?.icon} />
+                          <MarkerBadge color={it.markerColor} icon={it.markerIcon} />
+                        </>
+                      );
+                    })()}
+                    <p className="text-sm text-gray-800 hover:text-blue-600 transition">
+                      <strong>{it.studentName}</strong> <span className="text-gray-400 mx-2">•</span> {it.date}
+                    </p>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="font-semibold text-blue-600">{it.totalScore}/{it.totalMax}</span>
@@ -1784,6 +1873,7 @@ export default function Evaluations() {
                     }}
                     correctedIdsForExam={correctedStudentIdsForActiveExam}
                     hasActiveRubric={Boolean(form.rubric)}
+                    groupStyleByLabel={groupStyleByLabel}
                     wrapperClassName="relative w-full min-w-0 z-30"
                   />
                 ) : (
@@ -1865,14 +1955,28 @@ export default function Evaluations() {
                   setComments({});
                   if (teamCorrectionMode) {
                     setTeamSelectedStudentIds([]);
-                    setForm({ ...form, _id: undefined, generalComment: "" });
+                    setForm({ ...form, _id: undefined, generalComment: "", markerColor: "", markerIcon: "" });
                   } else {
-                    setForm({ ...form, studentId: "", studentName: "", generalComment: "" });
+                    setForm({
+                      ...form,
+                      studentId: "",
+                      studentName: "",
+                      generalComment: "",
+                      markerColor: "",
+                      markerIcon: "",
+                    });
                   }
                   lastCommittedEvalRef.current = captureEvalSnapshot({
                     form: teamCorrectionMode
-                      ? { ...form, _id: undefined, generalComment: "" }
-                      : { ...form, studentId: "", studentName: "", generalComment: "" },
+                      ? { ...form, _id: undefined, generalComment: "", markerColor: "", markerIcon: "" }
+                      : {
+                          ...form,
+                          studentId: "",
+                          studentName: "",
+                          generalComment: "",
+                          markerColor: "",
+                          markerIcon: "",
+                        },
                     scores: {},
                     subScores: {},
                     comments: {},
@@ -2001,18 +2105,23 @@ export default function Evaluations() {
                         </tr>
                       ) : (
                         hubEvalSortedRows.map((row) => {
-                          const evId = row.evaluation?._id;
-                          const sendBusy = evId != null && hubSendBusyId != null && String(hubSendBusyId) === String(evId);
                           const hasMail = !!(row.student.email || "").trim();
                           const st = row.delivery?.status;
-                          const canSendMail =
-                            !!row.evaluation && hasMail && st !== "queued" && !sendBusy;
                           return (
                           <tr
                             key={row.student._id}
                             className="transition-colors even:bg-slate-50/60 hover:bg-blue-50/40 dark:even:bg-slate-800/35 dark:hover:bg-indigo-950/40"
                           >
-                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{studentDisplayName(row.student)}</td>
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
+                              <div className="flex items-center gap-2">
+                                <MarkerBadge
+                                  color={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.color}
+                                  icon={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.icon}
+                                />
+                                <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
+                                <span>{studentDisplayName(row.student)}</span>
+                              </div>
+                            </td>
                             <td className="px-4 py-3">
                               <span
                                 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -2214,7 +2323,16 @@ export default function Evaluations() {
                         const sentAt = row.delivery?.sentAt || "";
                         return (
                           <tr key={`send-grid-${row.student._id}`} className="transition-colors even:bg-slate-50/60 hover:bg-blue-50/40 dark:even:bg-slate-800/35 dark:hover:bg-indigo-950/40">
-                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{studentDisplayName(row.student)}</td>
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
+                              <div className="flex items-center gap-2">
+                                <MarkerBadge
+                                  color={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.color}
+                                  icon={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.icon}
+                                />
+                                <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
+                                <span>{studentDisplayName(row.student)}</span>
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.student.email || "—"}</td>
                             <td className="px-4 py-3">
                               {!row.corrected ? (

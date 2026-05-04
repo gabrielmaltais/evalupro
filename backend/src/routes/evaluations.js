@@ -12,6 +12,11 @@ const { studentFullNameFromDoc } = require("../utils/studentName");
 const router = express.Router();
 router.use(auth);
 
+const markerHex = z.union([
+  z.literal(""),
+  z.string().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "Couleur marqueur invalide"),
+]);
+
 const schema = z.object({
   studentName: z.string().min(1),
   studentId: z.string().optional(),
@@ -22,6 +27,8 @@ const schema = z.object({
   generalComment: z.string().optional(),
   rubric: z.string().min(1),
   generateAiSummary: z.boolean().optional(),
+  markerColor: markerHex.optional(),
+  markerIcon: z.string().trim().max(80).optional(),
 });
 
 router.get("/", async (req, res) => {

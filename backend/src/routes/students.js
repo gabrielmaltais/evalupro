@@ -3,10 +3,22 @@ const { z } = require("zod");
 const Student = require("../models/Student");
 const Evaluation = require("../models/Evaluation");
 const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
+const GroupStyle = require("../models/GroupStyle");
 const { auth } = require("../middleware/auth");
 const { normalizeStudentPayload } = require("../utils/studentName");
 
 const router = express.Router();
+
+/** Déplace le style d’un libellé de groupe vers un autre (fusion si la cible existe déjà). */
+async function migrateGroupStyleKey(createdBy, from, to) {
+  if (!from || !to || from === to) return;
+  const existingDest = await GroupStyle.findOne({ createdBy, groupKey: to });
+  if (existingDest) {
+    await GroupStyle.deleteMany({ createdBy, groupKey: from });
+    return;
+  }
+  await GroupStyle.updateMany({ createdBy, groupKey: from }, { $set: { groupKey: to } });
+}
 
 const studentFields = z.object({
   name: z.string().optional(),
@@ -134,6 +146,7 @@ router.post("/groups/rename", async (req, res) => {
     const { from, to } = schema.parse(req.body);
     const result = await Student.updateMany({ createdBy: req.user._id, group: from }, { $set: { group: to } });
     await EvaluationEmailDelivery.updateMany({ owner: req.user._id, group: from }, { $set: { group: to } });
+    await migrateGroupStyleKey(req.user._id, from, to);
     res.json({ modified: result.modifiedCount });
   } catch (error) {
     res.status(400).json({ message: "Renommage de groupe invalide", details: error.message });
@@ -146,6 +159,9 @@ router.post("/groups/merge", async (req, res) => {
     const { fromGroups, to } = schema.parse(req.body);
     const result = await Student.updateMany({ createdBy: req.user._id, group: { $in: fromGroups } }, { $set: { group: to } });
     await EvaluationEmailDelivery.updateMany({ owner: req.user._id, group: { $in: fromGroups } }, { $set: { group: to } });
+    for (const fg of fromGroups) {
+      await migrateGroupStyleKey(req.user._id, fg, to);
+    }
     res.json({ modified: result.modifiedCount });
   } catch (error) {
     res.status(400).json({ message: "Fusion de groupes invalide", details: error.message });
@@ -196,6 +212,7 @@ router.delete("/groups/:groupName", async (req, res) => {
   const groupName = decodeURIComponent(req.params.groupName);
   const result = await Student.updateMany({ createdBy: req.user._id, group: groupName }, { $set: { group: "" } });
   await EvaluationEmailDelivery.updateMany({ owner: req.user._id, group: groupName }, { $set: { group: "" } });
+  await GroupStyle.deleteMany({ createdBy: req.user._id, groupKey: groupName });
   res.json({ modified: result.modifiedCount });
 });
 

@@ -119,4 +119,9 @@ export const api = {
     return request(`/api/evaluations/email-deliveries${qs ? `?${qs}` : ""}`);
   },
   retryFailedEmailBatch: (jobId, payload = {}) => request(`/api/evaluations/email-batches/${jobId}/retry-failed`, { method: "POST", body: JSON.stringify(payload) }),
+
+  listGroupStyles: () => request("/api/group-styles"),
+  upsertGroupStyle: (groupKey, payload) =>
+    request(`/api/group-styles/${encodeURIComponent(groupKey)}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteGroupStyle: (groupKey) => request(`/api/group-styles/${encodeURIComponent(groupKey)}`, { method: "DELETE" }),
 };
