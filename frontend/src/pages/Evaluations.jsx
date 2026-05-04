@@ -181,6 +181,8 @@ export default function Evaluations() {
   const [students, setStudents] = useState([]);
   const [items, setItems] = useState([]); // Historique
   const [form, setForm] = useState({ studentId: "", studentName: "", date: new Date().toISOString().slice(0, 10), generalComment: "", rubric: "" });
+  const [teamCorrectionMode, setTeamCorrectionMode] = useState(false);
+  const [teamSelectedStudentIds, setTeamSelectedStudentIds] = useState([]);
   const [scores, setScores] = useState({});
   const [subScores, setSubScores] = useState({});
   /** Par case : n’affiche le feedback rouge d’un sous-critère que si cette case a été manipulée (évite le bruit visuel au début de la correction). */
@@ -446,7 +448,12 @@ export default function Evaluations() {
   }, [hubSelectedGroup]);
 
   const selectedRubric = rubrics.find((r) => r._id === form.rubric);
-  const canEditEvaluation = Boolean(form.studentId);
+  const selectedTeamStudents = useMemo(() => {
+    const set = new Set((teamSelectedStudentIds || []).map((id) => String(id)));
+    return students.filter((s) => set.has(String(s._id)));
+  }, [students, teamSelectedStudentIds]);
+  const hasTeamTargets = selectedTeamStudents.length > 0;
+  const canEditEvaluation = teamCorrectionMode ? hasTeamTargets : Boolean(form.studentId);
 
   /** Étudiants (id) ayant déjà au moins une évaluation pour la grille / examen actif */
   const correctedStudentIdsForActiveExam = useMemo(() => {
@@ -525,6 +532,12 @@ export default function Evaluations() {
     return list;
   }, [students, studentPickerGroup, form.studentId]);
 
+  useEffect(() => {
+    if (!teamCorrectionMode) return;
+    const allowed = new Set(studentsForPicker.map((s) => String(s._id)));
+    setTeamSelectedStudentIds((prev) => prev.filter((id) => allowed.has(String(id))));
+  }, [teamCorrectionMode, studentsForPicker]);
+
   function onStudentPickerGroupChange(g) {
     setStudentPickerGroup(g);
     setForm((f) => {
@@ -534,6 +547,33 @@ export default function Evaluations() {
       const grp = normalizeGroupLabel(st.group);
       if (g && grp !== normalizeGroupLabel(g)) return { ...f, studentId: "", studentName: "" };
       return f;
+    });
+  }
+
+  function toggleTeamCorrectionMode(enabled) {
+    setTeamCorrectionMode(enabled);
+    if (enabled) {
+      const current = form.studentId ? [String(form.studentId)] : [];
+      setTeamSelectedStudentIds((prev) => {
+        const merged = Array.from(new Set([...prev.map(String), ...current]));
+        return merged;
+      });
+      // En mode équipe, on reste sur un brouillon commun pour éviter d'écraser une copie individuelle ouverte.
+      setForm((f) => ({ ...f, _id: undefined, studentId: "", studentName: "" }));
+      return;
+    }
+    const fallback = selectedTeamStudents[0];
+    setTeamSelectedStudentIds([]);
+    if (fallback) {
+      void syncEvaluationForStudentAndRubric(String(fallback._id), studentDisplayName(fallback), form.rubric);
+    }
+  }
+
+  function toggleTeamStudent(studentId, checked) {
+    const sid = String(studentId);
+    setTeamSelectedStudentIds((prev) => {
+      if (checked) return prev.includes(sid) ? prev : [...prev, sid];
+      return prev.filter((id) => String(id) !== sid);
     });
   }
 
@@ -1293,6 +1333,47 @@ export default function Evaluations() {
 
   async function saveEval() {
     setError("");
+    if (teamCorrectionMode) {
+      if (!form.rubric) {
+        setError("Sélectionnez un examen avant d'enregistrer une correction en équipe.");
+        return false;
+      }
+      if (!selectedTeamStudents.length) {
+        setError("Sélectionnez au moins un étudiant pour la correction en équipe.");
+        return false;
+      }
+      try {
+        for (const st of selectedTeamStudents) {
+          const sid = String(st._id);
+          const sname = studentDisplayName(st);
+          const latest = findLatestEvalForStudentRubric(sid, form.rubric, items);
+          const payload = {
+            ...form,
+            _id: undefined,
+            studentId: sid,
+            studentName: sname,
+            scores,
+            subScores,
+            comments,
+          };
+          if (latest?._id) {
+            await api.updateEvaluation(latest._id, payload);
+          } else {
+            await api.createEvaluation(payload);
+          }
+        }
+        clearLocalDraft();
+        lastCommittedEvalRef.current = captureEvalSnapshot({
+          form: { ...form, _id: undefined },
+        });
+        await refresh();
+        return true;
+      } catch (err) {
+        persistLocalDraft();
+        setError(String(err.message || err));
+        return false;
+      }
+    }
     if (!form.studentId) {
       setError("Sélectionnez un étudiant avant de modifier ou enregistrer une évaluation.");
       return false;
@@ -1327,12 +1408,20 @@ export default function Evaluations() {
   async function handleCreate(e) {
     if (e) e.preventDefault();
     if (await saveEval()) {
-      alert("Évaluation enregistrée avec succès !");
+      if (teamCorrectionMode) {
+        alert(`${selectedTeamStudents.length} évaluation(s) enregistrée(s) individuellement.`);
+      } else {
+        alert("Évaluation enregistrée avec succès !");
+      }
     }
   }
 
   async function handleDownloadPDF() {
     setError("");
+    if (teamCorrectionMode) {
+      setError("Le PDF individuel n'est pas disponible en mode correction en équipe.");
+      return;
+    }
     if (!form.studentName) { setError("Veuillez sélectionner un étudiant."); return; }
     const success = await saveEval();
     if (success) {
@@ -1631,9 +1720,24 @@ export default function Evaluations() {
           </div>
 
           <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mt-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">{form.studentId ? `Historique de l'étudiant` : `Historique Récent`}</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              {teamCorrectionMode
+                ? "Historique des étudiants sélectionnés"
+                : form.studentId
+                  ? "Historique de l'étudiant"
+                  : "Historique Récent"}
+            </h3>
             <ul className="divide-y divide-gray-100">
-              {(form.studentId ? items.filter(it => it.studentId === form.studentId) : items).slice(0, 10).map((it) => (
+              {(
+                teamCorrectionMode
+                  ? items.filter((it) => {
+                      const sid = evalStudentId(it);
+                      return sid && teamSelectedStudentIds.includes(String(sid));
+                    })
+                  : form.studentId
+                    ? items.filter((it) => String(evalStudentId(it) || "") === String(form.studentId))
+                    : items
+              ).slice(0, 10).map((it) => (
                 <li key={it._id} className="py-2 flex justify-between items-center group">
                   <div className="flex-1 cursor-pointer" onClick={() => loadEvaluation(it._id)}>
                     <p className="text-sm text-gray-800 hover:text-blue-600 transition"><strong>{it.studentName}</strong> <span className="text-gray-400 mx-2">•</span> {it.date}</p>
@@ -1659,17 +1763,61 @@ export default function Evaluations() {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center relative overflow-visible isolate">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-teal-400"></div>
               <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left relative z-20">
-                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">Étudiant</p>
-                <StudentSelectWithIcons
-                  students={studentsForPicker}
-                  valueStudentId={form.studentId}
-                  onSelectStudent={({ studentId, studentName }) => {
-                    void syncEvaluationForStudentAndRubric(studentId, studentName, form.rubric);
-                  }}
-                  correctedIdsForExam={correctedStudentIdsForActiveExam}
-                  hasActiveRubric={Boolean(form.rubric)}
-                  wrapperClassName="relative w-full min-w-0 z-30"
-                />
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Étudiant</p>
+                  <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-gray-600">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                      checked={teamCorrectionMode}
+                      onChange={(e) => toggleTeamCorrectionMode(e.target.checked)}
+                    />
+                    Correction en équipe
+                  </label>
+                </div>
+                {!teamCorrectionMode ? (
+                  <StudentSelectWithIcons
+                    students={studentsForPicker}
+                    valueStudentId={form.studentId}
+                    onSelectStudent={({ studentId, studentName }) => {
+                      void syncEvaluationForStudentAndRubric(studentId, studentName, form.rubric);
+                    }}
+                    correctedIdsForExam={correctedStudentIdsForActiveExam}
+                    hasActiveRubric={Boolean(form.rubric)}
+                    wrapperClassName="relative w-full min-w-0 z-30"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    <div className="max-h-40 overflow-auto rounded-lg border border-gray-200 bg-white">
+                      {studentsForPicker.map((s) => {
+                        const sid = String(s._id);
+                        const checked = teamSelectedStudentIds.includes(sid);
+                        return (
+                          <label key={sid} className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs hover:bg-blue-50">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => toggleTeamStudent(sid, e.target.checked)}
+                              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                            />
+                            <span className="truncate">{studentDisplayName(s)}</span>
+                          </label>
+                        );
+                      })}
+                      {studentsForPicker.length === 0 && (
+                        <div className="px-2 py-2 text-xs text-gray-500">Aucun étudiant dans ce filtre.</div>
+                      )}
+                    </div>
+                    <div className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1.5 text-[11px] text-blue-900">
+                      <span className="font-semibold">{teamSelectedStudentIds.length}</span> étudiant(s) sélectionné(s)
+                      {selectedTeamStudents.length > 0 ? (
+                        <div className="mt-1 truncate text-blue-700" title={selectedTeamStudents.map((s) => studentDisplayName(s)).join(", ")}>
+                          {selectedTeamStudents.map((s) => studentDisplayName(s)).join(", ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
               </div>
               <h2 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-2">Note Finale</h2>
               <div className="flex items-end justify-center gap-1 mb-4">
@@ -1688,9 +1836,9 @@ export default function Evaluations() {
 
             <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 grid gap-3">
               <button disabled={!canEditEvaluation} onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 disabled:opacity-45 disabled:cursor-not-allowed">
-                <i className="fa-solid fa-save"></i> Enregistrer l'évaluation
+                <i className="fa-solid fa-save"></i> {teamCorrectionMode ? "Enregistrer pour la sélection" : "Enregistrer l'évaluation"}
               </button>
-              <button disabled={!canEditEvaluation} onClick={handleDownloadPDF} className="w-full bg-slate-600 hover:bg-slate-500 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 border border-slate-500/40 dark:bg-indigo-900/90 dark:hover:bg-indigo-800 dark:border-indigo-400/25 disabled:opacity-45 disabled:cursor-not-allowed">
+              <button disabled={!canEditEvaluation || teamCorrectionMode} title={teamCorrectionMode ? "Désactivez le mode équipe pour générer un PDF individuel." : ""} onClick={handleDownloadPDF} className="w-full bg-slate-600 hover:bg-slate-500 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 border border-slate-500/40 dark:bg-indigo-900/90 dark:hover:bg-indigo-800 dark:border-indigo-400/25 disabled:opacity-45 disabled:cursor-not-allowed">
                 <i className="fa-solid fa-file-pdf"></i> Enregistrer & Télécharger PDF
               </button>
               <button
@@ -1700,9 +1848,16 @@ export default function Evaluations() {
                   setScores({});
                   setSubScores({});
                   setComments({});
-                  setForm({ ...form, studentId: "", studentName: "", generalComment: "" });
+                  if (teamCorrectionMode) {
+                    setTeamSelectedStudentIds([]);
+                    setForm({ ...form, _id: undefined, generalComment: "" });
+                  } else {
+                    setForm({ ...form, studentId: "", studentName: "", generalComment: "" });
+                  }
                   lastCommittedEvalRef.current = captureEvalSnapshot({
-                    form: { ...form, studentId: "", studentName: "", generalComment: "" },
+                    form: teamCorrectionMode
+                      ? { ...form, _id: undefined, generalComment: "" }
+                      : { ...form, studentId: "", studentName: "", generalComment: "" },
                     scores: {},
                     subScores: {},
                     comments: {},
