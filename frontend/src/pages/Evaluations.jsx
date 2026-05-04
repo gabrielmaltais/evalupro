@@ -14,6 +14,11 @@ function evalItemRubricId(it) {
   return evalRubricId(it);
 }
 
+function normalizeGroupLabel(groupValue) {
+  const g = String(groupValue || "").trim();
+  return g || "Sans groupe";
+}
+
 /** Liste déroulante étudiants avec icônes (le <select> natif ne permet pas le HTML dans les options). */
 function StudentSelectWithIcons({
   students,
@@ -29,7 +34,7 @@ function StudentSelectWithIcons({
   const groupedStudents = useMemo(() => {
     const acc = {};
     for (const s of students) {
-      const g = s.group || "Sans groupe";
+      const g = normalizeGroupLabel(s.group);
       if (!acc[g]) acc[g] = [];
       acc[g].push(s);
     }
@@ -468,7 +473,7 @@ export default function Evaluations() {
 
   const studentGroupKeys = useMemo(() => {
     const set = new Set();
-    for (const s of students) set.add(s.group || "Sans groupe");
+    for (const s of students) set.add(normalizeGroupLabel(s.group));
     return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
   }, [students]);
 
@@ -493,14 +498,14 @@ export default function Evaluations() {
   }, [studentPickerGroup]);
 
   const activeRubricsForCorrection = useMemo(() => {
-    const group = studentPickerGroup || "";
+    const group = studentPickerGroup ? normalizeGroupLabel(studentPickerGroup) : "";
     return rubrics.filter((r) => {
       if (!r?.isActive) return false;
       const rubricGroups = Array.isArray(r?.groups)
         ? r.groups.map((g) => String(g || "").trim()).filter(Boolean)
         : [];
       const legacyGroup = String(r?.group || "").trim();
-      const allGroups = rubricGroups.length ? rubricGroups : (legacyGroup ? [legacyGroup] : []);
+      const allGroups = Array.from(new Set([...rubricGroups, ...(legacyGroup ? [legacyGroup] : [])]));
       if (allGroups.length === 0) return true;
       if (!group) return true;
       return allGroups.includes(group);
@@ -510,7 +515,7 @@ export default function Evaluations() {
   const studentsForPicker = useMemo(() => {
     let list = !studentPickerGroup
       ? students
-      : students.filter((s) => (s.group || "Sans groupe") === studentPickerGroup);
+      : students.filter((s) => normalizeGroupLabel(s.group) === normalizeGroupLabel(studentPickerGroup));
     if (form.studentId) {
       const cur = students.find((s) => String(s._id) === String(form.studentId));
       if (cur && !list.some((s) => String(s._id) === String(cur._id))) {
@@ -526,8 +531,8 @@ export default function Evaluations() {
       if (!f.studentId) return f;
       const st = students.find((s) => String(s._id) === String(f.studentId));
       if (!st) return { ...f, studentId: "", studentName: "" };
-      const grp = st.group || "Sans groupe";
-      if (g && grp !== g) return { ...f, studentId: "", studentName: "" };
+      const grp = normalizeGroupLabel(st.group);
+      if (g && grp !== normalizeGroupLabel(g)) return { ...f, studentId: "", studentName: "" };
       return f;
     });
   }
@@ -541,7 +546,7 @@ export default function Evaluations() {
   const hubGroupedStudents = useMemo(() => {
     const acc = {};
     for (const s of students) {
-      const g = s.group || "Sans groupe";
+      const g = normalizeGroupLabel(s.group);
       if (!acc[g]) acc[g] = [];
       acc[g].push(s);
     }
@@ -559,7 +564,7 @@ export default function Evaluations() {
       if (!sid) return;
       const student = students.find((x) => String(x._id) === sid);
       if (!student) return;
-      const g = student.group || "Sans groupe";
+      const g = normalizeGroupLabel(student.group);
       if (hubSelectedGroup && g !== hubSelectedGroup) return;
       const rid = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : null;
       if (rid) rubricIdsWithCorrection.add(rid);

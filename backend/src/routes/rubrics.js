@@ -6,6 +6,20 @@ const roles = require("../middleware/roles");
 
 const router = express.Router();
 
+function normalizeGroupsInput(groups, group) {
+  if (groups !== undefined) {
+    const normalized = Array.from(
+      new Set((Array.isArray(groups) ? groups : [groups]).map((g) => String(g || "").trim()).filter(Boolean))
+    );
+    return { groups: normalized, group: normalized[0] || "" };
+  }
+  if (group !== undefined) {
+    const g = String(group || "").trim();
+    return { groups: g ? [g] : [], group: g };
+  }
+  return null;
+}
+
 const rubricSchema = z.object({
   title: z.string().min(1),
   taskTitle: z.string().min(1),
@@ -36,11 +50,10 @@ router.get("/", async (_req, res) => {
 router.post("/", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = rubricSchema.parse(req.body);
-    if ((!payload.groups || payload.groups.length === 0) && payload.group) {
-      payload.groups = [payload.group];
-    }
-    if (payload.groups) {
-      payload.groups = Array.from(new Set(payload.groups.map((g) => String(g || "").trim()).filter(Boolean)));
+    const normalizedGroupData = normalizeGroupsInput(payload.groups, payload.group);
+    if (normalizedGroupData) {
+      payload.groups = normalizedGroupData.groups;
+      payload.group = normalizedGroupData.group;
     }
     const item = await Rubric.create({ ...payload, createdBy: req.user._id });
     res.status(201).json(item);
@@ -52,10 +65,10 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
 router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = rubricSchema.partial().parse(req.body);
-    if (payload.groups) {
-      payload.groups = Array.from(new Set(payload.groups.map((g) => String(g || "").trim()).filter(Boolean)));
-    } else if (payload.group != null) {
-      payload.groups = payload.group ? [payload.group] : [];
+    const normalizedGroupData = normalizeGroupsInput(payload.groups, payload.group);
+    if (normalizedGroupData) {
+      payload.groups = normalizedGroupData.groups;
+      payload.group = normalizedGroupData.group;
     }
     const item = await Rubric.findByIdAndUpdate(req.params.id, payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
