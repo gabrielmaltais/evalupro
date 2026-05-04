@@ -1564,7 +1564,9 @@ export default function Evaluations() {
         scale: 2,
         useCORS: true,
         scrollX: 0,
-        scrollY: -window.scrollY,
+        // Le template est rendu en position fixe (top=0) hors-écran.
+        // Ne PAS compenser avec le scroll de la page, sinon le haut du PDF peut être croppé.
+        scrollY: 0,
       },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: ['css'], avoid: ['h3'] }
