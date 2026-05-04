@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { studentDisplayName, splitFullName } from "../lib/studentDisplay";
 import PageSectionTitle from "../components/PageSectionTitle";
-import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 
 /** Une ligne d’import : nom seul, ou nom + courriel (tab, point-virgule, ou virgule si la partie droite ressemble à un mail). */
 function parseStudentBulkLine(line) {
@@ -57,19 +56,14 @@ export default function AdminStudents() {
   const [purgeConfirmText, setPurgeConfirmText] = useState("");
   const [purgeAckIrreversible, setPurgeAckIrreversible] = useState(false);
   const [purgeBusy, setPurgeBusy] = useState(false);
-  const [groupStyles, setGroupStyles] = useState([]);
-  const [groupMarkerDraft, setGroupMarkerDraft] = useState({ color: "", icon: "" });
-
   async function refresh() {
     try {
-      const [data, dashboard, styles] = await Promise.all([
+      const [data, dashboard] = await Promise.all([
         api.listStudents(),
         api.getStudentGroupDashboard(),
-        api.listGroupStyles(),
       ]);
       setStudents(data);
       setGroupDashboard(dashboard || []);
-      setGroupStyles(styles || []);
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -86,23 +80,6 @@ export default function AdminStudents() {
   }, {}), [students]);
   const groupKeys = Object.keys(groupedStudents).sort();
   const allGroupKeys = Array.from(new Set([...groupKeys, ...draftGroups])).sort();
-  const groupStyleByLabel = useMemo(() => {
-    const m = {};
-    for (const s of groupStyles) {
-      if (s?.groupKey) m[s.groupKey] = s;
-    }
-    return m;
-  }, [groupStyles]);
-
-  useEffect(() => {
-    if (!selectedGroup) {
-      setGroupMarkerDraft({ color: "", icon: "" });
-      return;
-    }
-    const row = groupStyles.find((x) => x.groupKey === selectedGroup);
-    setGroupMarkerDraft({ color: row?.color || "", icon: row?.icon || "" });
-  }, [selectedGroup, groupStyles]);
-
   const displayedGroupDashboard = useMemo(() => {
     const map = new Map((groupDashboard || []).map((g) => [g.group, g]));
     draftGroups.forEach((g) => {
@@ -307,29 +284,6 @@ export default function AdminStudents() {
     setSelectedGroup(groupName);
   }
 
-  async function saveGroupMarker() {
-    if (!selectedGroup) {
-      setError("Sélectionnez d'abord un groupe.");
-      return;
-    }
-    setError("");
-    setSuccess("");
-    try {
-      const c = (groupMarkerDraft.color || "").trim();
-      const i = (groupMarkerDraft.icon || "").trim();
-      if (!c && !i) {
-        await api.deleteGroupStyle(selectedGroup);
-        setSuccess("Repère du groupe retiré.");
-      } else {
-        await api.upsertGroupStyle(selectedGroup, { color: c, icon: i });
-        setSuccess("Repère du groupe enregistré.");
-      }
-      await refresh();
-    } catch (e) {
-      setError(String(e.message || e));
-    }
-  }
-
   function clearGroupFilter() {
     setSelectedGroup("");
   }
@@ -373,13 +327,7 @@ export default function AdminStudents() {
                           aria-pressed={isActive}
                           aria-label={`Afficher les étudiants du groupe ${g.group}`}
                         >
-                          <span className="flex items-center gap-2 font-semibold text-sm text-gray-900 dark:text-gray-100">
-                            <MarkerBadge
-                              color={groupStyleByLabel[g.group]?.color}
-                              icon={groupStyleByLabel[g.group]?.icon}
-                            />
-                            <span className="block">{g.group}</span>
-                          </span>
+                          <span className="block font-semibold text-sm text-gray-900 dark:text-gray-100">{g.group}</span>
                           <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 block">
                             {g.students} étu. • {g.evaluations} évals.
                           </span>
@@ -428,31 +376,6 @@ export default function AdminStudents() {
                   <div className="text-xs text-gray-500 mb-2">Groupe sélectionné: <span className="font-semibold text-gray-700">{selectedGroup || "Aucun"}</span></div>
                   <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Nouveau nom du groupe actif" value={renameGroupTo} onChange={(e) => setRenameGroupTo(e.target.value)} />
                   <button onClick={renameSelectedGroup} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm">Renommer</button>
-                </div>
-                <div className="border-t border-gray-100 pt-4 dark:border-gray-700">
-                  <h3 className="mb-2 font-semibold text-sm">Repère visuel du groupe</h3>
-                  <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-                    Couleur et icône affichées dans la liste des étudiants, le hub d&apos;évaluation et les tableaux de suivi.
-                  </p>
-                  {selectedGroup ? (
-                    <>
-                      <MarkerStyleControls
-                        idPrefix="admin-group-marker"
-                        color={groupMarkerDraft.color}
-                        icon={groupMarkerDraft.icon}
-                        onChange={(patch) => setGroupMarkerDraft((d) => ({ ...d, ...patch }))}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => saveGroupMarker()}
-                        className="mt-3 w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                      >
-                        Enregistrer le repère
-                      </button>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-500">Sélectionnez un groupe dans la liste pour définir son apparence.</p>
-                  )}
                 </div>
               </div>
             </div>

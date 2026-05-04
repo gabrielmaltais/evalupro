@@ -27,7 +27,6 @@ function StudentSelectWithIcons({
   onSelectStudent,
   correctedIdsForExam,
   hasActiveRubric,
-  groupStyleByLabel = {},
   wrapperClassName = "relative flex-1 min-w-0",
 }) {
   const [open, setOpen] = useState(false);
@@ -122,13 +121,7 @@ function StudentSelectWithIcons({
           </li>
           {groupedStudents.map(([groupName, groupList]) => (
             <li key={groupName} role="none" className="pt-1">
-              <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-bold italic tracking-wide text-slate-500 dark:text-slate-400">
-                <MarkerBadge
-                  color={groupStyleByLabel[groupName]?.color}
-                  icon={groupStyleByLabel[groupName]?.icon}
-                />
-                <span>{groupName}</span>
-              </div>
+              <div className="px-3 py-1 text-[11px] font-bold italic tracking-wide text-slate-500 dark:text-slate-400">{groupName}</div>
               <ul role="none">
                 {groupList.map((s) => {
                   const sid = String(s._id);
@@ -261,7 +254,6 @@ export default function Evaluations() {
     }
   });
   const [groupDashboard, setGroupDashboard] = useState([]);
-  const [groupStyles, setGroupStyles] = useState([]);
   const [emailTargets, setEmailTargets] = useState({ groups: [], exams: [] });
   const [deliveries, setDeliveries] = useState([]);
   const [emailBatchConfig, setEmailBatchConfig] = useState({
@@ -375,15 +367,13 @@ export default function Evaluations() {
 
   async function refresh() {
     try {
-      const [evaluations, rubricList, studentList, dashboard, targets, sends, styleList] = await Promise.all([
+      const [evaluations, rubricList, studentList, dashboard, targets, sends] = await Promise.all([
         api.listEvaluations({ page: 1, limit: 2000 }),
         api.listRubrics(),
         api.listStudents(),
         api.getStudentGroupDashboard(),
         api.getEmailTargets(),
         api.listEmailDeliveries(),
-        // Ne doit pas bloquer la page "Évaluations" si l’API est indisponible.
-        api.listGroupStyles().catch(() => []),
       ]);
       setItems(evaluations.items || []);
       setRubrics(rubricList);
@@ -391,7 +381,6 @@ export default function Evaluations() {
       setGroupDashboard(dashboard || []);
       setEmailTargets(targets || { groups: [], exams: [] });
       setDeliveries(sends || []);
-      setGroupStyles(styleList || []);
       setHubSelectedGroup((prev) => prev || targets?.groups?.[0] || "");
       setEmailBatchConfig((prev) => {
         const examIds = new Set((targets?.exams || []).map((e) => String(e.rubricId)));
@@ -614,14 +603,6 @@ export default function Evaluations() {
   }, [students]);
   const hubGroupKeys = Object.keys(hubGroupedStudents).sort();
 
-  const groupStyleByLabel = useMemo(() => {
-    const m = {};
-    for (const s of groupStyles || []) {
-      if (s?.groupKey) m[s.groupKey] = { color: s.color || "", icon: s.icon || "" };
-    }
-    return m;
-  }, [groupStyles]);
-
   const hubFilteredStudents = hubSelectedGroup ? hubGroupedStudents[hubSelectedGroup] || [] : students;
 
   const examsForSend = useMemo(() => {
@@ -698,25 +679,6 @@ export default function Evaluations() {
     }
     return examsForSend;
   }, [evalPageTab, activeRubricsForCorrection, examsForSend]);
-  const hubExamGroupMarkers = useMemo(() => {
-    const byRubric = {};
-    const studentGroupById = new Map(students.map((s) => [String(s._id), normalizeGroupLabel(s.group)]));
-    for (const it of items) {
-      const rid = it.rubric?._id != null ? String(it.rubric._id) : it.rubric != null ? String(it.rubric) : "";
-      if (!rid) continue;
-      const sid = evalStudentId(it);
-      const gl = sid ? studentGroupById.get(String(sid)) || "Sans groupe" : "Sans groupe";
-      const gs = groupStyleByLabel[gl];
-      if (!gs || (!gs.color && !gs.icon)) continue;
-      if (!byRubric[rid]) byRubric[rid] = [];
-      const k = `${gs.color || ""}::${gs.icon || ""}`;
-      if (!byRubric[rid].some((x) => `${x.color || ""}::${x.icon || ""}` === k)) {
-        byRubric[rid].push({ color: gs.color || "", icon: gs.icon || "", groupLabel: gl });
-      }
-    }
-    return byRubric;
-  }, [items, students, groupStyleByLabel]);
-
   const hubBarStats = useMemo(() => {
     const totalStudents = hubFilteredStudents.length;
     const selectedRubricId = String(selectedHubExamId || "");
@@ -1615,7 +1577,6 @@ export default function Evaluations() {
               onStudentPickerGroupChange(nextGroup);
             }}
             groupKeys={hubGroupKeys}
-            activeGroupStyle={hubSelectedGroup ? groupStyleByLabel[hubSelectedGroup] : null}
             selectedExamId={selectedHubExamId}
             setSelectedExamId={(rubricId) => {
               const nextRubricId = String(rubricId || "");
@@ -1629,7 +1590,6 @@ export default function Evaluations() {
               setHasManualSuiviExamSelection(true);
             }}
             examOptions={hubExamOptions}
-            examGroupMarkers={hubExamGroupMarkers}
             stats={hubBarStats}
           />
         )}
@@ -1670,6 +1630,11 @@ export default function Evaluations() {
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <h3 className="text-lg font-bold text-gray-800">{c.title}</h3>
+                        {c.competencyElement && (
+                          <p className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">
+                            Élément de compétence: {c.competencyElement}
+                          </p>
+                        )}
                         <span className="text-sm font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded">Pondération : {c.weight} pts</span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1818,18 +1783,7 @@ export default function Evaluations() {
               ).slice(0, 10).map((it) => (
                 <li key={it._id} className="py-2 flex justify-between items-center group">
                   <div className="flex flex-1 cursor-pointer items-center gap-2" onClick={() => loadEvaluation(it._id)}>
-                    {(() => {
-                      const sid = evalStudentId(it);
-                      const stu = sid ? students.find((s) => String(s._id) === String(sid)) : null;
-                      const gl = normalizeGroupLabel(stu?.group);
-                      const gst = groupStyleByLabel[gl];
-                      return (
-                        <>
-                          <MarkerBadge color={gst?.color} icon={gst?.icon} />
-                          <MarkerBadge color={it.markerColor} icon={it.markerIcon} />
-                        </>
-                      );
-                    })()}
+                    <MarkerBadge color={it.markerColor} icon={it.markerIcon} />
                     <p className="text-sm text-gray-800 hover:text-blue-600 transition">
                       <strong>{it.studentName}</strong> <span className="text-gray-400 mx-2">•</span> {it.date}
                     </p>
@@ -1876,7 +1830,6 @@ export default function Evaluations() {
                     }}
                     correctedIdsForExam={correctedStudentIdsForActiveExam}
                     hasActiveRubric={Boolean(form.rubric)}
-                    groupStyleByLabel={groupStyleByLabel}
                     wrapperClassName="relative w-full min-w-0 z-30"
                   />
                 ) : (
@@ -2117,10 +2070,6 @@ export default function Evaluations() {
                           >
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
                               <div className="flex items-center gap-2">
-                                <MarkerBadge
-                                  color={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.color}
-                                  icon={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.icon}
-                                />
                                 <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
                                 <span>{studentDisplayName(row.student)}</span>
                               </div>
@@ -2328,10 +2277,6 @@ export default function Evaluations() {
                           <tr key={`send-grid-${row.student._id}`} className="transition-colors even:bg-slate-50/60 hover:bg-blue-50/40 dark:even:bg-slate-800/35 dark:hover:bg-indigo-950/40">
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
                               <div className="flex items-center gap-2">
-                                <MarkerBadge
-                                  color={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.color}
-                                  icon={groupStyleByLabel[normalizeGroupLabel(row.student.group)]?.icon}
-                                />
                                 <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
                                 <span>{studentDisplayName(row.student)}</span>
                               </div>
@@ -2668,6 +2613,9 @@ export default function Evaluations() {
                       <h4 className="font-bold text-gray-800 text-sm">{c.title}</h4>
                       <span className="font-mono font-bold text-gray-900">{s} <span className="text-gray-400 text-xs">/ {c.weight}</span></span>
                     </div>
+                    {c.competencyElement && (
+                      <p className="text-[11px] text-indigo-700 mb-1">Élément de compétence: {c.competencyElement}</p>
+                    )}
                     <p className="text-xs text-gray-600 mb-1">{descText}</p>
                     {c.subCriteria && c.subCriteria.length > 0 && (
                       <div className="mt-2 space-y-1">

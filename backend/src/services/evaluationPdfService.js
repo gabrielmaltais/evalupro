@@ -235,6 +235,12 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       doc.font("Helvetica").fontSize(9).fillColor("#9ca3af").text(`/ ${c.weight || 0}`, left + pageWidth - 48, cursorY, { width: 40, align: "right" });
 
       cursorY += 16;
+      if (c.competencyElement) {
+        doc.font("Helvetica").fontSize(8).fillColor("#4338ca").text(`Élément de compétence: ${c.competencyElement}`, textLeft, cursorY, {
+          width: pageWidth - 24,
+        });
+        cursorY += 12;
+      }
       doc.fontSize(9).fillColor("#4b5563").text(descText, textLeft, cursorY, { width: pageWidth - 24 });
       cursorY += 14;
       stripeEndY = Math.max(stripeEndY, cursorY);

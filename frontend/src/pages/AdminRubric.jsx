@@ -14,6 +14,7 @@ function unwrapAiTemplateEnvelope(raw) {
 const DEFAULT_CRITERION = {
   id: "cx",
   title: "Nouveau Critère",
+  competencyElement: "",
   weight: 10,
   color: "border-blue-500",
   levels: [
@@ -40,6 +41,7 @@ export default function AdminRubric() {
   const [showGroupsDropdown, setShowGroupsDropdown] = useState(false);
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
+  const [linkCompetencies, setLinkCompetencies] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const DEFAULT_FEEDBACK = [
     { minPct: 0, maxPct: 60, message: "Tu n'y es pas encore, mais ne te décourage pas ! Reviens sur les points manquants, consulte tes notes et n'hésite pas à demander de l'aide. Tu as la capacité de progresser et c'est en persévérant qu'on réussit." },
@@ -109,6 +111,7 @@ export default function AdminRubric() {
       version: next.version ?? version,
       groups: next.groups ?? groups,
       isActive: next.isActive ?? isActive,
+      linkCompetencies: next.linkCompetencies ?? linkCompetencies,
       criteria: next.criteria ?? criteria,
       feedbackMessages: next.feedbackMessages ?? feedbackMessages,
     };
@@ -118,7 +121,7 @@ export default function AdminRubric() {
   const hasUnsavedChanges = useMemo(
     () => buildSnapshot() !== savedSnapshot,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedId, title, taskTitle, version, groups, isActive, criteria, feedbackMessages, savedSnapshot]
+    [selectedId, title, taskTitle, version, groups, isActive, linkCompetencies, criteria, feedbackMessages, savedSnapshot]
   );
 
   useEffect(() => {
@@ -135,6 +138,7 @@ export default function AdminRubric() {
     setGroups(Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []));
     setCriteria(r.criteria || []);
     setIsActive(r.isActive !== false);
+    setLinkCompetencies(r.linkCompetencies === true);
     setFeedbackMessages(r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -147,6 +151,7 @@ export default function AdminRubric() {
         version: (r.version || 1) + 1,
         groups: Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []),
         isActive: r.isActive !== false,
+        linkCompetencies: r.linkCompetencies === true,
         criteria: r.criteria || [],
         feedbackMessages: r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK,
       })
@@ -161,6 +166,7 @@ export default function AdminRubric() {
     setGroups([]);
     setCriteria([{ ...DEFAULT_CRITERION, id: "c1" }]);
     setIsActive(true);
+    setLinkCompetencies(false);
     setFeedbackMessages(DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -173,6 +179,7 @@ export default function AdminRubric() {
         version: 1,
         groups: [],
         isActive: true,
+        linkCompetencies: false,
         criteria: [{ ...DEFAULT_CRITERION, id: "c1" }],
         feedbackMessages: DEFAULT_FEEDBACK,
       })
@@ -184,10 +191,10 @@ export default function AdminRubric() {
     setSuccess("");
     try {
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages });
+        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, feedbackMessages });
         setSuccess("Grille modifiée avec succès !");
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages });
+        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, feedbackMessages });
         setSelectedId(newRubric._id);
         setSuccess("Nouvelle grille créée avec succès !");
       }
@@ -273,7 +280,7 @@ export default function AdminRubric() {
   }
 
   function exportJSON() {
-    const data = { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, feedbackMessages };
+    const data = { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, feedbackMessages };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
     const a = document.createElement('a');
     a.href = dataStr;
@@ -417,6 +424,9 @@ export default function AdminRubric() {
         color: palette[i % palette.length],
         levels,
       };
+      if (cfg.lierElementsCompetence) {
+        criterion.competencyElement = criterionTitleExample;
+      }
       if (cfg.inclureSousCriteres) {
         const fbStyle = cfg.sousCritereFeedbackStyle === "verbeux"
           ? `${L.subFeedback} Ajoutez 2 ou 3 conseils concrets et actionnables.`
@@ -442,6 +452,7 @@ export default function AdminRubric() {
     const template_a_remplir = {
       title: L.title,
       taskTitle: L.taskTitle,
+      linkCompetencies: cfg.lierElementsCompetence === true,
       criteria: criteriaExamples,
       ...(feedbackMessages ? { feedbackMessages } : {}),
     };
@@ -492,6 +503,7 @@ export default function AdminRubric() {
       setTitle(imported.title);
       setTaskTitle(imported.taskTitle);
       setCriteria(imported.criteria);
+      setLinkCompetencies(imported.linkCompetencies === true);
       setVersion(1);
       setSelectedId(null);
       setFeedbackMessages(imported.feedbackMessages);
@@ -762,6 +774,16 @@ export default function AdminRubric() {
                   Grille active (visible dans Corriger)
                 </label>
               </div>
+              <div className="flex items-end">
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={linkCompetencies}
+                    onChange={(e) => setLinkCompetencies(e.target.checked)}
+                  />
+                  Lier l&apos;évaluation aux éléments de compétence (informatif)
+                </label>
+              </div>
             </div>
           </div>
 
@@ -781,26 +803,57 @@ export default function AdminRubric() {
                 <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50 relative">
                   <button type="button" onClick={() => removeCriterion(idx)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition"><i className="fa-solid fa-trash"></i></button>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4 pr-8">
-                    <div className="col-span-6">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Titre du critère</label>
-                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded text-sm outline-none" value={c.title} onChange={e => updateCriterion(idx, 'title', e.target.value)} />
+                  <div className="mb-4 space-y-4 pr-8">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
+                      <div className="min-w-0 md:col-span-6">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Titre du critère</label>
+                        <input
+                          type="text"
+                          className="w-full min-w-0 px-3 py-2 border border-gray-300 rounded text-sm outline-none"
+                          value={c.title}
+                          onChange={(e) => updateCriterion(idx, "title", e.target.value)}
+                        />
+                      </div>
+                      <div className="min-w-0 md:col-span-3">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Points (Poids)</label>
+                        <input
+                          type="number"
+                          className="w-full min-w-0 px-3 py-2 border border-gray-300 rounded text-sm outline-none"
+                          value={c.weight}
+                          onChange={(e) => updateCriterion(idx, "weight", Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="min-w-0 md:col-span-3">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Couleur UI</label>
+                        <select
+                          className="w-full min-w-0 px-3 py-2 border border-gray-300 rounded text-sm outline-none"
+                          value={c.color}
+                          onChange={(e) => updateCriterion(idx, "color", e.target.value)}
+                        >
+                          <option value="border-blue-500">Bleu</option>
+                          <option value="border-green-500">Vert</option>
+                          <option value="border-purple-500">Violet</option>
+                          <option value="border-orange-500">Orange</option>
+                          <option value="border-red-500">Rouge</option>
+                          <option value="border-gray-500">Gris</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="col-span-3">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Points (Poids)</label>
-                      <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded text-sm outline-none" value={c.weight} onChange={e => updateCriterion(idx, 'weight', Number(e.target.value))} />
-                    </div>
-                    <div className="col-span-3">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Couleur UI</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded text-sm outline-none" value={c.color} onChange={e => updateCriterion(idx, 'color', e.target.value)}>
-                        <option value="border-blue-500">Bleu</option>
-                        <option value="border-green-500">Vert</option>
-                        <option value="border-purple-500">Violet</option>
-                        <option value="border-orange-500">Orange</option>
-                        <option value="border-red-500">Rouge</option>
-                        <option value="border-gray-500">Gris</option>
-                      </select>
-                    </div>
+                    {linkCompetencies && (
+                      <div className="min-w-0">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                          Élément de compétence <span className="font-normal normal-case text-gray-400">(optionnel)</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full min-w-0 px-3 py-2 border border-gray-300 rounded text-sm outline-none"
+                          placeholder="Ex. résoudre un problème algorithmique (référence au plan de cours)"
+                          value={c.competencyElement || ""}
+                          onChange={(e) => updateCriterion(idx, "competencyElement", e.target.value)}
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">

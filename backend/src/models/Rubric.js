@@ -23,6 +23,8 @@ const criterionSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
     title: { type: String, required: true },
+    // Champ informatif optionnel: lien du critère avec un élément de compétence.
+    competencyElement: { type: String, default: "" },
     weight: { type: Number, required: true, min: 0 },
     color: { type: String, default: "border-blue-500" },
     levels: { type: [levelSchema], default: [] },
@@ -37,6 +39,8 @@ const rubricSchema = new mongoose.Schema(
     taskTitle: { type: String, required: true },
     version: { type: Number, required: true, min: 1 },
     isActive: { type: Boolean, default: false },
+    // Active l'affichage du champ "élément de compétence" dans l'éditeur de grille.
+    linkCompetencies: { type: Boolean, default: false },
     group: { type: String, default: "" },
     groups: { type: [String], default: [] },
     criteria: { type: [criterionSchema], default: [] },

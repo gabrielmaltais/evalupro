@@ -25,12 +25,14 @@ const rubricSchema = z.object({
   taskTitle: z.string().min(1),
   version: z.number().int().min(1),
   isActive: z.boolean().optional(),
+  linkCompetencies: z.boolean().optional(),
   group: z.string().optional(),
   groups: z.array(z.string()).optional(),
   criteria: z.array(
     z.object({
       id: z.string().min(1),
       title: z.string().min(1),
+      competencyElement: z.string().optional(),
       weight: z.number().nonnegative(),
       color: z.string().optional(),
       levels: z.array(z.object({ label: z.string(), maxPct: z.number().min(0).max(1), desc: z.string() })).optional(),

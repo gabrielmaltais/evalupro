@@ -1,14 +1,10 @@
-import MarkerBadge from "./MarkerBadge";
-
 export default function HubContextBar({
   selectedGroup,
   setSelectedGroup,
   groupKeys,
-  activeGroupStyle,
   selectedExamId,
   setSelectedExamId,
   examOptions,
-  examGroupMarkers,
   stats,
 }) {
   const selectedExam = (examOptions || []).find((ex) => String(ex.rubricId) === String(selectedExamId || ""));
@@ -39,14 +35,6 @@ export default function HubContextBar({
                 </option>
               ))}
             </select>
-            {selectedGroup && (activeGroupStyle?.color || activeGroupStyle?.icon) ? (
-              <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                <span className="font-semibold text-slate-500 dark:text-slate-500">Repère groupe :</span>
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-white/90 px-2 py-0.5 dark:border-indigo-500/25 dark:bg-slate-900/50">
-                  <MarkerBadge color={activeGroupStyle?.color} icon={activeGroupStyle?.icon} size="md" />
-                </span>
-              </div>
-            ) : null}
           </label>
           <label className="min-w-0">
             <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Examen</span>
@@ -64,49 +52,32 @@ export default function HubContextBar({
             </select>
             {selectedExam && (
               <div
-                className="mt-1 min-w-0 rounded-md border border-blue-100/80 bg-white/75 px-2 py-1 text-xs leading-snug text-slate-600 dark:border-indigo-400/20 dark:bg-slate-900/40 dark:text-slate-300"
+                className="mt-2.5 min-w-0 border-l-[3px] border-indigo-500/80 pl-3 dark:border-indigo-400/70"
                 title={examOptionLabel(selectedExam)}
               >
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedExam.title || selectedExam.taskTitle || "Cours"}</span>
-                {selectedExam.title && selectedExam.taskTitle && selectedExam.title !== selectedExam.taskTitle ? (
-                  <span className="truncate"> — {selectedExam.taskTitle}</span>
-                ) : null}
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Examen sélectionné
+                </span>
+                {(() => {
+                  const course = String(selectedExam.title || "").trim();
+                  const task = String(selectedExam.taskTitle || "").trim();
+                  const same = course && task && course.toLowerCase() === task.toLowerCase();
+                  if (course && task && !same) {
+                    return (
+                      <>
+                        <p className="mt-1 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{course}</p>
+                        <p className="mt-1 text-xs font-normal leading-snug text-slate-600 dark:text-slate-400">{task}</p>
+                      </>
+                    );
+                  }
+                  return (
+                    <p className="mt-1 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
+                      {course || task || "Examen"}
+                    </p>
+                  );
+                })()}
               </div>
             )}
-            <div className="mt-2 max-h-24 overflow-auto rounded-md border border-blue-100/70 bg-white/80 px-2 py-1 dark:border-indigo-400/20 dark:bg-slate-900/45">
-              {(examOptions || []).length === 0 ? (
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Aucune grille disponible.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {(examOptions || []).map((ex) => {
-                    const rid = String(ex.rubricId || "");
-                    const markers = (examGroupMarkers && examGroupMarkers[rid]) || [];
-                    return (
-                      <li key={`exam-marker-${rid}`} className="flex items-center justify-between gap-2 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedExamId(rid)}
-                          className={`truncate text-left ${
-                            String(selectedExamId || "") === rid
-                              ? "font-semibold text-blue-700 dark:text-blue-300"
-                              : "text-slate-700 hover:text-blue-700 dark:text-slate-300 dark:hover:text-blue-300"
-                          }`}
-                          title={examOptionLabel(ex)}
-                        >
-                          {ex.taskTitle || ex.title || "Examen"}
-                        </button>
-                        <span className="inline-flex items-center gap-1">
-                          {markers.slice(0, 4).map((m, idx) => (
-                            <MarkerBadge key={`${rid}-m-${idx}`} color={m.color} icon={m.icon} />
-                          ))}
-                          {markers.length > 4 ? <span className="text-[10px] text-slate-400">+{markers.length - 4}</span> : null}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:w-[420px]">
