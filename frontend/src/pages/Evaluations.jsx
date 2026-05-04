@@ -1792,6 +1792,9 @@ export default function Evaluations() {
                       {studentsForPicker.map((s) => {
                         const sid = String(s._id);
                         const checked = teamSelectedStudentIds.includes(sid);
+                        const isCorrectedForExam = Boolean(
+                          correctedStudentIdsForActiveExam && correctedStudentIdsForActiveExam.has(sid)
+                        );
                         return (
                           <label key={sid} className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs hover:bg-blue-50">
                             <input
@@ -1800,7 +1803,19 @@ export default function Evaluations() {
                               onChange={(e) => toggleTeamStudent(sid, e.target.checked)}
                               className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
                             />
-                            <span className="truncate">{studentDisplayName(s)}</span>
+                            <span className="min-w-0 flex-1 truncate">{studentDisplayName(s)}</span>
+                            {form.rubric && (
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  isCorrectedForExam
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-amber-100 text-amber-900"
+                                }`}
+                                title={isCorrectedForExam ? "Corrigé pour cet examen" : "Pas encore corrigé pour cet examen"}
+                              >
+                                {isCorrectedForExam ? "Corrigé" : "À corriger"}
+                              </span>
+                            )}
                           </label>
                         );
                       })}
