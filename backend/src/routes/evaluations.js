@@ -12,11 +12,6 @@ const { studentFullNameFromDoc } = require("../utils/studentName");
 const router = express.Router();
 router.use(auth);
 
-const markerHex = z.union([
-  z.literal(""),
-  z.string().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "Couleur marqueur invalide"),
-]);
-
 const schema = z.object({
   studentName: z.string().min(1),
   studentId: z.string().optional(),
@@ -27,9 +22,25 @@ const schema = z.object({
   generalComment: z.string().optional(),
   rubric: z.string().min(1),
   generateAiSummary: z.boolean().optional(),
-  markerColor: markerHex.optional(),
-  markerIcon: z.string().trim().max(80).optional(),
+  // Optionnels: ne doivent jamais bloquer l’enregistrement d’une évaluation.
+  markerColor: z.string().optional(),
+  markerIcon: z.string().optional(),
 });
+
+function normalizeMarkerColor(raw) {
+  if (raw == null) return "";
+  const v = String(raw).trim();
+  if (!v) return "";
+  // Supporte "#rrggbb", "#rgb" ou "rrggbb"/"rgb"
+  const noHash = v.startsWith("#") ? v.slice(1) : v;
+  if (/^([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(noHash)) return `#${noHash}`;
+  return "";
+}
+
+function normalizeMarkerIcon(raw) {
+  if (raw == null) return "";
+  return String(raw).trim().slice(0, 80);
+}
 
 router.get("/", async (req, res) => {
   const page = Number(req.query.page || 1);
@@ -47,6 +58,8 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const payload = schema.parse(req.body);
+    payload.markerColor = normalizeMarkerColor(payload.markerColor);
+    payload.markerIcon = normalizeMarkerIcon(payload.markerIcon);
     if (payload.studentId) {
       const st = await Student.findOne({ _id: payload.studentId, createdBy: req.user._id }).lean();
       if (st) payload.studentName = studentFullNameFromDoc(st);
@@ -210,6 +223,8 @@ router.put("/:id", async (req, res) => {
     if (!item) return res.status(404).json({ message: "Evaluation introuvable" });
     if (req.user.role !== "admin" && item.owner.toString() !== req.user._id.toString()) return res.status(403).json({ message: "Acces refuse" });
     const payload = schema.partial().parse(req.body);
+    if (Object.prototype.hasOwnProperty.call(payload, "markerColor")) payload.markerColor = normalizeMarkerColor(payload.markerColor);
+    if (Object.prototype.hasOwnProperty.call(payload, "markerIcon")) payload.markerIcon = normalizeMarkerIcon(payload.markerIcon);
     if (payload.studentId === "") {
       payload.studentId = undefined; // Force unsetting or ignoring
       item.studentId = undefined;

@@ -13,9 +13,14 @@ const adminSmtpRoutes = require("./routes/adminSmtp");
 const groupStyleRoutes = require("./routes/groupStyles");
 
 const app = express();
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
-app.use(express.json({ limit: "1mb" }));
 const isProd = process.env.NODE_ENV === "production";
+// En dev, refléter l’Origin (Vite 5173, autre port) pour éviter les blocages CORS si FRONTEND_ORIGIN ne matche pas.
+app.use(
+  cors({
+    origin: isProd ? process.env.FRONTEND_ORIGIN || "*" : true,
+  })
+);
+app.use(express.json({ limit: "1mb" }));
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: isProd ? 300 : 5000,

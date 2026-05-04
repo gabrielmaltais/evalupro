@@ -382,7 +382,8 @@ export default function Evaluations() {
         api.getStudentGroupDashboard(),
         api.getEmailTargets(),
         api.listEmailDeliveries(),
-        api.listGroupStyles(),
+        // Ne doit pas bloquer la page "Évaluations" si l’API est indisponible.
+        api.listGroupStyles().catch(() => []),
       ]);
       setItems(evaluations.items || []);
       setRubrics(rubricList);
