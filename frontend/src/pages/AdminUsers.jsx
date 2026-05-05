@@ -247,7 +247,14 @@ export default function AdminUsers() {
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.user} onChange={(e) => setSmtpForm({ ...smtpForm, user: e.target.value })} />
             </label>
             <label className="text-sm">Mot de passe SMTP
-              <input type="password" className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.password} onChange={(e) => setSmtpForm({ ...smtpForm, password: e.target.value })} placeholder="Laisser vide pour conserver l'existant" />
+              <input
+                type="password"
+                autoComplete="new-password"
+                className="mt-1 w-full border rounded-lg px-3 py-2"
+                value={smtpForm.password}
+                onChange={(e) => setSmtpForm({ ...smtpForm, password: e.target.value })}
+                placeholder="Laisser vide pour conserver l'existant"
+              />
             </label>
             <label className="text-sm">Nom expéditeur (tests / secours)
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.fromName} onChange={(e) => setSmtpForm({ ...smtpForm, fromName: e.target.value })} />

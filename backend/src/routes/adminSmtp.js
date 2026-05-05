@@ -38,9 +38,17 @@ router.put("/smtp-config", async (req, res) => {
   try {
     const payload = smtpSchema.parse(req.body);
     const current = await getActiveSmtpConfig();
-    const nextEncrypted = payload.password
-      ? encryptSecret(payload.password)
-      : current?.passwordEncrypted;
+    let nextEncrypted = current?.passwordEncrypted;
+    if (payload.password) {
+      try {
+        nextEncrypted = encryptSecret(payload.password);
+      } catch (err) {
+        // En production, un navigateur peut auto-remplir le champ password.
+        // Si une config chiffrée existe déjà, on conserve le secret existant
+        // au lieu de bloquer toute la sauvegarde des autres champs SMTP.
+        if (!nextEncrypted) throw err;
+      }
+    }
 
     if (!nextEncrypted) {
       return res.status(400).json({ message: "Mot de passe SMTP requis pour la premiere configuration." });
