@@ -1625,9 +1625,9 @@ export default function Evaluations() {
         )}
 
         {evalPageTab === "corriger" && (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* LEFT COLUMN: Evaluation Form */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="order-2 space-y-6 lg:order-1 lg:col-span-8">
           {!canEditEvaluation && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200">
               Sélectionnez un étudiant pour commencer la correction. Les champs d&apos;évaluation restent verrouillés tant qu&apos;aucun étudiant n&apos;est choisi.
@@ -1833,7 +1833,7 @@ export default function Evaluations() {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:sticky lg:top-24 lg:self-start space-y-6 h-fit">
+        <div className="order-1 h-fit space-y-6 lg:order-2 lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:sticky lg:top-24 lg:self-start">
           <div className="space-y-6">
 
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center relative overflow-visible isolate">
@@ -1910,17 +1910,17 @@ export default function Evaluations() {
                   </div>
                 )}
               </div>
-              <h2 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-2">Note Finale</h2>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-gray-500">Note Finale</h2>
               <div className="flex items-end justify-center gap-1 mb-4">
-                <span className="text-6xl font-extrabold text-gray-900 tracking-tighter">{Math.round(totalScore * 10) / 10}</span>
-                <span className="text-2xl font-medium text-gray-400 mb-2">/ {totalMax}</span>
+                <span className="text-6xl font-extrabold tracking-tighter text-slate-950 sm:text-gray-900">{Math.round(totalScore * 10) / 10}</span>
+                <span className="mb-2 text-2xl font-medium text-slate-600 sm:text-gray-400">/ {totalMax}</span>
               </div>
 
               <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6 overflow-hidden">
                 <div className={`h-2.5 rounded-full transition-all duration-500 ease-out ${barColor}`} style={{ width: `${pct}%` }}></div>
               </div>
 
-              <div className="relative z-0 h-48 w-full flex justify-center">
+              <div className="relative z-0 hidden h-48 w-full justify-center sm:flex">
                 <canvas ref={chartRef}></canvas>
               </div>
             </div>

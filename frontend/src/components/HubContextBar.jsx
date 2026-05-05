@@ -7,8 +7,6 @@ export default function HubContextBar({
   examOptions,
   stats,
 }) {
-  const selectedExam = (examOptions || []).find((ex) => String(ex.rubricId) === String(selectedExamId || ""));
-
   function examOptionLabel(ex) {
     const course = String(ex?.title || "").trim();
     const evaluation = String(ex?.taskTitle || "").trim();
@@ -38,46 +36,23 @@ export default function HubContextBar({
           </label>
           <label className="min-w-0">
             <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Examen</span>
-            <select
-              value={selectedExamId || ""}
-              onChange={(e) => setSelectedExamId(e.target.value)}
-              className="eval-form-control w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-indigo-500/35"
-            >
-              <option value="">— Choisir un examen —</option>
-              {(examOptions || []).map((ex) => (
-                <option key={`hub-exam-${ex.rubricId}-${ex.version ?? 1}`} value={String(ex.rubricId)}>
-                  {examOptionLabel(ex)}
-                </option>
-              ))}
-            </select>
-            {selectedExam && (
-              <div
-                className="mt-2.5 min-w-0 border-l-[3px] border-indigo-500/80 pl-3 dark:border-indigo-400/70"
-                title={examOptionLabel(selectedExam)}
+            <div className="relative">
+              <select
+                value={selectedExamId || ""}
+                onChange={(e) => setSelectedExamId(e.target.value)}
+                className="eval-form-control w-full appearance-none rounded-xl border border-blue-200 bg-white py-2 pl-3 pr-9 text-sm font-medium text-slate-900 shadow-sm dark:border-indigo-500/35"
               >
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Examen sélectionné
-                </span>
-                {(() => {
-                  const course = String(selectedExam.title || "").trim();
-                  const task = String(selectedExam.taskTitle || "").trim();
-                  const same = course && task && course.toLowerCase() === task.toLowerCase();
-                  if (course && task && !same) {
-                    return (
-                      <>
-                        <p className="mt-1 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{course}</p>
-                        <p className="mt-1 text-xs font-normal leading-snug text-slate-600 dark:text-slate-400">{task}</p>
-                      </>
-                    );
-                  }
-                  return (
-                    <p className="mt-1 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
-                      {course || task || "Examen"}
-                    </p>
-                  );
-                })()}
-              </div>
-            )}
+                <option value="">— Choisir un examen —</option>
+                {(examOptions || []).map((ex) => (
+                  <option key={`hub-exam-${ex.rubricId}-${ex.version ?? 1}`} value={String(ex.rubricId)}>
+                    {examOptionLabel(ex)}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                <i className="fa-solid fa-chevron-down text-[10px]" aria-hidden />
+              </span>
+            </div>
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:w-[420px]">
