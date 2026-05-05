@@ -1,10 +1,19 @@
 const crypto = require("crypto");
+const path = require("path");
+const dotenv = require("dotenv");
 const SmtpConfig = require("../models/SmtpConfig");
 
 const ALGO = "aes-256-gcm";
 
 function getKey() {
-  const keyRaw = process.env.SMTP_CONFIG_ENCRYPTION_KEY || "";
+  let keyRaw = process.env.SMTP_CONFIG_ENCRYPTION_KEY || "";
+  // Fallback de robustesse: certaines commandes bootstrappent l'app sans server.js
+  // (qui charge dotenv). On recharge ici backend/.env si nécessaire.
+  if (!keyRaw) {
+    dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+    keyRaw = process.env.SMTP_CONFIG_ENCRYPTION_KEY || "";
+  }
+  keyRaw = String(keyRaw).trim();
   if (!keyRaw) throw new Error("SMTP_CONFIG_ENCRYPTION_KEY manquante");
   return crypto.createHash("sha256").update(keyRaw).digest();
 }
