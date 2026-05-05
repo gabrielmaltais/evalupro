@@ -68,6 +68,21 @@ async function request(path, options = {}) {
   return response.json();
 }
 
+function parseFilenameFromContentDisposition(contentDispositionValue, fallback = "evaluation.pdf") {
+  const raw = String(contentDispositionValue || "");
+  const starMatch = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (starMatch?.[1]) {
+    try {
+      return decodeURIComponent(starMatch[1]).replace(/[/\\?%*:|"<>]/g, "_");
+    } catch {
+      // ignore decode errors and continue with other strategies
+    }
+  }
+  const plainMatch = raw.match(/filename="?([^"]+)"?/i);
+  if (plainMatch?.[1]) return plainMatch[1].replace(/[/\\?%*:|"<>]/g, "_");
+  return fallback;
+}
+
 export const api = {
   register: (payload) => request("/api/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
@@ -83,6 +98,35 @@ export const api = {
   },
   listEvaluationsByStudent: (studentId) => request(`/api/evaluations?studentId=${studentId}&limit=50`),
   getEvaluation: (id) => request(`/api/evaluations/${id}`),
+  downloadEvaluationPdf: async (id) => {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/api/evaluations/${id}/pdf`, {
+      method: "GET",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("eval_token");
+      window.location.href = "/login";
+      throw new Error("Session expirée.");
+    }
+    if (!response.ok) {
+      let errorMsg = "Erreur API";
+      try {
+        const data = await response.clone().json();
+        errorMsg = data.message || errorMsg;
+        if (data.details) errorMsg = `${errorMsg} (${data.details})`;
+      } catch {
+        errorMsg = (await response.text()) || errorMsg;
+      }
+      throw new Error(errorMsg);
+    }
+    const blob = await response.blob();
+    const filename = parseFilenameFromContentDisposition(response.headers.get("content-disposition"), "evaluation.pdf");
+    return { blob, filename };
+  },
   createEvaluation: (payload) => request("/api/evaluations", { method: "POST", body: JSON.stringify(payload) }),
   updateEvaluation: (id, payload) => request(`/api/evaluations/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteEvaluation: (id) => request(`/api/evaluations/${id}`, { method: "DELETE" }),

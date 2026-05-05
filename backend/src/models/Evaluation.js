@@ -18,7 +18,13 @@ const evaluationSchema = new mongoose.Schema(
     markerColor: { type: String, default: "" },
     markerIcon: { type: String, default: "" },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // Garantit que les Map (scores/subScores/comments) sortent en objets JSON
+    // côté API, ce qui évite les pertes de valeurs au rechargement frontend.
+    toJSON: { flattenMaps: true },
+    toObject: { flattenMaps: true },
+  }
 );
 
 module.exports = mongoose.model("Evaluation", evaluationSchema);

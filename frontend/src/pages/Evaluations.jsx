@@ -1349,7 +1349,18 @@ export default function Evaluations() {
   useEffect(() => {
     if (autoDownload && form._id) {
       setTimeout(() => {
-        generatePDF();
+        api.downloadEvaluationPdf(form._id).then(({ blob, filename }) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename || "evaluation.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        }).catch((err) => {
+          setError(String(err?.message || err));
+        });
         setAutoDownload(false);
       }, 500);
     }
@@ -1406,16 +1417,19 @@ export default function Evaluations() {
       if (form._id) {
         await api.updateEvaluation(form._id, { ...form, scores, subScores, comments });
         lastCommittedEvalRef.current = captureEvalSnapshot();
+        clearLocalDraft();
+        await refresh();
+        return form._id;
       } else {
         const res = await api.createEvaluation({ ...form, scores, subScores, comments });
         setForm(f => ({ ...f, _id: res._id }));
         lastCommittedEvalRef.current = captureEvalSnapshot({
           form: { ...form, _id: res._id },
         });
+        clearLocalDraft();
+        await refresh();
+        return res._id;
       }
-      clearLocalDraft();
-      await refresh();
-      return true;
     } catch (err) {
       persistLocalDraft();
       const raw = String(err.message || err);
@@ -1447,9 +1461,25 @@ export default function Evaluations() {
       return;
     }
     if (!form.studentName) { setError("Veuillez sélectionner un étudiant."); return; }
-    const success = await saveEval();
-    if (success) {
-      generatePDF();
+    const saved = await saveEval();
+    if (typeof saved !== "string") {
+      if (saved) {
+        setError("Impossible de télécharger le PDF pour ce mode d'enregistrement.");
+      }
+      return;
+    }
+    try {
+      const { blob, filename } = await api.downloadEvaluationPdf(saved);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "evaluation.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(String(err?.message || err));
     }
   }
 

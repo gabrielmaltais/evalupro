@@ -7,6 +7,7 @@ const Student = require("../models/Student");
 const { auth } = require("../middleware/auth");
 const { generateSummary } = require("../services/gemini");
 const { startBatchJob, getProgress, sendOneEvaluationEmail } = require("../services/emailBatchService");
+const { createEvaluationPdfBuffer, getEvaluationPdfFileName } = require("../services/evaluationPdfService");
 const { studentFullNameFromDoc } = require("../utils/studentName");
 
 const router = express.Router();
@@ -40,6 +41,25 @@ function normalizeMarkerColor(raw) {
 function normalizeMarkerIcon(raw) {
   if (raw == null) return "";
   return String(raw).trim().slice(0, 80);
+}
+
+function sumScoresMapLike(scoresLike) {
+  if (!scoresLike) return 0;
+  if (scoresLike instanceof Map) {
+    return Array.from(scoresLike.values()).reduce((sum, v) => sum + Number(v || 0), 0);
+  }
+  // MongooseMap expose values()
+  if (typeof scoresLike.values === "function" && scoresLike.$isMongooseMap) {
+    return Array.from(scoresLike.values()).reduce((sum, v) => sum + Number(v || 0), 0);
+  }
+  if (typeof scoresLike.toObject === "function") {
+    const obj = scoresLike.toObject();
+    return Object.values(obj || {}).reduce((sum, v) => sum + Number(v || 0), 0);
+  }
+  if (typeof scoresLike === "object") {
+    return Object.values(scoresLike).reduce((sum, v) => sum + Number(v || 0), 0);
+  }
+  return 0;
 }
 
 router.get("/", async (req, res) => {
@@ -206,6 +226,26 @@ router.post("/email-batches/:jobId/retry-failed", async (req, res) => {
   }
 });
 
+router.get("/:id/pdf", async (req, res) => {
+  try {
+    const item = await Evaluation.findById(req.params.id).populate("rubric");
+    if (!item) return res.status(404).json({ message: "Evaluation introuvable" });
+    if (req.user.role !== "admin" && item.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Acces refuse" });
+    }
+    if (!item.rubric) return res.status(400).json({ message: "Rubric introuvable pour cette evaluation" });
+
+    const pdfBuffer = await createEvaluationPdfBuffer(item, item.rubric);
+    const filename = getEvaluationPdfFileName(item, item.rubric);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    return res.status(400).json({ message: "Generation PDF impossible", details: error.message });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const item = await Evaluation.findById(req.params.id).populate("rubric");
@@ -236,8 +276,10 @@ router.put("/:id", async (req, res) => {
     }
 
     // Recalcul des totaux après modification pour garder le suivi/envois synchronisés.
-    const nextScores = item.scores ? Object.values(item.scores.toObject?.() || item.scores || {}) : [];
-    item.totalScore = nextScores.reduce((sum, v) => sum + Number(v || 0), 0);
+    // On priorise le payload si présent, sinon l'état courant de l'item.
+    item.totalScore = sumScoresMapLike(
+      Object.prototype.hasOwnProperty.call(payload, "scores") ? payload.scores : item.scores
+    );
     const rubricForTotals = await Rubric.findById(item.rubric).select("criteria");
     item.totalMax = (rubricForTotals?.criteria || []).reduce((sum, c) => sum + Number(c.weight || 0), 0);
 
