@@ -405,6 +405,8 @@ export default function Evaluations() {
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e.message || e)));
+    // Chargement initial seulement : `refresh` est recréée à chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1248,6 +1250,8 @@ export default function Evaluations() {
         return p;
       }, { replace: true });
     }
+    // `loadEvaluation` est recréée à chaque rendu; on ne réagit qu'aux paramètres d'URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, setSearchParams]);
 
   function openEmailSendModal() {
