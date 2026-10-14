@@ -215,7 +215,7 @@ export default function AdminRubric() {
       await api.archiveRubric(selectedId);
       startNew();
       await refresh();
-      setSuccess("Grille archivée. Tu peux la restaurer dans Classes > Archives.");
+      setSuccess("Grille archivée. Tu peux la restaurer dans Cours et groupes > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }

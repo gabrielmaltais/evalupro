@@ -26,7 +26,7 @@ function AppNav() {
   const role = getUserFromToken()?.role;
   const links = [
     { to: "/evaluations", label: "Évaluations", icon: "fa-graduation-cap", end: false },
-    { to: "/classes", label: "Classes", icon: "fa-school", end: false },
+    { to: "/classes", label: "Cours et groupes", icon: "fa-chalkboard-user", end: false },
     { to: "/account", label: "Mon compte", icon: "fa-user-gear", end: true },
   ];
   if (role === "admin") {
