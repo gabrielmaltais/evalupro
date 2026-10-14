@@ -6,6 +6,7 @@ const { connectDb } = require("./config/db");
 const port = process.env.PORT || 4000;
 
 const User = require("./models/User");
+const { autoArchiveExpiredSessions } = require("./services/sessionService");
 
 async function start() {
   await connectDb(process.env.MONGODB_URI);
@@ -31,6 +32,15 @@ async function start() {
   } catch (error) {
     console.error("Erreur lors de la vérification/création de l'administrateur par défaut:", error);
   }
+
+  // Archive les sessions échues sans attendre qu'un utilisateur ouvre la page (au démarrage, puis toutes les heures).
+  const runAutoArchive = () =>
+    autoArchiveExpiredSessions().then(
+      (ids) => ids.length && console.log("📦 %d session(s) archivée(s) automatiquement.", ids.length),
+      (error) => console.error("Archivage automatique des sessions impossible:", error)
+    );
+  runAutoArchive();
+  setInterval(runAutoArchive, 60 * 60 * 1000).unref();
 
   app.listen(port, () => {
     console.log(`API demarree sur ${port}`);

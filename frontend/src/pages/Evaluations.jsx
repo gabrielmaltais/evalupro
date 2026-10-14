@@ -6,6 +6,7 @@ import HubContextBar from "../components/HubContextBar";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
+import { applyLevelToCriterion, matchLevel, taskPoints } from "../lib/rubricTemplate";
 
 function evalItemStudentId(it) {
   return evalStudentId(it);
@@ -200,7 +201,6 @@ export default function Evaluations() {
   const [error, setError] = useState("");
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
-  const pdfTemplateRef = useRef(null);
   const lastCommittedEvalRef = useRef("");
 
   function stableNormalize(value) {
@@ -253,7 +253,7 @@ export default function Evaluations() {
       return "";
     }
   });
-  const [groupDashboard, setGroupDashboard] = useState([]);
+  const [, setGroupDashboard] = useState([]);
   const [emailTargets, setEmailTargets] = useState({ groups: [], exams: [] });
   const [deliveries, setDeliveries] = useState([]);
   const [emailBatchConfig, setEmailBatchConfig] = useState({
@@ -603,7 +603,10 @@ export default function Evaluations() {
   }, [students]);
   const hubGroupKeys = Object.keys(hubGroupedStudents).sort();
 
-  const hubFilteredStudents = hubSelectedGroup ? hubGroupedStudents[hubSelectedGroup] || [] : students;
+  const hubFilteredStudents = useMemo(
+    () => (hubSelectedGroup ? hubGroupedStudents[hubSelectedGroup] || [] : students),
+    [hubSelectedGroup, hubGroupedStudents, students]
+  );
 
   const examsForSend = useMemo(() => {
     const exams = emailTargets.exams || [];
@@ -1038,7 +1041,7 @@ export default function Evaluations() {
   if (selectedRubric && selectedRubric.criteria) {
     selectedRubric.criteria.forEach((c) => {
       totalMax += c.weight || 0;
-      totalScore += scores[c.id || c._id] || 0;
+      totalScore += Math.min(Number(c.weight) || 0, Math.max(0, Number(scores[c.id || c._id]) || 0));
     });
   }
 
@@ -1120,7 +1123,7 @@ export default function Evaluations() {
         comments: data.comments || {},
       });
       window.scrollTo(0, 0);
-    } catch (e) {
+    } catch {
       setError("Impossible de charger l'évaluation.");
     }
   }
@@ -1210,7 +1213,7 @@ export default function Evaluations() {
         setComments({});
       }
       refresh();
-    } catch (e) {
+    } catch {
       setError("Erreur lors de la suppression");
     }
   }
@@ -1484,99 +1487,38 @@ export default function Evaluations() {
   }
 
   function handleScore(id, val) {
-    setScores(s => ({ ...s, [id]: parseFloat(val) }));
+    const n = parseFloat(val);
+    setScores(s => ({ ...s, [id]: Number.isFinite(n) ? n : 0 }));
   }
 
   function handleLevelClick(cid, criterion, lvl) {
-    const val = criterion.weight * lvl.maxPct;
-    setScores(s => ({ ...s, [cid]: parseFloat(val) }));
-
-    // Si le critère a des sous-critères, gérer les cases auto
-    if (criterion.subCriteria && criterion.subCriteria.length > 0) {
-      const sortedLevels = [...(criterion.levels || [])].sort((a, b) => a.maxPct - b.maxPct);
-      const isHighest = sortedLevels.length > 0 && lvl.maxPct >= sortedLevels[sortedLevels.length - 1].maxPct;
-      const isLowest = sortedLevels.length > 0 && lvl.maxPct <= sortedLevels[0].maxPct;
-
-      if (isHighest) {
-        // Cocher toutes les cases
-        const allChecked = {};
-        criterion.subCriteria.forEach(sc => { allChecked[sc.id] = true; });
-        setSubScores(prev => ({ ...prev, [cid]: allChecked }));
-      } else if (isLowest) {
-        // Décocher toutes les cases
-        setSubScores(prev => ({ ...prev, [cid]: {} }));
-      }
-      // Pour les niveaux intermédiaires, on laisse les cases telles quelles
+    const { score, taskPoints: filled } = applyLevelToCriterion(criterion, lvl);
+    if (filled) {
+      // La note du critère est la somme de ses tâches : le niveau les remplit proportionnellement.
+      setSubScores((prev) => ({ ...prev, [cid]: filled }));
+      setSubCriteriaTouched((t) => ({ ...t, [cid]: Object.fromEntries(Object.keys(filled).map((id) => [id, true])) }));
     }
+    setScores((sc) => ({ ...sc, [cid]: score }));
   }
 
-  function handleSubScore(cid, scId, checked, criterion) {
-    const newCState = { ...(subScores[cid] || {}), [scId]: checked };
+  // `value` : points obtenus pour la tâche (nombre), ou booléen pour l'ancien format (case à cocher).
+  function handleSubScore(cid, scId, value, criterion) {
+    const task = criterion.subCriteria.find((sc) => sc.id === scId);
+    const points = task ? taskPoints(task, value) : 0;
+    const newCState = { ...(subScores[cid] || {}), [scId]: points };
     setSubScores(prev => ({ ...prev, [cid]: newCState }));
     setSubCriteriaTouched((t) => ({
       ...t,
       [cid]: { ...(t[cid] || {}), [scId]: true },
     }));
 
-    // Recalculer le score en sommant les sous-critères cochés
+    // Recalculer le score en sommant les points obtenus aux tâches
     let total = 0;
     criterion.subCriteria.forEach(sc => {
-      if (newCState[sc.id]) total += sc.pts;
+      total += taskPoints(sc, newCState[sc.id]);
     });
     // Plafonner au poids maximal du critère
-    setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, total), criterion.weight) }));
-  }
-
-  function generatePDF() {
-    if (!window.html2pdf || !pdfTemplateRef.current) return;
-    const template = pdfTemplateRef.current;
-    const content = template.querySelector('#pdf-content');
-    if (!content) return;
-
-    const baseRubricTitle = (selectedRubric?.taskTitle || selectedRubric?.title || 'Evaluation').replace(/[^a-zA-Z0-9À-ÿ\s-]/g, '').trim().replace(/\s+/g, '_');
-    const baseStudentName = (form.studentName || 'Etudiant').replace(/[^a-zA-Z0-9À-ÿ\s-]/g, '').trim().replace(/\s+/g, '_');
-
-    // Rendu PDF hors-écran, ancré en haut pour éviter les pages blanches liées au scroll.
-    const previousStyle = template.getAttribute("style") || "";
-    template.classList.remove("hidden");
-    template.style.position = "fixed";
-    template.style.left = "-10000px";
-    template.style.top = "0";
-    template.style.width = "1200px";
-    template.style.zIndex = "-1";
-    template.style.pointerEvents = "none";
-    template.style.background = "#ffffff";
-    void template.offsetWidth; // force reflow
-
-    const opt = {
-      margin: 0.5,
-      filename: `${baseRubricTitle}-${baseStudentName}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        scrollX: 0,
-        // Le template est rendu en position fixe (top=0) hors-écran.
-        // Ne PAS compenser avec le scroll de la page, sinon le haut du PDF peut être croppé.
-        scrollY: 0,
-      },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-      pagebreak: { mode: ['css'], avoid: ['h3'] }
-    };
-
-    window
-      .html2pdf()
-      .set(opt)
-      .from(content)
-      .save()
-      .finally(() => {
-        if (previousStyle) {
-          template.setAttribute("style", previousStyle);
-        } else {
-          template.removeAttribute("style");
-        }
-        template.classList.add("hidden");
-      });
+    setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, Number(total.toFixed(2))), criterion.weight) }));
   }
 
   const pageSubtitle = useMemo(() => {
@@ -1643,11 +1585,7 @@ export default function Evaluations() {
               let descText = "En attente d'évaluation...";
               if (currentScore > 0 || scores[cid] === 0) {
                 if (c.levels && c.levels.length > 0) {
-                  const sortedLevels = [...c.levels].sort((a, b) => a.maxPct - b.maxPct);
-                  let matchedLevel = sortedLevels[0];
-                  for (const lvl of sortedLevels) {
-                    if (pctC >= lvl.maxPct) matchedLevel = lvl;
-                  }
+                  const matchedLevel = matchLevel(c.levels, pctC);
                   descText = matchedLevel.desc || "Score attribué";
                 } else {
                   descText = "Score attribué";
@@ -1680,36 +1618,60 @@ export default function Evaluations() {
                           <div className={`grid gap-2 ${c.levels.length === 2 ? 'grid-cols-2' : c.levels.length === 4 ? 'grid-cols-2 md:grid-cols-4' : c.levels.length === 5 ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-3'}`}>
                             {c.levels.map((lvl, lnum) => {
                               const colorType = lvl.maxPct < 0.5 ? 'red' : lvl.maxPct < 0.8 ? 'yellow' : 'green';
+                              const isCurrentLevel = (currentScore > 0 || scores[cid] === 0) && matchLevel(c.levels, pctC) === lvl;
                               const btnClass = colorType === 'red' ? 'border-red-200 text-red-600 hover:bg-red-50' : colorType === 'yellow' ? 'border-yellow-300 text-yellow-600 hover:bg-yellow-50' : 'border-green-200 text-green-600 hover:bg-green-50';
                               return (
-                                <button key={lnum} disabled={!canEditEvaluation} onClick={() => handleLevelClick(cid, c, lvl)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} leading-tight disabled:opacity-50 disabled:cursor-not-allowed`}>
+                                <button key={lnum} disabled={!canEditEvaluation} onClick={() => handleLevelClick(cid, c, lvl)} className={`w-full py-2 px-1 text-xs font-semibold rounded border transition ${btnClass} ${isCurrentLevel ? 'ring-2 ring-offset-1 ring-blue-400 bg-blue-50/60 dark:bg-white/10' : ''} leading-tight disabled:opacity-50 disabled:cursor-not-allowed`} aria-pressed={isCurrentLevel}>
                                   {lvl.label}
                                 </button>
                               );
                             })}
                           </div>
                         )}
-                        <div className="relative pt-4 pb-2">
-                          <input disabled={!canEditEvaluation} type="range" min="0" max={c.weight || 10} step="0.5" value={currentScore} className="w-full h-2 accent-blue-600 cursor-pointer disabled:cursor-not-allowed" onChange={e => handleScore(cid, e.target.value)} />
-                        </div>
+                        {!(c.subCriteria && c.subCriteria.length > 0) && (
+                          <div className="relative pt-4 pb-2">
+                            <input disabled={!canEditEvaluation} type="range" min="0" max={c.weight || 10} step="0.5" value={currentScore} className="w-full h-2 accent-blue-600 cursor-pointer disabled:cursor-not-allowed" onChange={e => handleScore(cid, e.target.value)} />
+                          </div>
+                        )}
 
                         {c.subCriteria && c.subCriteria.length > 0 && (
                           <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2">
                             {c.subCriteria.map(sc => {
-                              const isChecked = subScores[cid]?.[sc.id] || false;
+                              const earned = taskPoints(sc, subScores[cid]?.[sc.id]);
+                              const maxPts = Number(sc.pts) || 0;
+                              const isFull = maxPts > 0 && earned >= maxPts;
+                              const touched = subCriteriaTouched[cid]?.[sc.id];
+                              const step = maxPts > 0 && maxPts <= 2 ? 0.25 : 0.5;
+                              const quick = [["0", 0], ["½", Number((maxPts / 2).toFixed(2))], ["Max", maxPts]];
                               return (
-                                <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : 'border-transparent hover:border-gray-100 hover:bg-gray-50 dark:hover:border-white/10 dark:hover:bg-white/[0.04]'}`}>
-                                  <input disabled={!canEditEvaluation} type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0 dark:border-slate-500 dark:bg-slate-800 disabled:cursor-not-allowed" />
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className={`text-sm ${isChecked ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
-                                    <span className="text-xs text-slate-600 dark:text-slate-300">Valeur : {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
-                                    {!isChecked && sc.feedback && subCriteriaTouched[cid]?.[sc.id] && (
-                                      <p className="text-xs text-red-700 dark:text-red-200 mt-1 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
-                                        ⚠ {sc.feedback}
-                                      </p>
-                                    )}
+                                <div key={sc.id} className={`flex flex-col gap-1.5 p-2 rounded border ${isFull ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : earned > 0 ? 'border-amber-200 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-950/20' : 'border-transparent'}`}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <span className={`text-sm min-w-0 ${isFull ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      {quick.map(([lbl, val]) => (
+                                        <button key={lbl} type="button" disabled={!canEditEvaluation} onClick={() => handleSubScore(cid, sc.id, val, c)} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold transition disabled:cursor-not-allowed ${earned === val && touched ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600'}`}>{lbl}</button>
+                                      ))}
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={maxPts}
+                                        step={step}
+                                        disabled={!canEditEvaluation}
+                                        value={touched || earned > 0 ? earned : ""}
+                                        placeholder="0"
+                                        onChange={e => handleSubScore(cid, sc.id, e.target.value === "" ? 0 : Number(e.target.value), c)}
+                                        className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs text-center outline-none focus:ring-1 focus:ring-purple-400 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                                        aria-label={`Points pour ${sc.label}`}
+                                      />
+                                      <span className="text-xs text-slate-600 dark:text-slate-300">/ {maxPts}</span>
+                                    </div>
                                   </div>
-                                </label>
+                                  {earned < maxPts && sc.feedback && touched && (
+                                    <p className="text-xs text-red-700 dark:text-red-200 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
+                                      ⚠ {sc.feedback}
+                                    </p>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -1722,7 +1684,7 @@ export default function Evaluations() {
                           const missingFeedbacks = c.subCriteria
                             .filter(
                               (sc) =>
-                                !subScores[cid]?.[sc.id] && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
+                                taskPoints(sc, subScores[cid]?.[sc.id]) < (Number(sc.pts) || 0) && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
                             )
                             .map((sc) => sc.feedback);
                           return missingFeedbacks.length > 0 && (
@@ -2586,121 +2548,6 @@ export default function Evaluations() {
         </div>
       )}
 
-      {/* PDF TEMPLATE */}
-      <div ref={pdfTemplateRef} className="hidden">
-        <div
-          id="pdf-content"
-          className="pdf-forced-light p-8 bg-white max-w-4xl mx-auto text-gray-800"
-        >
-          <div className="flex justify-between items-end border-b-2 border-gray-800 pb-4 mb-8">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{selectedRubric?.title}</h1>
-              <p className="text-sm uppercase tracking-wide text-gray-500 mt-1">{selectedRubric?.taskTitle}</p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-gray-500">Note Finale</div>
-              <div className="text-4xl font-black text-blue-600">{Math.round(totalScore * 10) / 10}/{totalMax}</div>
-            </div>
-          </div>
-          <div className="flex justify-between mb-8 bg-gray-50 p-4 rounded border border-gray-200">
-            <div>
-              <span className="block text-xs text-gray-400 uppercase">Étudiant</span>
-              <strong className="text-lg">{form.studentName || 'Non spécifié'}</strong>
-            </div>
-            {showDatePdf && (
-              <div className="text-right">
-                <span className="block text-xs text-gray-400 uppercase">Date</span>
-                <strong>{form.date}</strong>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            {selectedRubric?.criteria?.map((c, i) => {
-              const cid = c.id || c._id || String(i);
-              const s = scores[cid] || 0;
-
-              const pctC = s / (c.weight || 1);
-              let descText = "Non évalué";
-              if (s > 0 || scores[cid] === 0) {
-                if (c.levels && c.levels.length > 0) {
-                  const sortedLevels = [...c.levels].sort((a, b) => a.maxPct - b.maxPct);
-                  let matchedLevel = sortedLevels[0];
-                  for (const lvl of sortedLevels) {
-                    if (pctC >= lvl.maxPct) matchedLevel = lvl;
-                  }
-                  descText = matchedLevel.desc || "Score attribué";
-                } else {
-                  descText = "Score attribué";
-                }
-              }
-
-              return (
-                <div key={cid} className="flex border-b border-gray-100 py-3">
-                  <div className={`w-2 bg-blue-500 mr-3 rounded-full ${c.color?.replace('border-', 'bg-')}`}></div>
-                  <div className="flex-grow">
-                    <div className="flex justify-between items-baseline mb-1">
-                      <h4 className="font-bold text-gray-800 text-sm">{c.title}</h4>
-                      <span className="font-mono font-bold text-gray-900">{s} <span className="text-gray-400 text-xs">/ {c.weight}</span></span>
-                    </div>
-                    {c.competencyElement && (
-                      <p className="text-[11px] text-indigo-700 mb-1">Élément de compétence: {c.competencyElement}</p>
-                    )}
-                    <p className="text-xs text-gray-600 mb-1">{descText}</p>
-                    {c.subCriteria && c.subCriteria.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {c.subCriteria.map(sc => {
-                          const isChecked = subScores[cid]?.[sc.id] || false;
-                          return (
-                            <div key={sc.id}>
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className={`inline-block w-3.5 h-3.5 border rounded-sm flex-shrink-0 text-center leading-3 ${isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 bg-white'}`}>{isChecked ? '✓' : ''}</span>
-                                <span className={isChecked ? "text-gray-800 font-medium" : "text-gray-600"}>
-                                  {sc.label} ({sc.pts > 0 ? "+" : ""}
-                                  {sc.pts} pts)
-                                </span>
-                              </div>
-                              {!isChecked && sc.feedback && (
-                                <p className="text-xs text-red-700 ml-6 italic mt-0.5 rounded border border-red-200 bg-red-50 px-2 py-1 leading-snug">
-                                  ⚠ {sc.feedback}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {comments[cid] && <div className="mt-1 text-xs text-gray-500 italic">Note: {comments[cid]}</div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {form.generalComment && (
-            <div className="mt-8 border-t border-gray-200 pt-6">
-              <h3 className="text-sm font-bold text-gray-900 uppercase mb-2">Synthèse de l'enseignant</h3>
-              <div className="text-sm leading-relaxed text-gray-700 bg-gray-50 p-4 rounded text-justify whitespace-pre-wrap">{form.generalComment}</div>
-            </div>
-          )}
-
-          {/* Rétroaction finale basée sur le pourcentage */}
-          {selectedRubric?.feedbackMessages && selectedRubric.feedbackMessages.length > 0 && (() => {
-            const finalPct = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
-            const match = selectedRubric.feedbackMessages.find(fm => finalPct >= fm.minPct && finalPct <= fm.maxPct);
-            if (!match) return null;
-            const msgColor = finalPct < 60 ? 'border-l-red-400 bg-red-50' : finalPct < 75 ? 'border-l-orange-400 bg-orange-50' : finalPct < 85 ? 'border-l-yellow-400 bg-yellow-50' : finalPct < 95 ? 'border-l-blue-400 bg-blue-50' : 'border-l-green-400 bg-green-50';
-            const textColor = finalPct < 60 ? 'text-red-700' : finalPct < 75 ? 'text-orange-700' : finalPct < 85 ? 'text-yellow-700' : finalPct < 95 ? 'text-blue-700' : 'text-green-700';
-            return (
-              <div className={`mt-8 border-t border-gray-200 pt-6`}>
-                <div className={`p-4 rounded-lg border-l-4 ${msgColor}`}>
-                  <p className={`text-sm font-semibold ${textColor}`}>{match.message}</p>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      </div>
     </>
   );
 }

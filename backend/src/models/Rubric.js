@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const levelSchema = new mongoose.Schema(
   {
     label: { type: String, required: true },
+    // Note proposée (0-1) quand le correcteur clique sur le niveau.
     maxPct: { type: Number, required: true, min: 0, max: 1 },
+    // Pourcentage (0-1) à partir duquel le niveau s'applique; absent = maxPct (anciennes grilles).
+    minPct: { type: Number, min: 0, max: 1 },
     desc: { type: String, required: true },
   },
   { _id: false }
@@ -41,6 +44,8 @@ const rubricSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: false },
     // Active l'affichage du champ "élément de compétence" dans l'éditeur de grille.
     linkCompetencies: { type: Boolean, default: false },
+    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
+    archivedAt: { type: Date, default: null },
     group: { type: String, default: "" },
     groups: { type: [String], default: [] },
     criteria: { type: [criterionSchema], default: [] },

@@ -39,7 +39,7 @@ export default function Login() {
         if (parsed.message === "Email deja utilise") {
             errorMsg = "Cet email est déjà utilisé. Veuillez vous connecter.";
         }
-      } catch (e) {
+      } catch {
         // Not JSON
       }
       setError(errorMsg);

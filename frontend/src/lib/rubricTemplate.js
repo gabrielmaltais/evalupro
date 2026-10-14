@@ -122,11 +122,15 @@ function pickSubCriteria(raw, matchingQuestion) {
 
 function normalizeLevels(rawLevels) {
   const source = asArray(rawLevels).length ? asArray(rawLevels) : DEFAULT_LEVELS;
-  const levels = source.map((level, index) => ({
-    label: asText(firstDefined(level.label, level.name, level.nom, level.titre), DEFAULT_LEVELS[index]?.label || `Niveau ${index + 1}`),
-    maxPct: normalizePct(firstDefined(level.maxPct, level.max, level.percent, level.pct, level.pourcentage, level.score), DEFAULT_LEVELS[index]?.maxPct ?? 1),
-    desc: asText(firstDefined(level.desc, level.description, level.feedback, level.message, level.details), DEFAULT_LEVELS[index]?.desc || "Description du niveau."),
-  }));
+  const levels = source.map((level, index) => {
+    const minPct = normalizePct(firstDefined(level.minPct, level.seuilMin, level.seuil), undefined);
+    return {
+      label: asText(firstDefined(level.label, level.name, level.nom, level.titre), DEFAULT_LEVELS[index]?.label || `Niveau ${index + 1}`),
+      maxPct: normalizePct(firstDefined(level.maxPct, level.max, level.percent, level.pct, level.pourcentage, level.score), DEFAULT_LEVELS[index]?.maxPct ?? 1),
+      ...(minPct !== undefined ? { minPct } : {}),
+      desc: asText(firstDefined(level.desc, level.description, level.feedback, level.message, level.details), DEFAULT_LEVELS[index]?.desc || "Description du niveau."),
+    };
+  });
 
   const sorted = levels
     .filter((level) => level.label && level.desc)
@@ -195,7 +199,9 @@ export function normalizeImportedRubric(json, options = {}) {
       const pts = parsePoints(firstDefined(item.pts, item.points, item.pointage, item.weight, item.poids, item.score));
       return sum + (Number.isFinite(pts) ? pts : 0);
     }, 0);
-    const weight = explicitWeights[index] ?? (subCriteriaPointTotal > 0 ? subCriteriaPointTotal : fallbackWeights[index]);
+    // Une pondération absente ou laissée à 0 (substitut du gabarit) se déduit du total des tâches.
+    const explicitWeight = explicitWeights[index] > 0 ? explicitWeights[index] : undefined;
+    const weight = explicitWeight ?? (subCriteriaPointTotal > 0 ? subCriteriaPointTotal : explicitWeights[index] ?? fallbackWeights[index]);
 
     return {
       id: criterionId,
@@ -204,6 +210,7 @@ export function normalizeImportedRubric(json, options = {}) {
         `Critère ${index + 1}`,
       ),
       weight: Number(Math.max(0, weight).toFixed(2)),
+      competencyElement: asText(firstDefined(criterion.competencyElement, criterion.elementCompetence, criterion.élémentCompétence), ""),
       color: VALID_COLORS.has(criterion.color) ? criterion.color : options.defaultColor || "border-blue-500",
       levels: normalizeLevels(firstDefined(criterion.levels, criterion.niveaux, criterion.performanceLevels, criterion.descriptors)),
       subCriteria: normalizeSubCriteria(rawSubCriteria, criterionId, Math.max(0, weight), usedIds),
@@ -216,10 +223,101 @@ export function normalizeImportedRubric(json, options = {}) {
       title: asText(firstDefined(json.title, json.titre, json.courseTitle, json.cours, json.nomCours, json.rubric?.title, json.grille?.title, json.grille?.titre), "Grille importée"),
       taskTitle: asText(firstDefined(json.taskTitle, json.task, json.tache, json.tâche, json.assignment, json.examen, json.rubric?.taskTitle, json.grille?.taskTitle, json.grille?.tache, json.grille?.tâche), "Travail final"),
       groups: Array.isArray(json.groups) && json.groups.length ? json.groups.map((g) => String(g).trim()).filter(Boolean) : (json.group ? [String(json.group).trim()].filter(Boolean) : []),
+      linkCompetencies: json.linkCompetencies === true || criteria.some((c) => c.competencyElement),
       criteria,
       feedbackMessages: normalizeFeedbackMessages(json.feedbackMessages, options.defaultFeedbackMessages),
     },
+    aValider: asArray(json.aValider).map((item) => String(item).trim()).filter(Boolean),
+    warnings: checkRubricSums(criteria),
   };
+}
+
+/**
+ * Lit le JSON collé par l'utilisateur, même si l'IA l'a entouré de ```json ... ``` ou de texte.
+ * Retourne l'objet, ou lève une erreur si aucun JSON valide n'est trouvé.
+ */
+export function parseAiJson(text) {
+  const raw = String(text ?? "").trim().replace(/^\uFEFF/, "");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const candidates = [fenced?.[1], start >= 0 && end > start ? raw.slice(start, end + 1) : null].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        /* essai suivant */
+      }
+    }
+    throw new Error("JSON invalide");
+  }
+}
+
+/** Total des points des tâches d'un critère. */
+export function tasksTotal(criterion) {
+  return Number(asArray(criterion?.subCriteria).reduce((sum, t) => sum + (Number(t.pts) || 0), 0).toFixed(2));
+}
+
+/** Seuil (0-1) à partir duquel un niveau s'applique. `maxPct` sert de seuil pour les anciennes grilles. */
+export function levelThreshold(level) {
+  return Number.isFinite(level?.minPct) ? level.minPct : level?.maxPct ?? 0;
+}
+
+/** Niveau correspondant à un pourcentage (0-1) du poids d'un critère. */
+export function matchLevel(levels, pct) {
+  const sorted = [...(levels || [])].sort((a, b) => levelThreshold(a) - levelThreshold(b));
+  let matched = sorted[0];
+  for (const lvl of sorted) {
+    if (pct >= levelThreshold(lvl)) matched = lvl;
+  }
+  return matched;
+}
+
+/**
+ * Effet d'un clic sur un niveau : note du critère et, s'il a des tâches, points de chacune
+ * (la note du critère est alors la somme de ses tâches). Arrondi au quart de point.
+ */
+export function applyLevelToCriterion(criterion, level) {
+  const weight = Math.max(0, Number(criterion?.weight) || 0);
+  const pct = clampNumber(level?.maxPct, 0, 1, 0);
+  const quarter = (n) => Math.round(n * 4) / 4;
+  const tasks = asArray(criterion?.subCriteria);
+  if (!tasks.length) {
+    return { score: pct >= 1 ? weight : Math.min(weight, quarter(weight * pct)), taskPoints: null };
+  }
+  const points = {};
+  let total = 0;
+  tasks.forEach((task) => {
+    const max = Math.max(0, Number(task.pts) || 0);
+    points[task.id] = pct >= 1 ? max : Math.min(max, quarter(max * pct));
+    total += points[task.id];
+  });
+  return { score: Math.min(weight, Number(total.toFixed(2))), taskPoints: points };
+}
+
+/** Points obtenus pour une tâche : `true` (ancien format) = max, nombre = points partiels, sinon 0. */
+export function taskPoints(task, value) {
+  const max = Number(task?.pts) || 0;
+  if (value === true) return max;
+  const n = Number(value);
+  if (!Number.isFinite(n) || value === false || value === null || value === "") return 0;
+  return clampNumber(n, Math.min(0, max), Math.max(0, max), 0);
+}
+
+/** Écarts entre les points des tâches et le poids de chaque critère (affichés avant l'enregistrement). */
+export function checkRubricSums(criteria) {
+  const warnings = [];
+  asArray(criteria).forEach((c) => {
+    if (!asArray(c.subCriteria).length) return;
+    const total = tasksTotal(c);
+    if (Math.abs(total - (Number(c.weight) || 0)) > 0.01) {
+      warnings.push(`« ${c.title} » : les tâches totalisent ${total} pts pour une pondération de ${c.weight} pts.`);
+    }
+  });
+  return warnings;
 }
 
 export function normalizeFeedbackMessages(messages, fallback = []) {

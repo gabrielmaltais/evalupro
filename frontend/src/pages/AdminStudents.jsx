@@ -78,8 +78,7 @@ export default function AdminStudents() {
     acc[g].push(s);
     return acc;
   }, {}), [students]);
-  const groupKeys = Object.keys(groupedStudents).sort();
-  const allGroupKeys = Array.from(new Set([...groupKeys, ...draftGroups])).sort();
+
   const displayedGroupDashboard = useMemo(() => {
     const map = new Map((groupDashboard || []).map((g) => [g.group, g]));
     draftGroups.forEach((g) => {
@@ -234,6 +233,18 @@ export default function AdminStudents() {
     }
   }
 
+  async function archiveGroup(groupName) {
+    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Sessions > Archives.`)) return;
+    try {
+      await api.archiveGroup(groupName);
+      if (selectedGroup === groupName) setSelectedGroup("");
+      setSuccess("Groupe archivé.");
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
   function openPurgeGroupModal(groupName) {
     if (groupName === "Sans groupe") return;
     setError("");
@@ -332,7 +343,7 @@ export default function AdminStudents() {
                             {g.students} étu. • {g.evaluations} évals.
                           </span>
                         </button>
-                        <div className="flex shrink-0 flex-col gap-0.5 self-start">
+                        <div className="flex shrink-0 flex-row flex-wrap gap-0.5 self-start sm:flex-col">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -344,6 +355,19 @@ export default function AdminStudents() {
                           >
                             Vider
                           </button>
+                          {g.group !== "Sans groupe" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                archiveGroup(g.group);
+                              }}
+                              className="rounded-lg px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-50 hover:underline"
+                              title="Archiver le groupe (conserve étudiants et évaluations)"
+                            >
+                              Archiver
+                            </button>
+                          )}
                           {g.group !== "Sans groupe" && (
                             <button
                               type="button"

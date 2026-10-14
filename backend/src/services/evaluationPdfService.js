@@ -1,24 +1,11 @@
 const PDFDocument = require("pdfkit");
-
-function toPlainObject(mapLike) {
-  if (!mapLike) return {};
-  if (mapLike instanceof Map) return Object.fromEntries(mapLike);
-  if (typeof mapLike.toObject === "function") return mapLike.toObject();
-  if (typeof mapLike === "object") return { ...mapLike };
-  return {};
-}
+const { toPlainObject, criterionKey, computeEvaluationTotals } = require("../utils/evaluationTotals");
 
 function sanitizeFilePart(v) {
   return String(v || "")
     .replace(/[^a-zA-Z0-9À-ÿ\s-]/g, "")
     .trim()
     .replace(/\s+/g, "_");
-}
-
-function criterionKey(criterion, index) {
-  if (criterion.id != null && criterion.id !== "") return String(criterion.id);
-  if (criterion._id != null) return String(criterion._id);
-  return String(index);
 }
 
 function getNumber(obj, key) {
@@ -42,16 +29,29 @@ function getSubBlock(subScores, cid) {
   return block;
 }
 
+function levelThreshold(level) {
+  return Number.isFinite(level && level.minPct) ? level.minPct : (level && level.maxPct) || 0;
+}
+
+// `true` (ancien format) = tous les points; nombre = points partiels; sinon 0.
+function taskPoints(task, value) {
+  const max = Number(task.pts) || 0;
+  if (value === true) return max;
+  const n = Number(value);
+  if (value === false || value === null || value === undefined || value === "" || !Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, Math.min(0, max)), Math.max(0, max));
+}
+
 function levelDescription(criterion, s, scoresObj, cid) {
   let descText = "Non évalué";
   const raw = getNumber(scoresObj, cid);
   if (s > 0 || raw === 0) {
     if (criterion.levels && criterion.levels.length > 0) {
       const pctC = s / (criterion.weight || 1);
-      const sortedLevels = [...criterion.levels].sort((a, b) => a.maxPct - b.maxPct);
+      const sortedLevels = [...criterion.levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
       let matchedLevel = sortedLevels[0];
       for (const lvl of sortedLevels) {
-        if (pctC >= lvl.maxPct) matchedLevel = lvl;
+        if (pctC >= levelThreshold(lvl)) matchedLevel = lvl;
       }
       descText = matchedLevel.desc || "Score attribué";
     } else {
@@ -62,14 +62,7 @@ function levelDescription(criterion, s, scoresObj, cid) {
 }
 
 function computeTotals(rubric, scoresObj) {
-  let totalMax = 0;
-  let totalScore = 0;
-  (rubric.criteria || []).forEach((c, i) => {
-    const cid = criterionKey(c, i);
-    totalMax += c.weight || 0;
-    totalScore += getScore(scoresObj, cid);
-  });
-  return { totalScore, totalMax };
+  return computeEvaluationTotals(rubric, scoresObj);
 }
 
 function pickFeedbackMessage(rubric, finalPct) {
@@ -96,6 +89,9 @@ function criterionStripeColor(criterion) {
     "border-purple-500": "#a855f7",
     "border-orange-500": "#f97316",
     "border-gray-500": "#6b7280",
+    "border-indigo-500": "#6366f1",
+    "border-cyan-500": "#06b6d4",
+    "border-yellow-500": "#eab308",
   };
   return map[raw] || "#3b82f6";
 }
@@ -252,8 +248,10 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
           ensureCursorSpaceForCriterion(18);
-          const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
-          const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
+          const earned = taskPoints(sc, subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)]);
+          const maxPts = Number(sc.pts) || 0;
+          const isChecked = earned >= maxPts && earned > 0;
+          const labelText = `${sc.label} (${earned}/${maxPts} pts)`;
           doc.font("Helvetica").fontSize(8);
           const labelH = doc.heightOfString(labelText, { width: labelW });
           const rowH = Math.max(chkSize, labelH);

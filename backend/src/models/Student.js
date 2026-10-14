@@ -10,6 +10,9 @@ const studentSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String },
     group: { type: String }, // optional group/class name
+    /** Session à laquelle appartient le groupe de l'étudiant; archivedAt = groupe archivé. */
+    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
+    archivedAt: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }
