@@ -199,7 +199,9 @@ export function normalizeImportedRubric(json, options = {}) {
       const pts = parsePoints(firstDefined(item.pts, item.points, item.pointage, item.weight, item.poids, item.score));
       return sum + (Number.isFinite(pts) ? pts : 0);
     }, 0);
-    const weight = explicitWeights[index] ?? (subCriteriaPointTotal > 0 ? subCriteriaPointTotal : fallbackWeights[index]);
+    // Une pondération absente ou laissée à 0 (substitut du gabarit) se déduit du total des tâches.
+    const explicitWeight = explicitWeights[index] > 0 ? explicitWeights[index] : undefined;
+    const weight = explicitWeight ?? (subCriteriaPointTotal > 0 ? subCriteriaPointTotal : explicitWeights[index] ?? fallbackWeights[index]);
 
     return {
       id: criterionId,
@@ -228,6 +230,35 @@ export function normalizeImportedRubric(json, options = {}) {
     aValider: asArray(json.aValider).map((item) => String(item).trim()).filter(Boolean),
     warnings: checkRubricSums(criteria),
   };
+}
+
+/**
+ * Lit le JSON collé par l'utilisateur, même si l'IA l'a entouré de ```json ... ``` ou de texte.
+ * Retourne l'objet, ou lève une erreur si aucun JSON valide n'est trouvé.
+ */
+export function parseAiJson(text) {
+  const raw = String(text ?? "").trim().replace(/^\uFEFF/, "");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const candidates = [fenced?.[1], start >= 0 && end > start ? raw.slice(start, end + 1) : null].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        /* essai suivant */
+      }
+    }
+    throw new Error("JSON invalide");
+  }
+}
+
+/** Total des points des tâches d'un critère. */
+export function tasksTotal(criterion) {
+  return Number(asArray(criterion?.subCriteria).reduce((sum, t) => sum + (Number(t.pts) || 0), 0).toFixed(2));
 }
 
 /** Seuil (0-1) à partir duquel un niveau s'applique. `maxPct` sert de seuil pour les anciennes grilles. */
@@ -259,7 +290,7 @@ export function checkRubricSums(criteria) {
   const warnings = [];
   asArray(criteria).forEach((c) => {
     if (!asArray(c.subCriteria).length) return;
-    const total = Number(c.subCriteria.reduce((sum, t) => sum + (Number(t.pts) || 0), 0).toFixed(2));
+    const total = tasksTotal(c);
     if (Math.abs(total - (Number(c.weight) || 0)) > 0.01) {
       warnings.push(`« ${c.title} » : les tâches totalisent ${total} pts pour une pondération de ${c.weight} pts.`);
     }

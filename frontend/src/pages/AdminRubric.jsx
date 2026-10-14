@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { normalizeImportedRubric } from "../lib/rubricTemplate";
+import { normalizeImportedRubric, parseAiJson, tasksTotal } from "../lib/rubricTemplate";
 import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES } from "../lib/aiTemplate";
 import PageSectionTitle from "../components/PageSectionTitle";
 
@@ -234,7 +234,7 @@ export default function AdminRubric() {
   function addSC(cIdx) {
     const newC = [...criteria];
     const newSC = [...(newC[cIdx].subCriteria || [])];
-    newSC.push({ id: Date.now().toString() + Math.random().toString(36).substr(2, 5), label: 'Nouveau point technique', pts: 1 });
+    newSC.push({ id: Date.now().toString() + Math.random().toString(36).substr(2, 5), label: 'Nouvelle tâche', pts: 1 });
     newC[cIdx] = { ...newC[cIdx], subCriteria: newSC };
     setCriteria(newC);
   }
@@ -329,7 +329,7 @@ export default function AdminRubric() {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const json = JSON.parse(evt.target.result);
+        const json = parseAiJson(evt.target.result);
         applyImportedRubric(json);
       } catch {
         setError("Erreur de lecture du fichier JSON.");
@@ -341,7 +341,7 @@ export default function AdminRubric() {
 
   function importFromPastedJson() {
     try {
-      const json = JSON.parse(pastedJsonText);
+      const json = parseAiJson(pastedJsonText);
       const ok = applyImportedRubric(json);
       if (ok) {
         setShowPasteJsonModal(false);
@@ -709,6 +709,24 @@ export default function AdminRubric() {
                          <textarea className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" rows="1" placeholder="⚠ Rétroaction (optionnel) — affichée à l'élève quand la tâche n'obtient pas tous ses points" value={sc.feedback || ''} onChange={e => updateSC(idx, scIdx, 'feedback', e.target.value)}></textarea>
                       </div>
                     ))}
+                    {c.subCriteria?.length > 0 && (() => {
+                      const total = tasksTotal(c);
+                      const ok = Math.abs(total - (Number(c.weight) || 0)) < 0.01;
+                      return (
+                        <div className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-xs ${ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+                          <span>
+                            <i className={`fa-solid mr-1.5 ${ok ? "fa-circle-check" : "fa-triangle-exclamation"}`}></i>
+                            Total des tâches : <strong>{total}</strong> / {c.weight} pts
+                            {!ok && " — les points des tâches doivent égaler la pondération du critère."}
+                          </span>
+                          {!ok && (
+                            <span className="flex gap-1.5">
+                              <button type="button" onClick={() => updateCriterion(idx, "weight", total)} className="rounded border border-red-300 bg-white px-2 py-0.5 font-semibold hover:bg-red-100">Pondération = {total}</button>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                 </div>
@@ -879,7 +897,7 @@ export default function AdminRubric() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-paste text-teal-600"></i> Importer un JSON collé</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Collez le contenu JSON complet de votre grille.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Collez la réponse de votre IA : le JSON est repéré automatiquement.</p>
               </div>
               <button onClick={() => setShowPasteJsonModal(false)} className="text-gray-400 hover:text-gray-600 text-xl"><i className="fa-solid fa-xmark"></i></button>
             </div>
@@ -888,7 +906,7 @@ export default function AdminRubric() {
                 rows={12}
                 value={pastedJsonText}
                 onChange={(e) => setPastedJsonText(e.target.value)}
-                placeholder='{"title":"...","taskTitle":"...","criteria":[...]}'
+                placeholder="Collez ici la réponse de l'IA (le JSON, avec ou sans ```json)"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-teal-400"
               />
             </div>

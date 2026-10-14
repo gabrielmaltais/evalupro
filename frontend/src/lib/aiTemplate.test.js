@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAITemplate, LEVEL_SCALES } from "./aiTemplate";
-import { checkRubricSums, matchLevel, normalizeImportedRubric, taskPoints } from "./rubricTemplate";
+import { checkRubricSums, matchLevel, normalizeImportedRubric, parseAiJson, taskPoints } from "./rubricTemplate";
 
 describe("gabarit IA", () => {
   it("produit un gabarit importable avec l'échelle choisie", () => {
@@ -64,5 +64,54 @@ describe("niveaux et tâches", () => {
       aValider: ["Q7 ambiguë", ""],
     });
     expect(result.aValider).toEqual(["Q7 ambiguë"]);
+  });
+});
+
+describe("réponse de l'IA : import de bout en bout", () => {
+  const aiAnswer = {
+    title: "Systèmes réseau",
+    taskTitle: "Examen final",
+    linkCompetencies: true,
+    criteria: [
+      {
+        id: "c1",
+        title: "Installer et administrer les services d'infrastructure réseau",
+        competencyElement: "Élément 2",
+        weight: 0,
+        color: "border-blue-500",
+        levels: LEVEL_SCALES[4].map((l) => ({ ...l, desc: `Niveau ${l.label}` })),
+        subCriteria: [
+          { id: "c1-sc1", label: "Q1 OPNsense", pts: 6.5, feedback: "Revoir les interfaces." },
+          { id: "c1-sc2", label: "Q2 Règles", pts: 8 },
+          { id: "c1-sc3", label: "Q3 Tests", pts: 5.5 },
+        ],
+      },
+      {
+        id: "c1",
+        title: "Planifier l'implantation de services infonuagiques",
+        weight: 10,
+        levels: LEVEL_SCALES[4].map((l) => ({ ...l, desc: `Niveau ${l.label}` })),
+        subCriteria: [{ id: "c1-sc1", label: "Q4 Plan", pts: 4 }, { id: "c1-sc2", label: "Q5 Coûts", pts: 5 }],
+      },
+    ],
+    aValider: ["Q12 couvre deux critères"],
+  };
+
+  it("déduit la pondération des tâches quand elle est laissée à 0 et évite les ids en double", () => {
+    const result = normalizeImportedRubric(aiAnswer);
+    expect(result.ok).toBe(true);
+    const [c1, c2] = result.rubric.criteria;
+    expect(c1.weight).toBe(20);
+    expect(c1.id).not.toBe(c2.id);
+    expect(new Set([...c1.subCriteria, ...c2.subCriteria].map((t) => t.id)).size).toBe(5);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/Planifier/);
+  });
+
+  it("lit un JSON entouré de ```json et de texte", () => {
+    const wrapped = "Voici la grille :\n```json\n" + JSON.stringify({ template_a_remplir: aiAnswer }) + "\n```\nBonne correction !";
+    expect(parseAiJson(wrapped).template_a_remplir.title).toBe("Systèmes réseau");
+    expect(parseAiJson("Résultat: " + JSON.stringify(aiAnswer) + " fin").title).toBe("Systèmes réseau");
+    expect(() => parseAiJson("pas du json")).toThrow();
   });
 });
