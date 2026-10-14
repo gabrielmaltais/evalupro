@@ -531,9 +531,9 @@ export default function AdminRubric() {
           {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm whitespace-pre-line text-emerald-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-check mr-2"></i>{success}</div>}
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               <h2 className="text-xl font-bold text-gray-800">Paramètres Généraux</h2>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 {hasUnsavedChanges ? (
                   <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
                     <i className="fa-solid fa-circle-exclamation" />
@@ -705,19 +705,19 @@ export default function AdminRubric() {
                         <button type="button" onClick={() => addLevel(idx)} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded font-bold transition"><i className="fa-solid fa-plus"></i> Ajouter un niveau</button>
                     </div>
                     {c.levels?.map((l, lIdx) => (
-                      <div key={lIdx} className="flex gap-2 items-start group">
-                         <div className="w-32 flex-shrink-0">
+                      <div key={lIdx} className="flex flex-wrap gap-2 items-start group">
+                         <div className="w-full sm:w-32 sm:flex-shrink-0">
                            <input type="text" className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none bg-white font-semibold" value={l.label} onChange={e => updateLevel(idx, lIdx, 'label', e.target.value)} />
                          </div>
-                         <div className="w-20 flex-shrink-0 relative" title="Pourcentage (0 à 1) à partir duquel ce niveau s'applique">
+                         <div className="w-[calc(50%-0.25rem)] sm:w-20 sm:flex-shrink-0 relative" title="Pourcentage (0 à 1) à partir duquel ce niveau s'applique">
                            <input type="number" step="0.05" min="0" max="1" className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none bg-white" value={l.minPct ?? l.maxPct} onChange={e => updateLevel(idx, lIdx, 'minPct', Number(e.target.value))} />
                            <span className="absolute right-2 top-1.5 text-xs text-gray-400">dès</span>
                          </div>
-                         <div className="w-20 flex-shrink-0 relative" title="Note proposée (0 à 1) quand on clique sur ce niveau à la correction">
+                         <div className="w-[calc(50%-0.25rem)] sm:w-20 sm:flex-shrink-0 relative" title="Note proposée (0 à 1) quand on clique sur ce niveau à la correction">
                            <input type="number" step="0.05" min="0" max="1" className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs outline-none bg-white" value={l.maxPct} onChange={e => updateLevel(idx, lIdx, 'maxPct', Number(e.target.value))} />
                            <span className="absolute right-2 top-1.5 text-xs text-gray-400">note</span>
                          </div>
-                         <div className="flex-grow flex gap-2 items-start">
+                         <div className="w-full sm:w-auto sm:min-w-0 sm:flex-1 flex gap-2 items-start">
                            <textarea className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs outline-none bg-white" rows="2" value={l.desc} onChange={e => updateLevel(idx, lIdx, 'desc', e.target.value)}></textarea>
                            <button type="button" onClick={() => removeLevel(idx, lIdx)} className="text-red-400 hover:text-red-600 opacity-20 group-hover:opacity-100 transition p-1" title="Supprimer ce niveau"><i className="fa-solid fa-times"></i></button>
                          </div>
@@ -781,14 +781,14 @@ export default function AdminRubric() {
                 {feedbackMessages.map((fm, fmIdx) => {
                   const bgColor = fm.maxPct <= 40 ? 'border-l-red-400 bg-red-50/30' : fm.maxPct <= 60 ? 'border-l-orange-400 bg-orange-50/30' : fm.maxPct <= 80 ? 'border-l-yellow-400 bg-yellow-50/30' : fm.maxPct <= 90 ? 'border-l-blue-400 bg-blue-50/30' : 'border-l-green-400 bg-green-50/30';
                   return (
-                    <div key={fmIdx} className={`flex gap-2 items-start p-2 rounded-lg border-l-4 ${bgColor}`}>
+                    <div key={fmIdx} className={`flex flex-wrap gap-2 items-start p-2 rounded-lg border-l-4 ${bgColor}`}>
                       <div className="flex items-center gap-1 flex-shrink-0 pt-1">
                         <input type="number" className="w-12 px-1 py-1 border border-gray-300 rounded text-xs outline-none text-center" value={fm.minPct} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], minPct: Number(e.target.value)}; setFeedbackMessages(n); }} />
                         <span className="text-xs text-gray-400">—</span>
                         <input type="number" className="w-12 px-1 py-1 border border-gray-300 rounded text-xs outline-none text-center" value={fm.maxPct} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], maxPct: Number(e.target.value)}; setFeedbackMessages(n); }} />
                         <span className="text-xs text-gray-400 font-bold">%</span>
                       </div>
-                      <input type="text" className="flex-grow px-2 py-1 border border-gray-200 rounded text-xs outline-none" value={fm.message} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], message: e.target.value}; setFeedbackMessages(n); }} />
+                      <input type="text" className="w-full sm:w-auto sm:min-w-0 sm:flex-1 px-2 py-1.5 border border-gray-200 rounded text-xs outline-none" value={fm.message} onChange={e => { const n = [...feedbackMessages]; n[fmIdx] = {...n[fmIdx], message: e.target.value}; setFeedbackMessages(n); }} />
                     </div>
                   );
                 })}

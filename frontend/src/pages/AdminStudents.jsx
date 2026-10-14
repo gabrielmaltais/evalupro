@@ -343,7 +343,7 @@ export default function AdminStudents() {
                             {g.students} étu. • {g.evaluations} évals.
                           </span>
                         </button>
-                        <div className="flex shrink-0 flex-col gap-0.5 self-start">
+                        <div className="flex shrink-0 flex-row flex-wrap gap-0.5 self-start sm:flex-col">
                           <button
                             type="button"
                             onClick={(e) => {

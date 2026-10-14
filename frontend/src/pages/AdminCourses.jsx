@@ -193,7 +193,7 @@ export default function AdminCourses() {
 
         <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm lg:col-span-2 dark:border-gray-700/60 dark:bg-gray-900/40">
           {!course._id && course.competencies.length === 0 && !course.title ? (
-            <p className="text-sm text-gray-500">Sélectionnez un cours à gauche, ou créez-en un nouveau.</p>
+            <p className="text-sm text-gray-500">Choisis un cours dans la liste, ou crée-en un nouveau.</p>
           ) : (
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
