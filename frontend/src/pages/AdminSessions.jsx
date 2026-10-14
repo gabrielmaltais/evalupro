@@ -4,6 +4,7 @@ import PageSectionTitle from "../components/PageSectionTitle";
 import {
   formatSessionDate,
   sessionCountsLabel,
+  sessionsArchivingSoon,
   sessionStatusInfo,
   shiftDateOneYear,
   suggestNextSessionName,
@@ -35,6 +36,8 @@ export default function AdminSessions() {
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState(null);
   const [copying, setCopying] = useState(null);
+  const [tab, setTab] = useState("sessions");
+  const [copyingRubric, setCopyingRubric] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -66,6 +69,7 @@ export default function AdminSessions() {
   const groups = useMemo(() => groupsFromStudents(students), [students]);
   const activeSessions = sessions.filter((s) => !s.archivedAt);
   const archivedSessions = sessions.filter((s) => s.archivedAt);
+  const soon = useMemo(() => sessionsArchivingSoon(sessions), [sessions]);
   const sessionName = (id) => sessions.find((s) => s._id === id)?.name || "";
 
   async function run(fn, okMsg) {
@@ -185,6 +189,24 @@ export default function AdminSessions() {
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
+      {soon.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {soon.map(({ session, days }) => (
+            <p key={session._id}>
+              <i className="fa-solid fa-hourglass-half mr-1" />
+              « {session.name} » {days <= 0 ? "sera archivée très bientôt" : `s'archive dans ${days} jour${days > 1 ? "s" : ""}`}. Envoie tes courriels et exporte les notes avant.
+            </p>
+          ))}
+        </div>
+      )}
+
+      <nav className="flex gap-2" aria-label="Sections">
+        {[["sessions", "Sessions"], ["elements", "Cours, grilles et groupes"], ["archives", `Archives (${archivedSessions.length + archived.courses.length + archived.rubrics.length + archived.groups.length})`]].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${tab === id ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200"}`}>{label}</button>
+        ))}
+      </nav>
+
+      {tab === "sessions" && (
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Sessions</h2>
@@ -225,7 +247,9 @@ export default function AdminSessions() {
           );
         })}
       </section>
+      )}
 
+      {tab === "elements" && (
       <section className="space-y-4">
         <h2 className="text-lg font-bold">Éléments actifs</h2>
         <p className="text-sm text-gray-500">Rattache chaque cours, grille et groupe à une session. Archiver un élément seul le range sans toucher au reste.</p>
@@ -252,18 +276,7 @@ export default function AdminSessions() {
               <span className="text-sm font-semibold">{r.title}<span className="font-normal text-gray-500"> · {(r.groups?.length ? r.groups : r.group ? [r.group] : []).join(", ") || "tous les groupes"}</span></span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <SessionSelect value={r.session} onChange={(sid) => run(() => api.updateRubric(r._id, { session: sid }))} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const g = window.prompt("Copier cette grille vers quels groupes ? (séparés par des virgules)", "");
-                    if (g === null) return;
-                    run(
-                      () => api.copyRubric(r._id, { groups: g.split(/[,;]/).map((x) => x.trim()).filter(Boolean), sessionId: r.session || null }),
-                      "Grille copiée (version 1, sans évaluations)."
-                    );
-                  }}
-                  className={`${btn} border-gray-200 hover:bg-gray-50`}
-                >
+                <button type="button" onClick={() => setCopyingRubric({ rubric: r, selected: [], extra: "", title: r.title })} className={`${btn} border-gray-200 hover:bg-gray-50`}>
                   Copier vers…
                 </button>
                 <button type="button" onClick={() => run(() => api.archiveRubric(r._id), "Grille archivée.")} className={`${btn} border-amber-300 text-amber-800 hover:bg-amber-50`}>Archiver</button>
@@ -295,7 +308,9 @@ export default function AdminSessions() {
           {groups.length === 0 && <p className="text-sm text-gray-400">Aucun groupe actif.</p>}
         </div>
       </section>
+      )}
 
+      {tab === "archives" && (
       <section className="space-y-3">
         <h2 className="text-lg font-bold">Archives</h2>
         {archivedSessions.map((s) => (
@@ -333,6 +348,7 @@ export default function AdminSessions() {
           <p className="text-sm text-gray-400">Rien d'archivé pour l'instant.</p>
         )}
       </section>
+      )}
 
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -351,6 +367,44 @@ export default function AdminSessions() {
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setForm(null)} className={`${btn} border-gray-200`}>Annuler</button>
               <button type="button" onClick={saveForm} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {copyingRubric && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
+            <h3 className="text-lg font-bold">Copier la grille vers de nouveaux groupes</h3>
+            <p className="text-xs text-gray-500">La copie repart en version 1, sans évaluations. L'original reste inchangé.</p>
+            <input className={inputCls} value={copyingRubric.title} onChange={(e) => setCopyingRubric({ ...copyingRubric, title: e.target.value })} />
+            <div className="max-h-40 space-y-1 overflow-y-auto">
+              {groups.map((g) => (
+                <label key={g.group} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={copyingRubric.selected.includes(g.group)} onChange={() => setCopyingRubric((c) => ({ ...c, selected: c.selected.includes(g.group) ? c.selected.filter((x) => x !== g.group) : [...c.selected, g.group] }))} />
+                  {g.group}
+                </label>
+              ))}
+              {groups.length === 0 && <p className="text-sm text-gray-400">Aucun groupe actif : saisis les noms ci-dessous.</p>}
+            </div>
+            <input className={inputCls} placeholder="Autres groupes (séparés par des virgules)" value={copyingRubric.extra} onChange={(e) => setCopyingRubric({ ...copyingRubric, extra: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setCopyingRubric(null)} className={`${btn} border-gray-200`}>Annuler</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const c = copyingRubric;
+                  const extra = c.extra.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+                  const out = await run(
+                    () => api.copyRubric(c.rubric._id, { title: c.title, groups: [...c.selected, ...extra], sessionId: c.rubric.session || null }),
+                    "Grille copiée (version 1, sans évaluations)."
+                  );
+                  if (out) setCopyingRubric(null);
+                }}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              >
+                Copier
+              </button>
             </div>
           </div>
         </div>

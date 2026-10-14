@@ -196,6 +196,18 @@ export default function AdminRubric() {
     }
   }
 
+  async function archiveRubric() {
+    if (!selectedId) return;
+    try {
+      await api.archiveRubric(selectedId);
+      startNew();
+      await refresh();
+      setSuccess("Grille archivée. Tu peux la restaurer dans Sessions > Archives.");
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
   async function removeRubric() {
     if (!selectedId) return;
     try {
@@ -796,9 +808,14 @@ export default function AdminRubric() {
                         </button>
                       </div>
                     ) : (
-                      <button type="button" onClick={() => setConfirmDelete(true)} className="text-red-500 hover:text-red-700 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
-                          <i className="fa-solid fa-trash"></i> Supprimer cette Grille
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" onClick={archiveRubric} className="text-amber-700 hover:text-amber-900 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+                            <i className="fa-solid fa-box-archive"></i> Archiver
+                        </button>
+                        <button type="button" onClick={() => setConfirmDelete(true)} className="text-red-500 hover:text-red-700 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+                            <i className="fa-solid fa-trash"></i> Supprimer cette Grille
+                        </button>
+                      </div>
                     )
                 ) : (
                     <div></div>

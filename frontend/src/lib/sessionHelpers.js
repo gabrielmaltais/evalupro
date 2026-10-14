@@ -47,3 +47,23 @@ export function shiftDateOneYear(str) {
   if (m[2] === "02" && day === 29) day = 28;
   return `${y}-${m[2]}-${String(day).padStart(2, "0")}`;
 }
+
+/** Nombre de jours entre `today` (AAAA-MM-JJ) et `target`; négatif si la cible est passée, null si invalide. */
+export function daysUntil(target, today = new Date().toISOString().slice(0, 10)) {
+  const parse = (v) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ""));
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  };
+  const a = parse(today);
+  const b = parse(target);
+  return a === null || b === null ? null : Math.round((b - a) / 86400000);
+}
+
+/** Sessions actives à archiver automatiquement dans `withinDays` jours ou moins (à surveiller). */
+export function sessionsArchivingSoon(sessions, withinDays = 7, today) {
+  return sessions
+    .filter((s) => !s.archivedAt && s.autoArchive !== false)
+    .map((s) => ({ session: s, days: daysUntil(s.archiveAfter, today) }))
+    .filter((x) => x.days !== null && x.days <= withinDays)
+    .sort((a, b) => a.days - b.days);
+}

@@ -233,6 +233,18 @@ export default function AdminStudents() {
     }
   }
 
+  async function archiveGroup(groupName) {
+    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Sessions > Archives.`)) return;
+    try {
+      await api.archiveGroup(groupName);
+      if (selectedGroup === groupName) setSelectedGroup("");
+      setSuccess("Groupe archivé.");
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
   function openPurgeGroupModal(groupName) {
     if (groupName === "Sans groupe") return;
     setError("");
@@ -343,6 +355,19 @@ export default function AdminStudents() {
                           >
                             Vider
                           </button>
+                          {g.group !== "Sans groupe" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                archiveGroup(g.group);
+                              }}
+                              className="rounded-lg px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-50 hover:underline"
+                              title="Archiver le groupe (conserve étudiants et évaluations)"
+                            >
+                              Archiver
+                            </button>
+                          )}
                           {g.group !== "Sans groupe" && (
                             <button
                               type="button"

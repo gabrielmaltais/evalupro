@@ -116,6 +116,18 @@ export default function AdminCourses() {
     }
   }
 
+  async function archiveCurrent() {
+    if (!course._id) return;
+    try {
+      await api.archiveCourse(course._id);
+      setCourse(EMPTY_COURSE);
+      await refresh();
+      setSuccess("Cours archivé. Tu peux le restaurer dans Sessions > Archives.");
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
   async function remove() {
     if (!course._id) return;
     if (!confirmDelete) {
@@ -242,6 +254,11 @@ export default function AdminCourses() {
 
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-4">
                 <div>
+                  {course._id && (
+                    <button type="button" onClick={archiveCurrent} className="mr-2 rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50">
+                      <i className="fa-solid fa-box-archive mr-1" /> Archiver
+                    </button>
+                  )}
                   {course._id && (
                     <button type="button" onClick={remove} className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${confirmDelete ? "border-red-600 bg-red-600 text-white" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
                       {confirmDelete ? "Confirmer la suppression" : "Supprimer le cours"}
