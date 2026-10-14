@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const mongoose = require("mongoose");
 const Rubric = require("../models/Rubric");
-const Session = require("../models/Session");
+const Course = require("../models/Course");
 const Evaluation = require("../models/Evaluation");
 const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 const { auth } = require("../middleware/auth");
@@ -32,7 +32,8 @@ const rubricSchema = z.object({
   linkCompetencies: z.boolean().optional(),
   group: z.string().optional(),
   groups: z.array(z.string()).optional(),
-  session: z.string().nullable().optional(),
+  course: z.string().nullable().optional(),
+  archiveWithCourse: z.boolean().optional(),
   criteria: z.array(
     z.object({
       id: z.string().min(1),
@@ -65,13 +66,13 @@ async function recomputeEvaluationTotals(rubric) {
   if (ops.length) await Evaluation.bulkWrite(ops);
 }
 
-async function resolveSession(req, value) {
+async function resolveCourse(req, value) {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
-  if (!mongoose.isValidObjectId(value)) throw new Error("Session invalide");
-  const s = await Session.findOne({ _id: value, createdBy: req.user._id }).select("_id");
-  if (!s) throw new Error("Session introuvable");
-  return s._id;
+  if (!mongoose.isValidObjectId(value)) throw new Error("Cours invalide");
+  const c = await Course.findOne({ _id: value, createdBy: req.user._id }).select("_id");
+  if (!c) throw new Error("Cours introuvable");
+  return c._id;
 }
 
 router.get("/", async (req, res) => {
@@ -88,8 +89,13 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
       payload.groups = normalizedGroupData.groups;
       payload.group = normalizedGroupData.group;
     }
-    const session = await resolveSession(req, payload.session);
-    const item = await Rubric.create({ ...payload, session: session || null, createdBy: req.user._id });
+    const course = await resolveCourse(req, payload.course);
+    const item = await Rubric.create({
+      ...payload,
+      course: course || null,
+      archiveWithCourse: course ? payload.archiveWithCourse === true : false,
+      createdBy: req.user._id,
+    });
     res.status(201).json(item);
   } catch (error) {
     res.status(400).json({ message: "Rubric invalide", details: error.message });
@@ -104,8 +110,11 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
       payload.groups = normalizedGroupData.groups;
       payload.group = normalizedGroupData.group;
     }
-    const session = await resolveSession(req, payload.session);
-    if (session !== undefined) payload.session = session;
+    const course = await resolveCourse(req, payload.course);
+    if (course !== undefined) {
+      payload.course = course;
+      if (course === null) payload.archiveWithCourse = false;
+    }
     const item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
     if (payload.criteria) await recomputeEvaluationTotals(item);
@@ -128,14 +137,14 @@ router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
 });
 
 /**
- * Copie une grille (sans évaluations) vers de nouveaux groupes, éventuellement dans une session.
+ * Copie une grille (sans évaluations) vers de nouveaux groupes, éventuellement rattachée à un cours.
  * La copie repart en version 1; les évaluations restent liées à l'original.
  */
 router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   try {
     const src = await Rubric.findOne(mine(req, req.params.id));
     if (!src) return res.status(404).json({ message: "Rubric introuvable" });
-    const session = await resolveSession(req, req.body?.sessionId);
+    const course = await resolveCourse(req, req.body?.courseId === undefined ? src.course : req.body.courseId);
     const g = normalizeGroupsInput(Array.isArray(req.body?.groups) ? req.body.groups : [], undefined);
     const title = String(req.body?.title || "").trim() || src.title;
     const item = await Rubric.create({
@@ -148,7 +157,8 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
       feedbackMessages: src.feedbackMessages,
       groups: g.groups,
       group: g.group,
-      session: session || null,
+      course: course || null,
+      archiveWithCourse: course ? src.archiveWithCourse === true : false,
       createdBy: req.user._id,
     });
     res.status(201).json(item);

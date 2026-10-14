@@ -234,7 +234,7 @@ export default function AdminStudents() {
   }
 
   async function archiveGroup(groupName) {
-    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Sessions > Archives.`)) return;
+    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Classes > Archives.`)) return;
     try {
       await api.archiveGroup(groupName);
       if (selectedGroup === groupName) setSelectedGroup("");

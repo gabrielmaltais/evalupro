@@ -38,9 +38,11 @@ test("archive puis restaure une session avec ses éléments", async () => {
   const s = await request(app).post("/api/sessions").set(h).send({ name: "A26", startDate: "2026-08-24", endDate: "2026-12-20" });
   assert.equal(s.statusCode, 201);
   const c = await request(app).post("/api/courses").set(h).send({ title: "Réseaux", session: s.body._id });
-  const r = await request(app).post("/api/rubrics").set(h).send({ ...rubricBody("Examen 1"), session: s.body._id });
+  const r = await request(app).post("/api/rubrics").set(h).send({ ...rubricBody("Examen 1"), course: c.body._id, archiveWithCourse: true });
+  const keep = await request(app).post("/api/rubrics").set(h).send({ ...rubricBody("Persistante"), course: c.body._id, archiveWithCourse: false });
   assert.equal(c.statusCode, 201);
   assert.equal(r.statusCode, 201);
+  assert.equal(keep.statusCode, 201);
   // Un cours déjà archivé à la main ne doit pas être restauré avec la session.
   const c2 = await request(app).post("/api/courses").set(h).send({ title: "Ancien", session: s.body._id });
   await request(app).post(`/api/courses/${c2.body._id}/archive`).set(h);
@@ -49,14 +51,15 @@ test("archive puis restaure une session avec ses éléments", async () => {
   assert.equal(arch.statusCode, 200);
   assert.equal(arch.body.archived.courses, 1);
   assert.equal((await request(app).get("/api/courses").set(h)).body.length, 0);
-  assert.equal((await request(app).get("/api/rubrics").set(h)).body.length, 0);
+  // La grille archivée avec le cours disparaît; la grille persistante reste active.
+  assert.deepEqual((await request(app).get("/api/rubrics").set(h)).body.map((x) => x.title), ["Persistante"]);
   assert.equal((await request(app).get("/api/courses?archived=1").set(h)).body.length, 2);
 
   const rest = await request(app).post(`/api/sessions/${s.body._id}/restore`).set(h);
   assert.equal(rest.statusCode, 200);
   const active = (await request(app).get("/api/courses").set(h)).body;
   assert.deepEqual(active.map((x) => x.title), ["Réseaux"]);
-  assert.equal((await request(app).get("/api/rubrics").set(h)).body.length, 1);
+  assert.equal((await request(app).get("/api/rubrics").set(h)).body.length, 2);
 });
 
 test("archivage automatique d'une session échue", async () => {
@@ -80,15 +83,17 @@ test("copie d'une session vers de nouveaux groupes", async () => {
   const h = await login("e@example.com");
   const s = await request(app).post("/api/sessions").set(h).send({ name: "A25", startDate: "2025-08-24", endDate: "2099-12-20" });
   const c = await request(app).post("/api/courses").set(h).send({ title: "Réseaux", session: s.body._id, competencies: [{ title: "Analyser" }] });
-  const r = await request(app).post("/api/rubrics").set(h).send({ ...rubricBody("Examen"), session: s.body._id });
+  const r = await request(app).post("/api/rubrics").set(h).send({ ...rubricBody("Examen"), course: c.body._id, archiveWithCourse: true });
   const copy = await request(app).post(`/api/sessions/${s.body._id}/copy`).set(h).send({
     name: "A26", startDate: "2026-08-24", endDate: "2099-12-20", courseIds: [c.body._id], rubricIds: [r.body._id], groups: ["G1"],
   });
   assert.equal(copy.statusCode, 201);
   assert.deepEqual(copy.body.copied, { courses: 1, rubrics: 1 });
   const rubrics = (await request(app).get("/api/rubrics").set(h)).body;
-  const copied = rubrics.find((x) => x.session === copy.body.session._id);
+  const newCourse = (await request(app).get("/api/courses").set(h)).body.find((x) => x.session === copy.body.session._id);
+  const copied = rubrics.find((x) => x.course === newCourse._id);
   assert.deepEqual(copied.groups, ["G1"]);
+  assert.equal(copied.archiveWithCourse, true);
   assert.equal(copied.version, 1);
 });
 

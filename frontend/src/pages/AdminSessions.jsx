@@ -25,7 +25,7 @@ function groupsFromStudents(students) {
   return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group));
 }
 
-export default function AdminSessions() {
+export default function AdminSessions({ view = "sessions" }) {
   const [sessions, setSessions] = useState([]);
   const [courses, setCourses] = useState([]);
   const [rubrics, setRubrics] = useState([]);
@@ -36,8 +36,7 @@ export default function AdminSessions() {
   const [success, setSuccess] = useState("");
   const [form, setForm] = useState(null);
   const [copying, setCopying] = useState(null);
-  const [tab, setTab] = useState("sessions");
-  const [copyingRubric, setCopyingRubric] = useState(null);
+  const tab = view;
 
   const refresh = useCallback(async () => {
     try {
@@ -70,6 +69,16 @@ export default function AdminSessions() {
   const activeSessions = sessions.filter((s) => !s.archivedAt);
   const archivedSessions = sessions.filter((s) => s.archivedAt);
   const soon = useMemo(() => sessionsArchivingSoon(sessions), [sessions]);
+  // Un élément archivé en même temps que sa session (même date) se restaure avec elle; sinon il a sa propre ligne.
+  const withSession = (sessionId, archivedAt) => {
+    const sess = archivedSessions.find((x) => x._id === sessionId);
+    return !!sess && !!archivedAt && new Date(sess.archivedAt).getTime() === new Date(archivedAt).getTime();
+  };
+  const archivedCourseById = new Map(archived.courses.map((c) => [c._id, c]));
+  const rubricWithCourse = (r) => {
+    const c = archivedCourseById.get(r.course);
+    return !!c && !!r.archivedAt && new Date(c.archivedAt).getTime() === new Date(r.archivedAt).getTime();
+  };
   const sessionName = (id) => sessions.find((s) => s._id === id)?.name || "";
 
   async function run(fn, okMsg) {
@@ -136,7 +145,7 @@ export default function AdminSessions() {
       endDate: shiftDateOneYear(s.endDate),
       groupsText: "",
       courseIds: courses.filter((c) => c.session === s._id).map((c) => c._id),
-      rubricIds: rubrics.filter((r) => r.session === s._id).map((r) => r._id),
+      rubricIds: [],
       archiveSource: false,
     });
   }
@@ -182,8 +191,8 @@ export default function AdminSessions() {
       <PageSectionTitle
         icon="fa-box-archive"
         iconBgClass="bg-indigo-600"
-        title="Sessions et archives"
-        subtitle="Regroupe tes cours, grilles et groupes par session. À la fin, tout s'archive tout seul et tu repars à neuf."
+        title={tab === "archives" ? "Archives" : "Sessions"}
+        subtitle={tab === "archives" ? "Tout ce que tu as rangé, restaurable en un clic." : "Une session regroupe tes cours et tes groupes. À la fin, tout s'archive tout seul et tu repars à neuf."}
       />
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -199,12 +208,6 @@ export default function AdminSessions() {
           ))}
         </div>
       )}
-
-      <nav className="flex gap-2" aria-label="Sections">
-        {[["sessions", "Sessions"], ["elements", "Cours, grilles et groupes"], ["archives", `Archives (${archivedSessions.length + archived.courses.length + archived.rubrics.length + archived.groups.length})`]].map(([id, label]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${tab === id ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200"}`}>{label}</button>
-        ))}
-      </nav>
 
       {tab === "sessions" && (
       <section className="space-y-3">
@@ -249,70 +252,33 @@ export default function AdminSessions() {
       </section>
       )}
 
-      {tab === "elements" && (
-      <section className="space-y-4">
-        <h2 className="text-lg font-bold">Éléments actifs</h2>
-        <p className="text-sm text-gray-500">Rattache chaque cours, grille et groupe à une session. Archiver un élément seul le range sans toucher au reste.</p>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-bold uppercase text-gray-500">Cours ({courses.length})</h3>
-          {courses.map((c) => (
-            <div key={c._id} className={row}>
-              <span className="text-sm font-semibold">{c.title}{c.code ? ` (${c.code})` : ""}</span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SessionSelect value={c.session} onChange={(sid) => run(() => api.updateCourse(c._id, { session: sid }))} />
-                <button type="button" onClick={() => run(() => api.copyCourse(c._id, c.session), "Cours copié.")} className={`${btn} border-gray-200 hover:bg-gray-50`}>Copier</button>
-                <button type="button" onClick={() => run(() => api.archiveCourse(c._id), "Cours archivé.")} className={`${btn} border-amber-300 text-amber-800 hover:bg-amber-50`}>Archiver</button>
-              </div>
+      {tab === "sessions" && (
+      <section className="space-y-2">
+        <h2 className="text-lg font-bold">Groupes par session</h2>
+        <p className="text-sm text-gray-500">Rattache chaque groupe à sa session : il sera archivé avec elle. Les cours se rattachent à une session dans leur propre fiche.</p>
+        {groups.map((g) => (
+          <div key={g.group} className={row}>
+            <span className="text-sm font-semibold">{g.group}<span className="font-normal text-gray-500"> · {g.students} étudiant{g.students > 1 ? "s" : ""}</span></span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <SessionSelect value={g.session} onChange={(sid) => run(() => api.setGroupSession(g.group, sid))} />
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Archiver le groupe « ${g.group} » ? Étudiants et évaluations sont conservés.`)) run(() => api.archiveGroup(g.group), "Groupe archivé.");
+                }}
+                className={`${btn} border-amber-300 text-amber-800 hover:bg-amber-50`}
+              >
+                Archiver
+              </button>
             </div>
-          ))}
-          {courses.length === 0 && <p className="text-sm text-gray-400">Aucun cours actif.</p>}
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-bold uppercase text-gray-500">Grilles ({rubrics.length})</h3>
-          {rubrics.map((r) => (
-            <div key={r._id} className={row}>
-              <span className="text-sm font-semibold">{r.title}<span className="font-normal text-gray-500"> · {(r.groups?.length ? r.groups : r.group ? [r.group] : []).join(", ") || "tous les groupes"}</span></span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SessionSelect value={r.session} onChange={(sid) => run(() => api.updateRubric(r._id, { session: sid }))} />
-                <button type="button" onClick={() => setCopyingRubric({ rubric: r, selected: [], extra: "", title: r.title })} className={`${btn} border-gray-200 hover:bg-gray-50`}>
-                  Copier vers…
-                </button>
-                <button type="button" onClick={() => run(() => api.archiveRubric(r._id), "Grille archivée.")} className={`${btn} border-amber-300 text-amber-800 hover:bg-amber-50`}>Archiver</button>
-              </div>
-            </div>
-          ))}
-          {rubrics.length === 0 && <p className="text-sm text-gray-400">Aucune grille active.</p>}
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-bold uppercase text-gray-500">Groupes ({groups.length})</h3>
-          {groups.map((g) => (
-            <div key={g.group} className={row}>
-              <span className="text-sm font-semibold">{g.group}<span className="font-normal text-gray-500"> · {g.students} étudiant{g.students > 1 ? "s" : ""}</span></span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SessionSelect value={g.session} onChange={(sid) => run(() => api.setGroupSession(g.group, sid))} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`Archiver le groupe « ${g.group} » ? Ses étudiants et évaluations sont conservés.`)) run(() => api.archiveGroup(g.group), "Groupe archivé.");
-                  }}
-                  className={`${btn} border-amber-300 text-amber-800 hover:bg-amber-50`}
-                >
-                  Archiver
-                </button>
-              </div>
-            </div>
-          ))}
-          {groups.length === 0 && <p className="text-sm text-gray-400">Aucun groupe actif.</p>}
-        </div>
+          </div>
+        ))}
+        {groups.length === 0 && <p className="text-sm text-gray-400">Aucun groupe actif.</p>}
       </section>
       )}
 
       {tab === "archives" && (
       <section className="space-y-3">
-        <h2 className="text-lg font-bold">Archives</h2>
         {archivedSessions.map((s) => (
           <div key={s._id} className={row}>
             <div>
@@ -326,19 +292,19 @@ export default function AdminSessions() {
             </div>
           </div>
         ))}
-        {archived.courses.filter((c) => !archivedSessions.some((s) => s._id === c.session)).map((c) => (
+        {archived.courses.filter((c) => !withSession(c.session, c.archivedAt)).map((c) => (
           <div key={c._id} className={row}>
             <span className="text-sm">Cours : <b>{c.title}</b>{c.session ? ` · ${sessionName(c.session)}` : ""}</span>
             <button type="button" onClick={() => run(() => api.restoreCourse(c._id), "Cours restauré.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
           </div>
         ))}
-        {archived.rubrics.filter((r) => !archivedSessions.some((s) => s._id === r.session)).map((r) => (
+        {archived.rubrics.filter((r) => !rubricWithCourse(r)).map((r) => (
           <div key={r._id} className={row}>
-            <span className="text-sm">Grille : <b>{r.title}</b></span>
+            <span className="text-sm">Grille : <b>{r.title}</b>{archivedCourseById.get(r.course) ? ` · cours ${archivedCourseById.get(r.course).title}` : ""}</span>
             <button type="button" onClick={() => run(() => api.restoreRubric(r._id), "Grille restaurée.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
           </div>
         ))}
-        {archived.groups.filter((g) => !archivedSessions.some((s) => s._id === g.session)).map((g) => (
+        {archived.groups.filter((g) => !withSession(g.session, g.archivedAt)).map((g) => (
           <div key={g.group} className={row}>
             <span className="text-sm">Groupe : <b>{g.group}</b> · {g.students} étudiant{g.students > 1 ? "s" : ""}</span>
             <button type="button" onClick={() => run(() => api.restoreGroup(g.group), "Groupe restauré.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
@@ -372,44 +338,6 @@ export default function AdminSessions() {
         </div>
       )}
 
-      {copyingRubric && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-bold">Copier la grille vers de nouveaux groupes</h3>
-            <p className="text-xs text-gray-500">La copie repart en version 1, sans évaluations. L'original reste inchangé.</p>
-            <input className={inputCls} value={copyingRubric.title} onChange={(e) => setCopyingRubric({ ...copyingRubric, title: e.target.value })} />
-            <div className="max-h-40 space-y-1 overflow-y-auto">
-              {groups.map((g) => (
-                <label key={g.group} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={copyingRubric.selected.includes(g.group)} onChange={() => setCopyingRubric((c) => ({ ...c, selected: c.selected.includes(g.group) ? c.selected.filter((x) => x !== g.group) : [...c.selected, g.group] }))} />
-                  {g.group}
-                </label>
-              ))}
-              {groups.length === 0 && <p className="text-sm text-gray-400">Aucun groupe actif : saisis les noms ci-dessous.</p>}
-            </div>
-            <input className={inputCls} placeholder="Autres groupes (séparés par des virgules)" value={copyingRubric.extra} onChange={(e) => setCopyingRubric({ ...copyingRubric, extra: e.target.value })} />
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setCopyingRubric(null)} className={`${btn} border-gray-200`}>Annuler</button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const c = copyingRubric;
-                  const extra = c.extra.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
-                  const out = await run(
-                    () => api.copyRubric(c.rubric._id, { title: c.title, groups: [...c.selected, ...extra], sessionId: c.rubric.session || null }),
-                    "Grille copiée (version 1, sans évaluations)."
-                  );
-                  if (out) setCopyingRubric(null);
-                }}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-              >
-                Copier
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {copying && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
@@ -427,8 +355,8 @@ export default function AdminSessions() {
               ))}
             </div>
             <div>
-              <p className="text-xs font-bold uppercase text-gray-500">Grilles à copier</p>
-              {rubrics.filter((r) => r.session === copying.source._id).concat(archived.rubrics.filter((r) => r.session === copying.source._id)).map((r) => (
+              <p className="text-xs font-bold uppercase text-gray-500">Grilles de ces cours à copier</p>
+              {rubrics.concat(archived.rubrics).filter((r) => copying.courseIds.includes(r.course)).map((r) => (
                 <label key={r._id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copying.rubricIds.includes(r._id)} onChange={() => toggleIn("rubricIds", r._id)} />{r.title}</label>
               ))}
             </div>
