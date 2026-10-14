@@ -78,8 +78,7 @@ export default function AdminStudents() {
     acc[g].push(s);
     return acc;
   }, {}), [students]);
-  const groupKeys = Object.keys(groupedStudents).sort();
-  const allGroupKeys = Array.from(new Set([...groupKeys, ...draftGroups])).sort();
+
   const displayedGroupDashboard = useMemo(() => {
     const map = new Map((groupDashboard || []).map((g) => [g.group, g]));
     draftGroups.forEach((g) => {

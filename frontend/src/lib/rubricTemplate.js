@@ -276,6 +276,28 @@ export function matchLevel(levels, pct) {
   return matched;
 }
 
+/**
+ * Effet d'un clic sur un niveau : note du critère et, s'il a des tâches, points de chacune
+ * (la note du critère est alors la somme de ses tâches). Arrondi au quart de point.
+ */
+export function applyLevelToCriterion(criterion, level) {
+  const weight = Math.max(0, Number(criterion?.weight) || 0);
+  const pct = clampNumber(level?.maxPct, 0, 1, 0);
+  const quarter = (n) => Math.round(n * 4) / 4;
+  const tasks = asArray(criterion?.subCriteria);
+  if (!tasks.length) {
+    return { score: pct >= 1 ? weight : Math.min(weight, quarter(weight * pct)), taskPoints: null };
+  }
+  const points = {};
+  let total = 0;
+  tasks.forEach((task) => {
+    const max = Math.max(0, Number(task.pts) || 0);
+    points[task.id] = pct >= 1 ? max : Math.min(max, quarter(max * pct));
+    total += points[task.id];
+  });
+  return { score: Math.min(weight, Number(total.toFixed(2))), taskPoints: points };
+}
+
 /** Points obtenus pour une tâche : `true` (ancien format) = max, nombre = points partiels, sinon 0. */
 export function taskPoints(task, value) {
   const max = Number(task?.pts) || 0;

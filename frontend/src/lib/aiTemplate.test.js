@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAITemplate, LEVEL_SCALES } from "./aiTemplate";
-import { checkRubricSums, matchLevel, normalizeImportedRubric, parseAiJson, taskPoints } from "./rubricTemplate";
+import { applyLevelToCriterion, checkRubricSums, matchLevel, normalizeImportedRubric, parseAiJson, taskPoints } from "./rubricTemplate";
 
 describe("gabarit IA", () => {
   it("produit un gabarit importable avec l'échelle choisie", () => {
@@ -113,5 +113,25 @@ describe("réponse de l'IA : import de bout en bout", () => {
     expect(parseAiJson(wrapped).template_a_remplir.title).toBe("Systèmes réseau");
     expect(parseAiJson("Résultat: " + JSON.stringify(aiAnswer) + " fin").title).toBe("Systèmes réseau");
     expect(() => parseAiJson("pas du json")).toThrow();
+  });
+});
+
+describe("clic sur un niveau à la correction", () => {
+  const levels = LEVEL_SCALES[4];
+  it("sans tâches : note proportionnelle, arrondie au quart de point", () => {
+    const c = { weight: 7 };
+    expect(applyLevelToCriterion(c, levels[3])).toEqual({ score: 7, taskPoints: null });
+    expect(applyLevelToCriterion(c, levels[1]).score).toBe(4.75);
+    expect(applyLevelToCriterion(c, { maxPct: 0 }).score).toBe(0);
+  });
+
+  it("avec tâches : la note est la somme des tâches et ne dépasse jamais la pondération", () => {
+    const c = { weight: 10, subCriteria: [{ id: "a", pts: 6 }, { id: "b", pts: 4 }] };
+    expect(applyLevelToCriterion(c, levels[3])).toEqual({ score: 10, taskPoints: { a: 6, b: 4 } });
+    const mid = applyLevelToCriterion(c, levels[2]);
+    expect(mid.taskPoints).toEqual({ a: 5, b: 3.25 });
+    expect(mid.score).toBe(8.25);
+    const over = applyLevelToCriterion({ weight: 5, subCriteria: [{ id: "a", pts: 6 }] }, levels[3]);
+    expect(over.score).toBe(5);
   });
 });

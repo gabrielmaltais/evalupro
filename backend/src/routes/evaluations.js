@@ -9,6 +9,7 @@ const { generateSummary } = require("../services/gemini");
 const { startBatchJob, getProgress, sendOneEvaluationEmail } = require("../services/emailBatchService");
 const { createEvaluationPdfBuffer, getEvaluationPdfFileName } = require("../services/evaluationPdfService");
 const { studentFullNameFromDoc } = require("../utils/studentName");
+const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 
 const router = express.Router();
 router.use(auth);
@@ -43,30 +44,15 @@ function normalizeMarkerIcon(raw) {
   return String(raw).trim().slice(0, 80);
 }
 
-function sumScoresMapLike(scoresLike) {
-  if (!scoresLike) return 0;
-  if (scoresLike instanceof Map) {
-    return Array.from(scoresLike.values()).reduce((sum, v) => sum + Number(v || 0), 0);
-  }
-  // MongooseMap expose values()
-  if (typeof scoresLike.values === "function" && scoresLike.$isMongooseMap) {
-    return Array.from(scoresLike.values()).reduce((sum, v) => sum + Number(v || 0), 0);
-  }
-  if (typeof scoresLike.toObject === "function") {
-    const obj = scoresLike.toObject();
-    return Object.values(obj || {}).reduce((sum, v) => sum + Number(v || 0), 0);
-  }
-  if (typeof scoresLike === "object") {
-    return Object.values(scoresLike).reduce((sum, v) => sum + Number(v || 0), 0);
-  }
-  return 0;
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 router.get("/", async (req, res) => {
-  const page = Number(req.query.page || 1);
-  const limit = Number(req.query.limit || 10);
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const limit = Math.min(5000, Math.max(1, Math.floor(Number(req.query.limit)) || 10));
   const query = req.user.role === "admin" ? {} : { owner: req.user._id };
-  if (req.query.studentName) query.studentName = new RegExp(req.query.studentName, "i");
+  if (req.query.studentName) query.studentName = new RegExp(escapeRegex(req.query.studentName), "i");
   if (req.query.studentId) query.studentId = req.query.studentId;
   const [items, total] = await Promise.all([
     Evaluation.find(query).populate("rubric", "title taskTitle version").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
@@ -86,8 +72,7 @@ router.post("/", async (req, res) => {
     }
     const rubric = await Rubric.findById(payload.rubric);
     if (!rubric) return res.status(404).json({ message: "Rubric introuvable" });
-    const totalScore = Object.values(payload.scores || {}).reduce((a, b) => a + Number(b), 0);
-    const totalMax = rubric.criteria.reduce((sum, c) => sum + Number(c.weight), 0);
+    const { totalScore, totalMax } = computeEvaluationTotals(rubric, payload.scores);
     let aiSummary = "";
     if (payload.generateAiSummary) {
       aiSummary = await generateSummary(`Etudiant: ${payload.studentName}\nCommentaire: ${payload.generalComment || ""}`);
@@ -275,13 +260,14 @@ router.put("/:id", async (req, res) => {
       if (!rubricExists) return res.status(404).json({ message: "Rubric introuvable" });
     }
 
-    // Recalcul des totaux après modification pour garder le suivi/envois synchronisés.
-    // On priorise le payload si présent, sinon l'état courant de l'item.
-    item.totalScore = sumScoresMapLike(
+    // Recalcul des totaux à chaque modification (notes ou grille) pour garder suivi et envois synchronisés.
+    const rubricForTotals = await Rubric.findById(item.rubric).select("criteria");
+    const totals = computeEvaluationTotals(
+      rubricForTotals,
       Object.prototype.hasOwnProperty.call(payload, "scores") ? payload.scores : item.scores
     );
-    const rubricForTotals = await Rubric.findById(item.rubric).select("criteria");
-    item.totalMax = (rubricForTotals?.criteria || []).reduce((sum, c) => sum + Number(c.weight || 0), 0);
+    item.totalScore = totals.totalScore;
+    item.totalMax = totals.totalMax;
 
     if (item.studentId) {
       const st = await Student.findOne({ _id: item.studentId, createdBy: req.user._id }).lean();

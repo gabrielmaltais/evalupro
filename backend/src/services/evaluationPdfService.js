@@ -1,24 +1,11 @@
 const PDFDocument = require("pdfkit");
-
-function toPlainObject(mapLike) {
-  if (!mapLike) return {};
-  if (mapLike instanceof Map) return Object.fromEntries(mapLike);
-  if (typeof mapLike.toObject === "function") return mapLike.toObject();
-  if (typeof mapLike === "object") return { ...mapLike };
-  return {};
-}
+const { toPlainObject, criterionKey, computeEvaluationTotals } = require("../utils/evaluationTotals");
 
 function sanitizeFilePart(v) {
   return String(v || "")
     .replace(/[^a-zA-Z0-9À-ÿ\s-]/g, "")
     .trim()
     .replace(/\s+/g, "_");
-}
-
-function criterionKey(criterion, index) {
-  if (criterion.id != null && criterion.id !== "") return String(criterion.id);
-  if (criterion._id != null) return String(criterion._id);
-  return String(index);
 }
 
 function getNumber(obj, key) {
@@ -75,14 +62,7 @@ function levelDescription(criterion, s, scoresObj, cid) {
 }
 
 function computeTotals(rubric, scoresObj) {
-  let totalMax = 0;
-  let totalScore = 0;
-  (rubric.criteria || []).forEach((c, i) => {
-    const cid = criterionKey(c, i);
-    totalMax += c.weight || 0;
-    totalScore += getScore(scoresObj, cid);
-  });
-  return { totalScore, totalMax };
+  return computeEvaluationTotals(rubric, scoresObj);
 }
 
 function pickFeedbackMessage(rubric, finalPct) {
@@ -109,6 +89,9 @@ function criterionStripeColor(criterion) {
     "border-purple-500": "#a855f7",
     "border-orange-500": "#f97316",
     "border-gray-500": "#6b7280",
+    "border-indigo-500": "#6366f1",
+    "border-cyan-500": "#06b6d4",
+    "border-yellow-500": "#eab308",
   };
   return map[raw] || "#3b82f6";
 }

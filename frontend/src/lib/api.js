@@ -18,7 +18,7 @@ export function getUserFromToken() {
       _id: payload.sub,
       id: payload.sub,
     };
-  } catch (e) {
+  } catch {
     return null;
   }
 }
