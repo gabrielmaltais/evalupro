@@ -40,6 +40,9 @@ export default function AdminRubric() {
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
   const [linkCompetencies, setLinkCompetencies] = useState(false);
+  const [courseId, setCourseId] = useState("");
+  const [archiveWithCourse, setArchiveWithCourse] = useState(false);
+  const [duplicating, setDuplicating] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const DEFAULT_FEEDBACK = [
     { minPct: 0, maxPct: 60, message: "Tu n'y es pas encore, mais ne te décourage pas ! Reviens sur les points manquants, consulte tes notes et n'hésite pas à demander de l'aide. Tu as la capacité de progresser et c'est en persévérant qu'on réussit." },
@@ -103,6 +106,8 @@ export default function AdminRubric() {
       groups: next.groups ?? groups,
       isActive: next.isActive ?? isActive,
       linkCompetencies: next.linkCompetencies ?? linkCompetencies,
+      courseId: next.courseId ?? courseId,
+      archiveWithCourse: next.archiveWithCourse ?? archiveWithCourse,
       criteria: next.criteria ?? criteria,
       feedbackMessages: next.feedbackMessages ?? feedbackMessages,
     };
@@ -112,7 +117,7 @@ export default function AdminRubric() {
   const hasUnsavedChanges = useMemo(
     () => buildSnapshot() !== savedSnapshot,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedId, title, taskTitle, version, groups, isActive, linkCompetencies, criteria, feedbackMessages, savedSnapshot]
+    [selectedId, title, taskTitle, version, groups, isActive, linkCompetencies, courseId, archiveWithCourse, criteria, feedbackMessages, savedSnapshot]
   );
 
   useEffect(() => {
@@ -130,6 +135,8 @@ export default function AdminRubric() {
     setCriteria(r.criteria || []);
     setIsActive(r.isActive !== false);
     setLinkCompetencies(r.linkCompetencies === true);
+    setCourseId(r.course || "");
+    setArchiveWithCourse(r.archiveWithCourse === true);
     setFeedbackMessages(r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -143,6 +150,8 @@ export default function AdminRubric() {
         groups: Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []),
         isActive: r.isActive !== false,
         linkCompetencies: r.linkCompetencies === true,
+        courseId: r.course || "",
+        archiveWithCourse: r.archiveWithCourse === true,
         criteria: r.criteria || [],
         feedbackMessages: r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK,
       })
@@ -158,6 +167,8 @@ export default function AdminRubric() {
     setCriteria([{ ...DEFAULT_CRITERION, id: "c1" }]);
     setIsActive(true);
     setLinkCompetencies(false);
+    setCourseId("");
+    setArchiveWithCourse(false);
     setFeedbackMessages(DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -171,6 +182,8 @@ export default function AdminRubric() {
         groups: [],
         isActive: true,
         linkCompetencies: false,
+        courseId: "",
+        archiveWithCourse: false,
         criteria: [{ ...DEFAULT_CRITERION, id: "c1" }],
         feedbackMessages: DEFAULT_FEEDBACK,
       })
@@ -182,10 +195,10 @@ export default function AdminRubric() {
     setSuccess("");
     try {
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, feedbackMessages });
+        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId || null, archiveWithCourse: courseId ? archiveWithCourse : false, feedbackMessages });
         setSuccess("Grille modifiée avec succès !");
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, feedbackMessages });
+        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId || null, archiveWithCourse: courseId ? archiveWithCourse : false, feedbackMessages });
         setSelectedId(newRubric._id);
         setSuccess("Nouvelle grille créée avec succès !");
       }
@@ -202,7 +215,7 @@ export default function AdminRubric() {
       await api.archiveRubric(selectedId);
       startNew();
       await refresh();
-      setSuccess("Grille archivée. Tu peux la restaurer dans Sessions > Archives.");
+      setSuccess("Grille archivée. Tu peux la restaurer dans Cours et groupes > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -340,6 +353,7 @@ export default function AdminRubric() {
       setTaskTitle(imported.taskTitle);
       setCriteria(imported.criteria);
       setLinkCompetencies(imported.linkCompetencies === true);
+      if (aiConfig.courseId) setCourseId(aiConfig.courseId);
       setVersion(1);
       setSelectedId(null);
       setFeedbackMessages(imported.feedbackMessages);
@@ -627,6 +641,31 @@ export default function AdminRubric() {
                   Lier l&apos;évaluation aux éléments de compétence (informatif)
                 </label>
               </div>
+              <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Cours de cette grille (facultatif)</label>
+                <select
+                  value={courseId}
+                  onChange={(e) => { setCourseId(e.target.value); if (!e.target.value) setArchiveWithCourse(false); }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">Aucun cours : grille indépendante</option>
+                  {courses.map((c) => (
+                    <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
+                  ))}
+                </select>
+                {courseId && (
+                  <div className="mt-2 space-y-1 text-sm text-gray-700">
+                    <label className="flex items-start gap-2">
+                      <input type="radio" name="rubric-persist" className="mt-1" checked={!archiveWithCourse} onChange={() => setArchiveWithCourse(false)} />
+                      <span><strong>Persistante</strong> : la grille reste active quand le cours est archivé (tu la réutilises d&apos;une session à l&apos;autre).</span>
+                    </label>
+                    <label className="flex items-start gap-2">
+                      <input type="radio" name="rubric-persist" className="mt-1" checked={archiveWithCourse} onChange={() => setArchiveWithCourse(true)} />
+                      <span><strong>Archivée avec le cours</strong> : elle est rangée avec lui à la fin de la session.</span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -809,6 +848,9 @@ export default function AdminRubric() {
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" onClick={() => setDuplicating({ title: `${title} (copie)`, selected: [], extra: "" })} className="text-blue-600 hover:text-blue-800 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+                            <i className="fa-solid fa-copy"></i> Dupliquer vers des groupes
+                        </button>
                         <button type="button" onClick={archiveRubric} className="text-amber-700 hover:text-amber-900 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
                             <i className="fa-solid fa-box-archive"></i> Archiver
                         </button>
@@ -828,6 +870,47 @@ export default function AdminRubric() {
           </div>
         </div>
       </main>
+
+      {duplicating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
+            <h3 className="text-lg font-bold">Dupliquer la grille vers de nouveaux groupes</h3>
+            <p className="text-xs text-gray-500">La copie repart en version 1, sans évaluations, avec le même cours. L&apos;original reste inchangé.</p>
+            <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={duplicating.title} onChange={(e) => setDuplicating({ ...duplicating, title: e.target.value })} />
+            <div className="max-h-40 space-y-1 overflow-y-auto">
+              {groupOptions.map((g) => (
+                <label key={g} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={duplicating.selected.includes(g)} onChange={() => setDuplicating((d) => ({ ...d, selected: d.selected.includes(g) ? d.selected.filter((x) => x !== g) : [...d.selected, g] }))} />
+                  {g}
+                </label>
+              ))}
+            </div>
+            <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Autres groupes (séparés par des virgules)" value={duplicating.extra} onChange={(e) => setDuplicating({ ...duplicating, extra: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDuplicating(null)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold">Annuler</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const d = duplicating;
+                  try {
+                    const extra = d.extra.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+                    const copy = await api.copyRubric(selectedId, { title: d.title, groups: [...d.selected, ...extra] });
+                    setDuplicating(null);
+                    await refresh();
+                    selectRubric(copy);
+                    setSuccess("Grille dupliquée (version 1, sans évaluations).");
+                  } catch (e) {
+                    setError(String(e.message || e));
+                  }
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Dupliquer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI TEMPLATE MODAL */}
       {showAIModal && (
@@ -874,12 +957,12 @@ export default function AdminRubric() {
                   </ul>
                 )}
                 {selectedCourse && selectedCourseCompetencies.length === 0 && (
-                  <p className="text-[11px] text-amber-800">Ce cours n&apos;a pas encore de compétences. <Link to="/evaluations/cours" className="font-semibold underline">Ajoutez-les</Link> pour qu&apos;elles soient incluses, sinon fournissez-les à l&apos;IA.</p>
+                  <p className="text-[11px] text-amber-800">Ce cours n&apos;a pas encore de compétences. <Link to="/classes/cours" className="font-semibold underline">Ajoutez-les</Link> pour qu&apos;elles soient incluses, sinon fournissez-les à l&apos;IA.</p>
                 )}
                 {!selectedCourse && (
                   <p className="text-[11px] text-gray-500">
                     {courses.length === 0 ? "Vous n'avez pas encore de cours. " : ""}
-                    <Link to="/evaluations/cours" className="font-semibold text-emerald-700 underline">Entrez une fois les compétences de votre cours</Link> : elles seront ajoutées automatiquement au gabarit.
+                    <Link to="/classes/cours" className="font-semibold text-emerald-700 underline">Entrez une fois les compétences de votre cours</Link> : elles seront ajoutées automatiquement au gabarit.
                   </p>
                 )}
               </section>

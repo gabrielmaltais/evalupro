@@ -19,6 +19,7 @@ export default function AdminCourses() {
   const [bulkText, setBulkText] = useState("");
   const [showBulk, setShowBulk] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sessions, setSessions] = useState([]);
 
   async function refresh(selectId) {
     try {
@@ -37,6 +38,7 @@ export default function AdminCourses() {
 
   useEffect(() => {
     refresh();
+    api.listSessions().then((list) => setSessions(list.filter((x) => !x.archivedAt))).catch(() => {});
   }, []);
 
   function selectCourse(c) {
@@ -100,6 +102,7 @@ export default function AdminCourses() {
     const payload = {
       title: course.title.trim(),
       code: (course.code || "").trim(),
+      session: course.session || null,
       competencies: course.competencies
         .filter((c) => c.title.trim())
         .map((c) => ({ id: String(c.id).startsWith("new-") ? undefined : c.id, title: c.title.trim(), description: (c.description || "").trim() })),
@@ -122,7 +125,7 @@ export default function AdminCourses() {
       await api.archiveCourse(course._id);
       setCourse(EMPTY_COURSE);
       await refresh();
-      setSuccess("Cours archivé. Tu peux le restaurer dans Sessions > Archives.");
+      setSuccess("Cours archivé (avec ses grilles « archivées avec le cours »). Tu peux le restaurer dans Cours et groupes > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -204,6 +207,14 @@ export default function AdminCourses() {
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Code (facultatif)</label>
                   <input type="text" value={course.code || ""} onChange={(e) => setCourse({ ...course, code: e.target.value })} placeholder="Ex : 420-XYZ" className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Session</label>
+                  <select value={course.session || ""} onChange={(e) => setCourse({ ...course, session: e.target.value || null })} className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
+                    <option value="">Aucune session (le cours reste actif)</option>
+                    {sessions.map((x) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">Le cours est archivé avec sa session, ainsi que les grilles réglées sur « archivée avec le cours ».</p>
                 </div>
               </div>
 

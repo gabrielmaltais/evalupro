@@ -4,6 +4,23 @@ const Rubric = require("../models/Rubric");
 const Student = require("../models/Student");
 const { shouldAutoArchive, todayStr } = require("../utils/sessionDates");
 
+/** Archive les grilles « archivées avec le cours » des cours donnés (celles encore actives seulement). */
+async function archiveCourseRubrics(courseIds, when) {
+  if (!courseIds.length) return 0;
+  const r = await Rubric.updateMany(
+    { course: { $in: courseIds }, archiveWithCourse: true, archivedAt: null },
+    { $set: { archivedAt: when } }
+  );
+  return r.modifiedCount;
+}
+
+/** Restaure les grilles que l'archivage de ces cours (à cette date précise) avait rangées. */
+async function restoreCourseRubrics(courseIds, when) {
+  if (!courseIds.length || !when) return 0;
+  const r = await Rubric.updateMany({ course: { $in: courseIds }, archivedAt: when }, { $set: { archivedAt: null } });
+  return r.modifiedCount;
+}
+
 /**
  * Archive une session et tout ce qui lui est rattaché (cours, grilles, groupes d'étudiants).
  * Seuls les éléments encore actifs reçoivent la date d'archivage de la session : à la restauration,
@@ -15,12 +32,13 @@ async function archiveSession(session, by = "manual") {
   session.archivedBy = by;
   await session.save();
   const filter = { session: session._id, archivedAt: null };
-  const [courses, rubrics, students] = await Promise.all([
+  const [courses, students] = await Promise.all([
     Course.updateMany(filter, { $set: { archivedAt: when } }),
-    Rubric.updateMany(filter, { $set: { archivedAt: when } }),
     Student.updateMany(filter, { $set: { archivedAt: when } }),
   ]);
-  return { courses: courses.modifiedCount, rubrics: rubrics.modifiedCount, students: students.modifiedCount };
+  const ids = await Course.find({ session: session._id, archivedAt: when }).distinct("_id");
+  const rubrics = await archiveCourseRubrics(ids, when);
+  return { courses: courses.modifiedCount, rubrics, students: students.modifiedCount };
 }
 
 async function restoreSession(session) {
@@ -30,12 +48,13 @@ async function restoreSession(session) {
   await session.save();
   if (!when) return { courses: 0, rubrics: 0, students: 0 };
   const filter = { session: session._id, archivedAt: when };
-  const [courses, rubrics, students] = await Promise.all([
+  const ids = await Course.find(filter).distinct("_id");
+  const rubrics = await restoreCourseRubrics(ids, when);
+  const [courses, students] = await Promise.all([
     Course.updateMany(filter, { $set: { archivedAt: null } }),
-    Rubric.updateMany(filter, { $set: { archivedAt: null } }),
     Student.updateMany(filter, { $set: { archivedAt: null } }),
   ]);
-  return { courses: courses.modifiedCount, rubrics: rubrics.modifiedCount, students: students.modifiedCount };
+  return { courses: courses.modifiedCount, rubrics, students: students.modifiedCount };
 }
 
 /** Archive les sessions échues (fin + délai de grâce dépassés). Sans ownerId : toutes les sessions. */
@@ -52,4 +71,4 @@ async function autoArchiveExpiredSessions(ownerId, today = todayStr()) {
   return archived;
 }
 
-module.exports = { archiveSession, restoreSession, autoArchiveExpiredSessions };
+module.exports = { archiveCourseRubrics, restoreCourseRubrics, archiveSession, restoreSession, autoArchiveExpiredSessions };

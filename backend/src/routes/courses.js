@@ -3,6 +3,8 @@ const { z } = require("zod");
 const mongoose = require("mongoose");
 const Course = require("../models/Course");
 const Session = require("../models/Session");
+const Rubric = require("../models/Rubric");
+const { archiveCourseRubrics, restoreCourseRubrics } = require("../services/sessionService");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 const { normalizeCompetencies } = require("../utils/courseCompetencies");
@@ -84,17 +86,18 @@ router.post("/:id/archive", roles("admin", "teacher"), async (req, res) => {
     { new: true }
   );
   if (!item) return res.status(404).json({ message: "Cours introuvable ou déjà archivé" });
-  res.json(item);
+  const rubrics = await archiveCourseRubrics([item._id], item.archivedAt);
+  res.json({ ...item.toObject(), archivedRubrics: rubrics });
 });
 
 router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
-  const item = await Course.findOneAndUpdate(
-    ownerFilter(req, { _id: req.params.id }),
-    { $set: { archivedAt: null } },
-    { new: true }
-  );
-  if (!item) return res.status(404).json({ message: "Cours introuvable" });
-  res.json(item);
+  const before = await Course.findOne(ownerFilter(req, { _id: req.params.id }));
+  if (!before) return res.status(404).json({ message: "Cours introuvable" });
+  const when = before.archivedAt;
+  before.archivedAt = null;
+  await before.save();
+  const rubrics = await restoreCourseRubrics([before._id], when);
+  res.json({ ...before.toObject(), restoredRubrics: rubrics });
 });
 
 /** Copie un cours (avec ses compétences) dans une session, ou sans session si sessionId est absent. */
@@ -120,6 +123,7 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
     const deleted = await Course.findOneAndDelete(ownerFilter(req, { _id: req.params.id }));
     if (!deleted) return res.status(404).json({ message: "Cours introuvable" });
+    await Rubric.updateMany({ course: deleted._id }, { $set: { course: null } });
     res.status(204).send();
   } catch (error) {
     res.status(400).json({ message: "Suppression invalide", details: error.message });

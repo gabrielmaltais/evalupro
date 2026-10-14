@@ -50,7 +50,13 @@ async function countsFor(ownerId, sessionIds) {
   if (!sessionIds.length) return new Map();
   const [courses, rubrics, students] = await Promise.all([
     Course.aggregate([{ $match: { createdBy: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
-    Rubric.aggregate([{ $match: { createdBy: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
+    Rubric.aggregate([
+      { $match: { createdBy: ownerId, course: { $ne: null } } },
+      { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "c" } },
+      { $unwind: "$c" },
+      { $match: { "c.session": { $in: sessionIds } } },
+      { $group: { _id: "$c.session", n: { $sum: 1 } } },
+    ]),
     Student.aggregate([
       { $match: { createdBy: ownerId, session: { $in: sessionIds } } },
       { $group: { _id: "$session", n: { $sum: 1 }, groups: { $addToSet: "$group" } } },
@@ -112,7 +118,6 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
     const filter = { session: item._id };
     await Promise.all([
       Course.updateMany(filter, { $set: { session: null } }),
-      Rubric.updateMany(filter, { $set: { session: null } }),
       Student.updateMany(filter, { $set: { session: null } }),
     ]);
     res.status(204).send();
@@ -163,10 +168,11 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
 
     const courseIds = (payload.courseIds || []).filter(isId);
     const rubricIds = (payload.rubricIds || []).filter(isId);
-    const [courses, rubrics] = await Promise.all([
-      courseIds.length ? Course.find(mine(req, { _id: { $in: courseIds }, session: source._id })) : [],
-      rubricIds.length ? Rubric.find(mine(req, { _id: { $in: rubricIds }, session: source._id })) : [],
-    ]);
+    const courses = courseIds.length ? await Course.find(mine(req, { _id: { $in: courseIds }, session: source._id })) : [];
+    // Seules les grilles rattachées à un cours copié peuvent être copiées (elles suivent leur nouveau cours).
+    const rubrics = rubricIds.length
+      ? await Rubric.find(mine(req, { _id: { $in: rubricIds }, course: { $in: courses.map((c) => c._id) } }))
+      : [];
 
     const created = await Session.create({
       name: payload.name,
@@ -178,9 +184,10 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
     });
 
     const groups = Array.from(new Set(payload.groups || []));
-    await Course.insertMany(
+    const newCourses = await Course.insertMany(
       courses.map((c) => ({ title: c.title, code: c.code, competencies: c.competencies, session: created._id, createdBy: req.user._id }))
     );
+    const courseMap = new Map(courses.map((c, i) => [String(c._id), newCourses[i]._id]));
     await Rubric.insertMany(
       rubrics.map((r) => ({
         title: r.title,
@@ -192,7 +199,8 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
         feedbackMessages: r.feedbackMessages,
         groups,
         group: groups[0] || "",
-        session: created._id,
+        course: courseMap.get(String(r.course)),
+        archiveWithCourse: r.archiveWithCourse,
         createdBy: req.user._id,
       }))
     );
