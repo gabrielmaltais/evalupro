@@ -16,6 +16,8 @@ const courseSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     code: { type: String, default: "", trim: true },
     competencies: { type: [competencySchema], default: [] },
+    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
+    archivedAt: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

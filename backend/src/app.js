@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth");
 const rubricRoutes = require("./routes/rubrics");
 const evaluationRoutes = require("./routes/evaluations");
 const courseRoutes = require("./routes/courses");
+const sessionRoutes = require("./routes/sessions");
 
 const studentRoutes = require("./routes/students");
 const userRoutes = require("./routes/users");
@@ -35,6 +36,7 @@ app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/rubrics", rubricRoutes);
 app.use("/api/courses", courseRoutes);
+app.use("/api/sessions", sessionRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/users", userRoutes);

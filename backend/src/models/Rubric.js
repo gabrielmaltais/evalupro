@@ -44,6 +44,8 @@ const rubricSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: false },
     // Active l'affichage du champ "élément de compétence" dans l'éditeur de grille.
     linkCompetencies: { type: Boolean, default: false },
+    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
+    archivedAt: { type: Date, default: null },
     group: { type: String, default: "" },
     groups: { type: [String], default: [] },
     criteria: { type: [criterionSchema], default: [] },

@@ -1,6 +1,8 @@
 const express = require("express");
 const { z } = require("zod");
+const mongoose = require("mongoose");
 const Student = require("../models/Student");
+const Session = require("../models/Session");
 const Evaluation = require("../models/Evaluation");
 const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const GroupStyle = require("../models/GroupStyle");
@@ -31,15 +33,21 @@ const studentFields = z.object({
 
 router.use(auth);
 
+/** Session et état d'archive d'un groupe existant, pour que les nouveaux étudiants les héritent. */
+async function groupInheritance(ownerId, group) {
+  if (!group) return {};
+  const ref = await Student.findOne({ createdBy: ownerId, group }).select("session archivedAt").lean();
+  return ref ? { session: ref.session || null, archivedAt: ref.archivedAt || null } : {};
+}
+
 router.get("/", async (req, res) => {
-  // Only return students created by this user, or maybe all students?
-  // Since it's a shared platform or personal, let's return students created by this user
-  const items = await Student.find({ createdBy: req.user._id }).sort({ lastName: 1, firstName: 1, name: 1 });
+  const archived = req.query.archived === "1" || req.query.archived === "true";
+  const items = await Student.find({ createdBy: req.user._id, archivedAt: archived ? { $ne: null } : null }).sort({ lastName: 1, firstName: 1, name: 1 });
   res.json(items);
 });
 
 router.get("/group-dashboard", async (req, res) => {
-  const students = await Student.find({ createdBy: req.user._id }).lean();
+  const students = await Student.find({ createdBy: req.user._id, archivedAt: null }).lean();
   const studentIds = students.map((s) => s._id);
   const evaluations = await Evaluation.find({ owner: req.user._id, studentId: { $in: studentIds } })
     .select("studentId totalScore totalMax")
@@ -86,7 +94,8 @@ router.post("/", async (req, res) => {
   try {
     const raw = studentFields.parse(req.body);
     const payload = normalizeStudentPayload(raw);
-    const item = await Student.create({ ...payload, createdBy: req.user._id });
+    const inherit = await groupInheritance(req.user._id, payload.group);
+    const item = await Student.create({ ...payload, ...inherit, createdBy: req.user._id });
     res.status(201).json(item);
   } catch (error) {
     const code = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 400;
@@ -101,7 +110,13 @@ const bulkStudentSchema = z.object({
 router.post("/bulk", async (req, res) => {
   try {
     const payload = bulkStudentSchema.parse(req.body);
-    const docs = payload.students.map((s) => ({ ...normalizeStudentPayload(s), createdBy: req.user._id }));
+    const cache = new Map();
+    const docs = [];
+    for (const s of payload.students) {
+      const n = normalizeStudentPayload(s);
+      if (n.group && !cache.has(n.group)) cache.set(n.group, await groupInheritance(req.user._id, n.group));
+      docs.push({ ...n, ...(cache.get(n.group) || {}), createdBy: req.user._id });
+    }
     const inserted = await Student.insertMany(docs);
     res.status(201).json(inserted);
   } catch (error) {
@@ -138,6 +153,58 @@ router.delete("/:id", async (req, res) => {
   const deleted = await Student.findOneAndDelete({ _id: req.params.id, createdBy: req.user._id });
   if (!deleted) return res.status(404).json({ message: "Etudiant introuvable" });
   res.status(204).send();
+});
+
+const groupName = z.string().trim().min(1);
+
+router.get("/groups/archived", async (req, res) => {
+  const rows = await Student.aggregate([
+    { $match: { createdBy: req.user._id, archivedAt: { $ne: null } } },
+    { $group: { _id: "$group", students: { $sum: 1 }, session: { $first: "$session" }, archivedAt: { $max: "$archivedAt" } } },
+    { $sort: { _id: 1 } },
+  ]);
+  res.json(rows.map((r) => ({ group: r._id || "", students: r.students, session: r.session || null, archivedAt: r.archivedAt })));
+});
+
+router.post("/groups/archive", async (req, res) => {
+  try {
+    const { group } = z.object({ group: groupName }).parse(req.body);
+    const result = await Student.updateMany(
+      { createdBy: req.user._id, group, archivedAt: null },
+      { $set: { archivedAt: new Date() } }
+    );
+    res.json({ modified: result.modifiedCount });
+  } catch (error) {
+    res.status(400).json({ message: "Archivage du groupe impossible", details: error.message });
+  }
+});
+
+router.post("/groups/restore", async (req, res) => {
+  try {
+    const { group } = z.object({ group: groupName }).parse(req.body);
+    const result = await Student.updateMany({ createdBy: req.user._id, group }, { $set: { archivedAt: null } });
+    res.json({ modified: result.modifiedCount });
+  } catch (error) {
+    res.status(400).json({ message: "Restauration du groupe impossible", details: error.message });
+  }
+});
+
+/** Rattache un groupe à une session (ou le détache avec sessionId = null). */
+router.post("/groups/session", async (req, res) => {
+  try {
+    const { group, sessionId } = z.object({ group: groupName, sessionId: z.string().nullable() }).parse(req.body);
+    let session = null;
+    if (sessionId) {
+      if (!mongoose.isValidObjectId(sessionId)) return res.status(400).json({ message: "Session invalide" });
+      const s = await Session.findOne({ _id: sessionId, createdBy: req.user._id });
+      if (!s) return res.status(404).json({ message: "Session introuvable" });
+      session = s._id;
+    }
+    const result = await Student.updateMany({ createdBy: req.user._id, group }, { $set: { session } });
+    res.json({ modified: result.modifiedCount });
+  } catch (error) {
+    res.status(400).json({ message: "Rattachement impossible", details: error.message });
+  }
 });
 
 router.post("/groups/rename", async (req, res) => {

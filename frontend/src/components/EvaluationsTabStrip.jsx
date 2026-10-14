@@ -5,6 +5,7 @@ const TABS = [
   { id: "suivi", label: "Suivi d'évaluation", icon: "fa-list-check", to: "/evaluations?tab=suivi" },
   { id: "envois", label: "Envois", icon: "fa-paper-plane", to: "/evaluations?tab=envois" },
   { id: "cours", label: "Cours", icon: "fa-book-open", to: "/evaluations/cours" },
+  { id: "sessions", label: "Sessions", icon: "fa-box-archive", to: "/evaluations/sessions" },
   { id: "grilles", label: "Grilles", icon: "fa-sliders", to: "/evaluations/grilles" },
 ];
 
@@ -13,6 +14,7 @@ export default function EvaluationsTabStrip() {
   const location = useLocation();
   const isGrilles = location.pathname === "/evaluations/grilles";
   const isCours = location.pathname === "/evaluations/cours";
+  const isSessions = location.pathname === "/evaluations/sessions";
   const tabParam = new URLSearchParams(location.search).get("tab");
   const activeEval =
     tabParam === "suivi" || tabParam === "envois" || tabParam === "corriger" ? tabParam : "corriger";
@@ -20,12 +22,12 @@ export default function EvaluationsTabStrip() {
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
       <nav
-        className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/40 sm:grid-cols-5"
+        className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-700/60 dark:bg-gray-900/40 sm:grid-cols-6"
         aria-label="Évaluations"
       >
         {TABS.map((t) => {
           const active =
-            t.id === "grilles" ? isGrilles : t.id === "cours" ? isCours : !isGrilles && !isCours && activeEval === t.id;
+            t.id === "grilles" ? isGrilles : t.id === "cours" ? isCours : t.id === "sessions" ? isSessions : !isGrilles && !isCours && !isSessions && activeEval === t.id;
           return (
             <Link
               key={t.id}

@@ -104,12 +104,12 @@ const sendOneSchema = z.object({
 router.get("/email-targets", async (req, res) => {
   const query = req.user.role === "admin" ? {} : { owner: req.user._id };
   const [groups, rubrics] = await Promise.all([
-    Student.find({ createdBy: req.user._id, group: { $nin: [null, ""] } }).distinct("group"),
-    Evaluation.find(query).populate("rubric", "title taskTitle version").sort({ createdAt: -1 }),
+    Student.find({ createdBy: req.user._id, archivedAt: null, group: { $nin: [null, ""] } }).distinct("group"),
+    Evaluation.find(query).populate("rubric", "title taskTitle version archivedAt").sort({ createdAt: -1 }),
   ]);
   const examMap = new Map();
   rubrics.forEach((ev) => {
-    if (!ev.rubric) return;
+    if (!ev.rubric || ev.rubric.archivedAt) return;
     const key = String(ev.rubric._id);
     if (!examMap.has(key)) {
       examMap.set(key, {

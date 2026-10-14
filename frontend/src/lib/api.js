@@ -92,7 +92,36 @@ export const api = {
   createRubric: (payload) => request("/api/rubrics", { method: "POST", body: JSON.stringify(payload) }),
   updateRubric: (id, payload) => request(`/api/rubrics/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRubric: (id) => request(`/api/rubrics/${id}`, { method: "DELETE" }),
+  listRubricsArchived: () => request("/api/rubrics?archived=1"),
+  archiveRubric: (id) => request(`/api/rubrics/${id}/archive`, { method: "POST" }),
+  restoreRubric: (id) => request(`/api/rubrics/${id}/restore`, { method: "POST" }),
+  copyRubric: (id, payload) => request(`/api/rubrics/${id}/copy`, { method: "POST", body: JSON.stringify(payload) }),
   listCourses: () => request("/api/courses"),
+  listCoursesArchived: () => request("/api/courses?archived=1"),
+  archiveCourse: (id) => request(`/api/courses/${id}/archive`, { method: "POST" }),
+  restoreCourse: (id) => request(`/api/courses/${id}/restore`, { method: "POST" }),
+  copyCourse: (id, sessionId) => request(`/api/courses/${id}/copy`, { method: "POST", body: JSON.stringify({ sessionId: sessionId || null }) }),
+  listSessions: () => request("/api/sessions"),
+  createSession: (payload) => request("/api/sessions", { method: "POST", body: JSON.stringify(payload) }),
+  updateSession: (id, payload) => request(`/api/sessions/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteSession: (id) => request(`/api/sessions/${id}`, { method: "DELETE" }),
+  archiveSession: (id) => request(`/api/sessions/${id}/archive`, { method: "POST" }),
+  restoreSession: (id) => request(`/api/sessions/${id}/restore`, { method: "POST" }),
+  copySession: (id, payload) => request(`/api/sessions/${id}/copy`, { method: "POST", body: JSON.stringify(payload) }),
+  exportSessionCsv: async (id) => {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/api/sessions/${id}/export`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!response.ok) throw new Error("Export impossible");
+    const blob = await response.blob();
+    return { blob, filename: parseFilenameFromContentDisposition(response.headers.get("content-disposition"), "notes.csv") };
+  },
+  listStudentsArchived: () => request("/api/students?archived=1"),
+  listArchivedGroups: () => request("/api/students/groups/archived"),
+  archiveGroup: (group) => request("/api/students/groups/archive", { method: "POST", body: JSON.stringify({ group }) }),
+  restoreGroup: (group) => request("/api/students/groups/restore", { method: "POST", body: JSON.stringify({ group }) }),
+  setGroupSession: (group, sessionId) => request("/api/students/groups/session", { method: "POST", body: JSON.stringify({ group, sessionId: sessionId || null }) }),
   createCourse: (payload) => request("/api/courses", { method: "POST", body: JSON.stringify(payload) }),
   updateCourse: (id, payload) => request(`/api/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCourse: (id) => request(`/api/courses/${id}`, { method: "DELETE" }),
