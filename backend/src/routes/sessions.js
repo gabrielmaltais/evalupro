@@ -165,7 +165,7 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
     const rubricIds = (payload.rubricIds || []).filter(isId);
     const [courses, rubrics] = await Promise.all([
       courseIds.length ? Course.find(mine(req, { _id: { $in: courseIds }, session: source._id })) : [],
-      rubricIds.length ? Rubric.find({ _id: { $in: rubricIds }, session: source._id }) : [],
+      rubricIds.length ? Rubric.find(mine(req, { _id: { $in: rubricIds }, session: source._id })) : [],
     ]);
 
     const created = await Session.create({

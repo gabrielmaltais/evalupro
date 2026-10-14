@@ -3,6 +3,8 @@ const { z } = require("zod");
 const mongoose = require("mongoose");
 const Rubric = require("../models/Rubric");
 const Session = require("../models/Session");
+const Evaluation = require("../models/Evaluation");
+const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 
@@ -47,6 +49,22 @@ const rubricSchema = z.object({
 
 router.use(auth);
 
+/** Chaque utilisateur a son espace : une grille n'est visible et modifiable que par son créateur. */
+const mine = (req, id, extra = {}) => ({ _id: id, createdBy: req.user._id, ...extra });
+
+/** Recalcule les totaux des évaluations d'une grille après modification de ses critères. */
+async function recomputeEvaluationTotals(rubric) {
+  const evals = await Evaluation.find({ rubric: rubric._id }).select("scores totalScore totalMax").lean();
+  const ops = [];
+  for (const ev of evals) {
+    const { totalScore, totalMax } = computeEvaluationTotals(rubric, ev.scores);
+    if (totalScore !== ev.totalScore || totalMax !== ev.totalMax) {
+      ops.push({ updateOne: { filter: { _id: ev._id }, update: { $set: { totalScore, totalMax } } } });
+    }
+  }
+  if (ops.length) await Evaluation.bulkWrite(ops);
+}
+
 async function resolveSession(req, value) {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -58,7 +76,7 @@ async function resolveSession(req, value) {
 
 router.get("/", async (req, res) => {
   const archived = req.query.archived === "1" || req.query.archived === "true";
-  const items = await Rubric.find({ archivedAt: archived ? { $ne: null } : null }).sort({ createdAt: -1 });
+  const items = await Rubric.find({ createdBy: req.user._id, archivedAt: archived ? { $ne: null } : null }).sort({ createdAt: -1 });
   res.json(items);
 });
 
@@ -88,8 +106,9 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
     }
     const session = await resolveSession(req, payload.session);
     if (session !== undefined) payload.session = session;
-    const item = await Rubric.findByIdAndUpdate(req.params.id, payload, { new: true });
+    const item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
+    if (payload.criteria) await recomputeEvaluationTotals(item);
     res.json(item);
   } catch (error) {
     res.status(400).json({ message: "Rubric invalide", details: error.message });
@@ -97,13 +116,13 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
 });
 
 router.post("/:id/archive", roles("admin", "teacher"), async (req, res) => {
-  const item = await Rubric.findOneAndUpdate({ _id: req.params.id, archivedAt: null }, { $set: { archivedAt: new Date() } }, { new: true });
+  const item = await Rubric.findOneAndUpdate(mine(req, req.params.id, { archivedAt: null }), { $set: { archivedAt: new Date() } }, { new: true });
   if (!item) return res.status(404).json({ message: "Rubric introuvable ou déjà archivée" });
   res.json(item);
 });
 
 router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
-  const item = await Rubric.findByIdAndUpdate(req.params.id, { $set: { archivedAt: null } }, { new: true });
+  const item = await Rubric.findOneAndUpdate(mine(req, req.params.id), { $set: { archivedAt: null } }, { new: true });
   if (!item) return res.status(404).json({ message: "Rubric introuvable" });
   res.json(item);
 });
@@ -114,7 +133,7 @@ router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
  */
 router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   try {
-    const src = await Rubric.findById(req.params.id);
+    const src = await Rubric.findOne(mine(req, req.params.id));
     if (!src) return res.status(404).json({ message: "Rubric introuvable" });
     const session = await resolveSession(req, req.body?.sessionId);
     const g = normalizeGroupsInput(Array.isArray(req.body?.groups) ? req.body.groups : [], undefined);
@@ -139,7 +158,7 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
 });
 
 router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
-  const deleted = await Rubric.findByIdAndDelete(req.params.id);
+  const deleted = await Rubric.findOneAndDelete(mine(req, req.params.id));
   if (!deleted) return res.status(404).json({ message: "Rubric introuvable" });
   res.status(204).send();
 });

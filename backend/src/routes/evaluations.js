@@ -70,7 +70,7 @@ router.post("/", async (req, res) => {
       const st = await Student.findOne({ _id: payload.studentId, createdBy: req.user._id }).lean();
       if (st) payload.studentName = studentFullNameFromDoc(st);
     }
-    const rubric = await Rubric.findById(payload.rubric);
+    const rubric = await Rubric.findOne({ _id: payload.rubric, createdBy: req.user._id });
     if (!rubric) return res.status(404).json({ message: "Rubric introuvable" });
     const { totalScore, totalMax } = computeEvaluationTotals(rubric, payload.scores);
     let aiSummary = "";
@@ -256,7 +256,7 @@ router.put("/:id", async (req, res) => {
     }
     Object.assign(item, payload);
     if (payload.rubric) {
-      const rubricExists = await Rubric.findById(item.rubric).select("_id criteria");
+      const rubricExists = await Rubric.findOne({ _id: item.rubric, createdBy: req.user._id }).select("_id criteria");
       if (!rubricExists) return res.status(404).json({ message: "Rubric introuvable" });
     }
 
