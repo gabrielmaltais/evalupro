@@ -30,6 +30,7 @@ export const LEVEL_SCALES = {
 };
 
 export const DEFAULT_AI_CONFIG = {
+  courseId: "",
   langue: "fr",
   niveaux: "4",
   pointsPartiels: true,
@@ -91,6 +92,11 @@ const TEXT = {
     feedbackMsg: "Message de rétroaction pour cette tranche de note (à rédiger).",
     toValidate: "Liste ici chaque point incertain à faire valider par l'enseignant.",
     repeatCriteria: "Ce gabarit montre UN critère en exemple : répète la même structure pour CHAQUE critère de l'enseignant.",
+    providedWithCourse: (n, title) =>
+      `Les ${n} compétences / critères de performance du cours « ${title} » sont déjà inclus dans ce gabarit (voir 'criteres_de_performance_du_cours' et 'template_a_remplir.criteria'). L'enseignant te fournit en plus son examen ou l'énoncé du travail avec les points de chaque question (OBLIGATOIRE), et éventuellement un corrigé, un barème ou des consignes. Si l'examen est absent, ne génère pas de grille : demande-le.`,
+    courseStructure: (n) =>
+      `Le gabarit contient déjà ${n} critères, un par compétence du cours, dans cet ordre. Garde leur titre et leur \`competencyElement\` tels quels et ne les supprime pas. Remplis pour chacun : \`weight\`, les tâches (\`subCriteria\`, à répéter autant que nécessaire) et les \`desc\` des niveaux. Si l'examen ne touche pas une compétence, laisse-la avec \`weight\` à 0 et signale-le dans \`aValider\`.`,
+    courseCriterionNote: "Titre du critère fourni par l'enseignant : à conserver tel quel.",
   },
   en: {
     role: "Expert in college-level educational technology, specialised in building criterion-referenced rubrics with descriptive scales.",
@@ -142,6 +148,11 @@ const TEXT = {
     feedbackMsg: "Feedback message for this score band (to write).",
     toValidate: "List here each uncertain point for the teacher to validate.",
     repeatCriteria: "This template shows ONE example criterion: repeat the same structure for EACH teacher criterion.",
+    providedWithCourse: (n, title) =>
+      `The ${n} competencies / performance criteria of the course "${title}" are already included in this template (see 'criteres_de_performance_du_cours' and 'template_a_remplir.criteria'). The teacher additionally provides the exam or assignment text with the points of each question (REQUIRED), and optionally an answer key, a marking scheme or instructions. If the exam is missing, do not generate a rubric: ask for it.`,
+    courseStructure: (n) =>
+      `The template already contains ${n} criteria, one per course competency, in this order. Keep their title and \`competencyElement\` unchanged and do not remove them. For each one fill in: \`weight\`, the tasks (\`subCriteria\`, repeated as needed) and the level \`desc\` fields. If the exam does not touch a competency, leave it with \`weight\` 0 and mention it in \`aValider\`.`,
+    courseCriterionNote: "Criterion title provided by the teacher: keep it unchanged.",
   },
 };
 
@@ -158,26 +169,36 @@ export function buildAITemplate(config = {}) {
     desc: T.levelDesc(lvl.label),
   }));
 
-  const criterion = {
-    id: "c1",
-    title: T.criterionTitle,
-    competencyElement: T.competency,
+  const makeCriterion = (index, title, competencyElement) => ({
+    id: `c${index + 1}`,
+    title,
+    competencyElement,
     weight: 0,
-    color: COLORS[0],
-    levels,
+    color: COLORS[index % COLORS.length],
+    levels: levels.map((lvl) => ({ ...lvl })),
     subCriteria: [1, 2].map((n) => ({
-      id: `c1-sc${n}`,
+      id: `c${index + 1}-sc${n}`,
       label: `${T.taskLabel} ${n}`,
       pts: 0,
       feedback: T.taskFeedback,
     })),
-  };
+  });
+
+  const courseTitle = String(cfg.course?.title || "").trim();
+  const competencies = (cfg.course?.competencies || [])
+    .map((c) => ({ title: String(c?.title || "").trim(), description: String(c?.description || "").trim() }))
+    .filter((c) => c.title);
+  const hasCourse = Boolean(courseTitle) && competencies.length > 0;
+
+  const criteria = hasCourse
+    ? competencies.map((c, i) => makeCriterion(i, c.title, c.title))
+    : [makeCriterion(0, T.criterionTitle, T.competency)];
 
   const template_a_remplir = {
-    title: T.title,
+    title: hasCourse ? courseTitle : T.title,
     taskTitle: T.taskTitle,
     linkCompetencies: true,
-    criteria: [criterion],
+    criteria,
     ...(cfg.inclureFeedbackGlobal
       ? { feedbackMessages: FEEDBACK_BANDS.map(([minPct, maxPct]) => ({ minPct, maxPct, message: T.feedbackMsg })) }
       : {}),
@@ -189,9 +210,18 @@ export function buildAITemplate(config = {}) {
     _prompt_configuration: {
       role: T.role,
       reponse_attendue: T.format,
-      ce_que_l_enseignant_te_fournit: T.provided,
+      ce_que_l_enseignant_te_fournit: hasCourse ? T.providedWithCourse(competencies.length, courseTitle) : T.provided,
+      ...(hasCourse
+        ? {
+            criteres_de_performance_du_cours: competencies.map((c, i) => ({
+              numero: i + 1,
+              titre: c.title,
+              ...(c.description ? { precisions: c.description } : {}),
+            })),
+          }
+        : {}),
       logique_de_la_grille: T.logic,
-      structure: T.repeatCriteria,
+      structure: hasCourse ? T.courseStructure(competencies.length) : T.repeatCriteria,
       regles_mathematiques: T.math,
       niveaux_de_performance: T.levels(scale.length),
       points: cfg.pointsPartiels ? T.partial : T.noPartial,

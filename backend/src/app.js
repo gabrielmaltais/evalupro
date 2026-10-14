@@ -6,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 const authRoutes = require("./routes/auth");
 const rubricRoutes = require("./routes/rubrics");
 const evaluationRoutes = require("./routes/evaluations");
+const courseRoutes = require("./routes/courses");
 
 const studentRoutes = require("./routes/students");
 const userRoutes = require("./routes/users");
@@ -33,6 +34,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/rubrics", rubricRoutes);
+app.use("/api/courses", courseRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/users", userRoutes);

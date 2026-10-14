@@ -92,6 +92,10 @@ export const api = {
   createRubric: (payload) => request("/api/rubrics", { method: "POST", body: JSON.stringify(payload) }),
   updateRubric: (id, payload) => request(`/api/rubrics/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRubric: (id) => request(`/api/rubrics/${id}`, { method: "DELETE" }),
+  listCourses: () => request("/api/courses"),
+  createCourse: (payload) => request("/api/courses", { method: "POST", body: JSON.stringify(payload) }),
+  updateCourse: (id, payload) => request(`/api/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteCourse: (id) => request(`/api/courses/${id}`, { method: "DELETE" }),
   listEvaluations: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/api/evaluations${qs ? `?${qs}` : ""}`);

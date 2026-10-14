@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/Login";
 import Evaluations from "./pages/Evaluations";
 import AdminRubric from "./pages/AdminRubric";
+import AdminCourses from "./pages/AdminCourses";
 import AdminStudents from "./pages/AdminStudents";
 import AdminUsers from "./pages/AdminUsers";
 import AccountSettings from "./pages/AccountSettings";
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/evaluations" element={<EvaluationsLayout />}>
           <Route index element={<Evaluations />} />
           <Route path="grilles" element={<AdminRubric />} />
+          <Route path="cours" element={<AdminCourses />} />
         </Route>
         <Route path="/admin/rubrics" element={<Navigate to="/evaluations/grilles" replace />} />
         <Route path="/admin/students" element={<AdminStudents />} />

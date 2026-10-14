@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseCompetencyLines } from "./courseHelpers";
 import { buildAITemplate, LEVEL_SCALES } from "./aiTemplate";
 import { applyLevelToCriterion, checkRubricSums, matchLevel, normalizeImportedRubric, parseAiJson, taskPoints } from "./rubricTemplate";
 
@@ -133,5 +134,56 @@ describe("clic sur un niveau à la correction", () => {
     expect(mid.score).toBe(8.25);
     const over = applyLevelToCriterion({ weight: 5, subCriteria: [{ id: "a", pts: 6 }] }, levels[3]);
     expect(over.score).toBe(5);
+  });
+});
+
+describe("gabarit avec un cours", () => {
+  const course = {
+    title: "Déploiement de services réseau",
+    competencies: [
+      { id: "a", title: "Analyser le projet de déploiement", description: "Besoins et contraintes" },
+      { id: "b", title: "Installer et administrer les services d'infrastructure réseau", description: "" },
+      { id: "c", title: "   ", description: "ignorée" },
+    ],
+  };
+
+  it("crée un critère par compétence et envoie la liste à l'IA", () => {
+    const t = buildAITemplate({ course });
+    const criteria = t.template_a_remplir.criteria;
+    expect(criteria.map((c) => c.title)).toEqual([course.competencies[0].title, course.competencies[1].title]);
+    expect(new Set(criteria.map((c) => c.id)).size).toBe(2);
+    expect(criteria[0].competencyElement).toBe(criteria[0].title);
+    expect(t.template_a_remplir.title).toBe(course.title);
+    expect(t._prompt_configuration.criteres_de_performance_du_cours).toEqual([
+      { numero: 1, titre: course.competencies[0].title, precisions: "Besoins et contraintes" },
+      { numero: 2, titre: course.competencies[1].title },
+    ]);
+    expect(t._prompt_configuration.ce_que_l_enseignant_te_fournit).toMatch(/déjà inclus/);
+    expect(t._prompt_configuration.ce_que_l_enseignant_te_fournit).toMatch(/examen/);
+  });
+
+  it("revient au gabarit générique sans cours ou sans compétences", () => {
+    for (const c of [undefined, { title: "Vide", competencies: [] }]) {
+      const t = buildAITemplate({ course: c });
+      expect(t.template_a_remplir.criteria).toHaveLength(1);
+      expect(t._prompt_configuration.criteres_de_performance_du_cours).toBeUndefined();
+      expect(t._prompt_configuration.ce_que_l_enseignant_te_fournit).toMatch(/OBLIGATOIRE/);
+    }
+  });
+
+  it("le gabarit pré-rempli reste importable et les critères non touchés gardent 0 point", () => {
+    const filled = buildAITemplate({ course }).template_a_remplir;
+    filled.criteria[0].weight = 10;
+    filled.criteria[0].subCriteria.forEach((s) => (s.pts = 5));
+    const result = normalizeImportedRubric(filled);
+    expect(result.ok).toBe(true);
+    expect(result.rubric.criteria.map((c) => c.weight)).toEqual([10, 0]);
+  });
+});
+
+describe("liste de compétences collée", () => {
+  it("retire numérotation, puces et lignes vides", () => {
+    const lines = parseCompetencyLines("1. Analyser le projet\n  2) Installer les services\n- Planifier\n\n• Évaluer\na) Documenter\n3Dessiner");
+    expect(lines.map((l) => l.title)).toEqual(["Analyser le projet", "Installer les services", "Planifier", "Évaluer", "Documenter", "3Dessiner"]);
   });
 });

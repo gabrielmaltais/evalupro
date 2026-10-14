@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { normalizeImportedRubric, parseAiJson, tasksTotal } from "../lib/rubricTemplate";
 import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES } from "../lib/aiTemplate";
+import { competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
 
 /** Si le JSON vient du gabarit IA enveloppé, extraire la grille importable. */
@@ -58,7 +59,16 @@ export default function AdminRubric() {
   const [aiCopySuccess, setAiCopySuccess] = useState(false);
   const [showPasteJsonModal, setShowPasteJsonModal] = useState(false);
   const [pastedJsonText, setPastedJsonText] = useState("");
-  const [aiConfig, setAiConfig] = useState(DEFAULT_AI_CONFIG);
+  const [courses, setCourses] = useState([]);
+  const [aiConfig, setAiConfig] = useState(() => {
+    let courseId = "";
+    try {
+      courseId = localStorage.getItem("evalupro_ai_course") || "";
+    } catch {
+      /* stockage indisponible */
+    }
+    return { ...DEFAULT_AI_CONFIG, courseId };
+  });
 
 
   async function refresh() {
@@ -76,6 +86,11 @@ export default function AdminRubric() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // Cours (et leurs compétences) proposés dans le configurateur de gabarit.
+  useEffect(() => {
+    api.listCourses().then(setCourses).catch(() => setCourses([]));
   }, []);
 
 
@@ -266,7 +281,18 @@ export default function AdminRubric() {
     a.remove();
   }
 
-  const buildAITemplate = () => buildAITemplateJson(aiConfig);
+  const selectedCourse = courses.find((c) => c._id === aiConfig.courseId) || null;
+  const selectedCourseCompetencies = competenciesForAi(selectedCourse);
+  const buildAITemplate = () => buildAITemplateJson({ ...aiConfig, course: selectedCourse });
+
+  function chooseAiCourse(courseId) {
+    setAiConfig((c) => ({ ...c, courseId }));
+    try {
+      localStorage.setItem("evalupro_ai_course", courseId);
+    } catch {
+      /* stockage indisponible */
+    }
+  }
 
   function downloadAITemplate() {
     const cfg = aiConfig;
@@ -814,11 +840,42 @@ export default function AdminRubric() {
                 ))}
               </section>
 
+              {/* Cours : compétences ajoutées automatiquement au gabarit */}
+              <section className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-800"><i className="fa-solid fa-book-open mr-1 text-emerald-600 text-[11px]"></i> Cours du gabarit</label>
+                <select value={aiConfig.courseId} onChange={(e) => chooseAiCourse(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-400">
+                  <option value="">— Aucun cours (je fournirai les compétences à l&apos;IA) —</option>
+                  {courses.map((c) => (
+                    <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title} ({(c.competencies || []).length} compétence(s))</option>
+                  ))}
+                </select>
+                {selectedCourse && selectedCourseCompetencies.length > 0 && (
+                  <ul className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-950 space-y-0.5">
+                    {selectedCourseCompetencies.map((comp, i) => (
+                      <li key={i}><span className="font-semibold">{i + 1}.</span> {comp.title}</li>
+                    ))}
+                  </ul>
+                )}
+                {selectedCourse && selectedCourseCompetencies.length === 0 && (
+                  <p className="text-[11px] text-amber-800">Ce cours n&apos;a pas encore de compétences. <Link to="/evaluations/cours" className="font-semibold underline">Ajoutez-les</Link> pour qu&apos;elles soient incluses, sinon fournissez-les à l&apos;IA.</p>
+                )}
+                {!selectedCourse && (
+                  <p className="text-[11px] text-gray-500">
+                    {courses.length === 0 ? "Vous n'avez pas encore de cours. " : ""}
+                    <Link to="/evaluations/cours" className="font-semibold text-emerald-700 underline">Entrez une fois les compétences de votre cours</Link> : elles seront ajoutées automatiquement au gabarit.
+                  </p>
+                )}
+              </section>
+
               {/* Ce qu'il faut fournir */}
               <section className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5">
                 <p className="text-xs font-bold text-amber-950"><i className="fa-solid fa-paperclip mr-1.5"></i>À fournir à l&apos;IA en plus du gabarit</p>
                 <ul className="mt-1.5 space-y-1.5 text-[12px] text-amber-950/90 leading-snug">
-                  <li><i className="fa-solid fa-circle-check mr-1.5 text-amber-600"></i><strong>Vos critères de performance</strong> (ou éléments de compétence) du plan de cours, copiés tels quels. <span className="font-semibold">Obligatoire.</span></li>
+                  {selectedCourseCompetencies.length > 0 ? (
+                    <li><i className="fa-solid fa-circle-check mr-1.5 text-emerald-600"></i><strong>Les {selectedCourseCompetencies.length} compétences du cours</strong> sont déjà dans le gabarit : rien à ajouter.</li>
+                  ) : (
+                    <li><i className="fa-solid fa-circle-check mr-1.5 text-amber-600"></i><strong>Vos critères de performance</strong> (ou éléments de compétence) du plan de cours, copiés tels quels. <span className="font-semibold">Obligatoire.</span></li>
+                  )}
                   <li><i className="fa-solid fa-circle-check mr-1.5 text-amber-600"></i><strong>Votre examen ou l&apos;énoncé du travail</strong>, avec les points de chaque question. <span className="font-semibold">Obligatoire.</span></li>
                   <li><i className="fa-regular fa-circle mr-1.5 text-amber-600"></i>Un corrigé ou un barème, si vous en avez un. <span className="text-amber-800">Facultatif.</span></li>
                 </ul>
