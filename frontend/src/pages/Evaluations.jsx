@@ -6,6 +6,7 @@ import HubContextBar from "../components/HubContextBar";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
+import { matchLevel, taskPoints } from "../lib/rubricTemplate";
 
 function evalItemStudentId(it) {
   return evalStudentId(it);
@@ -1500,7 +1501,7 @@ export default function Evaluations() {
       if (isHighest) {
         // Cocher toutes les cases
         const allChecked = {};
-        criterion.subCriteria.forEach(sc => { allChecked[sc.id] = true; });
+        criterion.subCriteria.forEach(sc => { allChecked[sc.id] = Number(sc.pts) || 0; });
         setSubScores(prev => ({ ...prev, [cid]: allChecked }));
       } else if (isLowest) {
         // Décocher toutes les cases
@@ -1510,21 +1511,24 @@ export default function Evaluations() {
     }
   }
 
-  function handleSubScore(cid, scId, checked, criterion) {
-    const newCState = { ...(subScores[cid] || {}), [scId]: checked };
+  // `value` : points obtenus pour la tâche (nombre), ou booléen pour l'ancien format (case à cocher).
+  function handleSubScore(cid, scId, value, criterion) {
+    const task = criterion.subCriteria.find((sc) => sc.id === scId);
+    const points = task ? taskPoints(task, value) : 0;
+    const newCState = { ...(subScores[cid] || {}), [scId]: points };
     setSubScores(prev => ({ ...prev, [cid]: newCState }));
     setSubCriteriaTouched((t) => ({
       ...t,
       [cid]: { ...(t[cid] || {}), [scId]: true },
     }));
 
-    // Recalculer le score en sommant les sous-critères cochés
+    // Recalculer le score en sommant les points obtenus aux tâches
     let total = 0;
     criterion.subCriteria.forEach(sc => {
-      if (newCState[sc.id]) total += sc.pts;
+      total += taskPoints(sc, newCState[sc.id]);
     });
     // Plafonner au poids maximal du critère
-    setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, total), criterion.weight) }));
+    setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, Number(total.toFixed(2))), criterion.weight) }));
   }
 
   function generatePDF() {
@@ -1643,11 +1647,7 @@ export default function Evaluations() {
               let descText = "En attente d'évaluation...";
               if (currentScore > 0 || scores[cid] === 0) {
                 if (c.levels && c.levels.length > 0) {
-                  const sortedLevels = [...c.levels].sort((a, b) => a.maxPct - b.maxPct);
-                  let matchedLevel = sortedLevels[0];
-                  for (const lvl of sortedLevels) {
-                    if (pctC >= lvl.maxPct) matchedLevel = lvl;
-                  }
+                  const matchedLevel = matchLevel(c.levels, pctC);
                   descText = matchedLevel.desc || "Score attribué";
                 } else {
                   descText = "Score attribué";
@@ -1696,20 +1696,41 @@ export default function Evaluations() {
                         {c.subCriteria && c.subCriteria.length > 0 && (
                           <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2">
                             {c.subCriteria.map(sc => {
-                              const isChecked = subScores[cid]?.[sc.id] || false;
+                              const earned = taskPoints(sc, subScores[cid]?.[sc.id]);
+                              const maxPts = Number(sc.pts) || 0;
+                              const isFull = maxPts > 0 && earned >= maxPts;
+                              const touched = subCriteriaTouched[cid]?.[sc.id];
+                              const step = maxPts > 0 && maxPts <= 2 ? 0.25 : 0.5;
+                              const quick = [["0", 0], ["½", Number((maxPts / 2).toFixed(2))], ["Max", maxPts]];
                               return (
-                                <label key={sc.id} className={`flex items-start gap-3 p-2 rounded cursor-pointer transition border ${isChecked ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : 'border-transparent hover:border-gray-100 hover:bg-gray-50 dark:hover:border-white/10 dark:hover:bg-white/[0.04]'}`}>
-                                  <input disabled={!canEditEvaluation} type="checkbox" checked={isChecked} onChange={e => handleSubScore(cid, sc.id, e.target.checked, c)} className="mt-0.5 w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 flex-shrink-0 dark:border-slate-500 dark:bg-slate-800 disabled:cursor-not-allowed" />
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className={`text-sm ${isChecked ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
-                                    <span className="text-xs text-slate-600 dark:text-slate-300">Valeur : {sc.pts > 0 ? '+' : ''}{sc.pts} pts</span>
-                                    {!isChecked && sc.feedback && subCriteriaTouched[cid]?.[sc.id] && (
-                                      <p className="text-xs text-red-700 dark:text-red-200 mt-1 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
-                                        ⚠ {sc.feedback}
-                                      </p>
-                                    )}
+                                <div key={sc.id} className={`flex flex-col gap-1.5 p-2 rounded border ${isFull ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : earned > 0 ? 'border-amber-200 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-950/20' : 'border-transparent'}`}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <span className={`text-sm min-w-0 ${isFull ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      {quick.map(([lbl, val]) => (
+                                        <button key={lbl} type="button" disabled={!canEditEvaluation} onClick={() => handleSubScore(cid, sc.id, val, c)} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold transition disabled:cursor-not-allowed ${earned === val && touched ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600'}`}>{lbl}</button>
+                                      ))}
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={maxPts}
+                                        step={step}
+                                        disabled={!canEditEvaluation}
+                                        value={touched || earned > 0 ? earned : ""}
+                                        placeholder="0"
+                                        onChange={e => handleSubScore(cid, sc.id, e.target.value === "" ? 0 : Number(e.target.value), c)}
+                                        className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs text-center outline-none focus:ring-1 focus:ring-purple-400 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                                        aria-label={`Points pour ${sc.label}`}
+                                      />
+                                      <span className="text-xs text-slate-600 dark:text-slate-300">/ {maxPts}</span>
+                                    </div>
                                   </div>
-                                </label>
+                                  {earned < maxPts && sc.feedback && touched && (
+                                    <p className="text-xs text-red-700 dark:text-red-200 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
+                                      ⚠ {sc.feedback}
+                                    </p>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -1722,7 +1743,7 @@ export default function Evaluations() {
                           const missingFeedbacks = c.subCriteria
                             .filter(
                               (sc) =>
-                                !subScores[cid]?.[sc.id] && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
+                                taskPoints(sc, subScores[cid]?.[sc.id]) < (Number(sc.pts) || 0) && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
                             )
                             .map((sc) => sc.feedback);
                           return missingFeedbacks.length > 0 && (
@@ -2624,11 +2645,7 @@ export default function Evaluations() {
               let descText = "Non évalué";
               if (s > 0 || scores[cid] === 0) {
                 if (c.levels && c.levels.length > 0) {
-                  const sortedLevels = [...c.levels].sort((a, b) => a.maxPct - b.maxPct);
-                  let matchedLevel = sortedLevels[0];
-                  for (const lvl of sortedLevels) {
-                    if (pctC >= lvl.maxPct) matchedLevel = lvl;
-                  }
+                  const matchedLevel = matchLevel(c.levels, pctC);
                   descText = matchedLevel.desc || "Score attribué";
                 } else {
                   descText = "Score attribué";
@@ -2650,14 +2667,14 @@ export default function Evaluations() {
                     {c.subCriteria && c.subCriteria.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {c.subCriteria.map(sc => {
-                          const isChecked = subScores[cid]?.[sc.id] || false;
+                          const earned = taskPoints(sc, subScores[cid]?.[sc.id]);
+                          const isChecked = earned >= (Number(sc.pts) || 0) && earned > 0;
                           return (
                             <div key={sc.id}>
                               <div className="flex items-center gap-2 text-xs">
                                 <span className={`inline-block w-3.5 h-3.5 border rounded-sm flex-shrink-0 text-center leading-3 ${isChecked ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 bg-white'}`}>{isChecked ? '✓' : ''}</span>
                                 <span className={isChecked ? "text-gray-800 font-medium" : "text-gray-600"}>
-                                  {sc.label} ({sc.pts > 0 ? "+" : ""}
-                                  {sc.pts} pts)
+                                  {sc.label} ({earned}/{sc.pts} pts)
                                 </span>
                               </div>
                               {!isChecked && sc.feedback && (

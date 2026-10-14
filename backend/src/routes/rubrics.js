@@ -35,7 +35,7 @@ const rubricSchema = z.object({
       competencyElement: z.string().optional(),
       weight: z.number().nonnegative(),
       color: z.string().optional(),
-      levels: z.array(z.object({ label: z.string(), maxPct: z.number().min(0).max(1), desc: z.string() })).optional(),
+      levels: z.array(z.object({ label: z.string(), maxPct: z.number().min(0).max(1), minPct: z.number().min(0).max(1).optional(), desc: z.string() })).optional(),
       subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional() })).optional(),
     })
   ),

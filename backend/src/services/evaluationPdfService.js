@@ -42,16 +42,29 @@ function getSubBlock(subScores, cid) {
   return block;
 }
 
+function levelThreshold(level) {
+  return Number.isFinite(level && level.minPct) ? level.minPct : (level && level.maxPct) || 0;
+}
+
+// `true` (ancien format) = tous les points; nombre = points partiels; sinon 0.
+function taskPoints(task, value) {
+  const max = Number(task.pts) || 0;
+  if (value === true) return max;
+  const n = Number(value);
+  if (value === false || value === null || value === undefined || value === "" || !Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, Math.min(0, max)), Math.max(0, max));
+}
+
 function levelDescription(criterion, s, scoresObj, cid) {
   let descText = "Non évalué";
   const raw = getNumber(scoresObj, cid);
   if (s > 0 || raw === 0) {
     if (criterion.levels && criterion.levels.length > 0) {
       const pctC = s / (criterion.weight || 1);
-      const sortedLevels = [...criterion.levels].sort((a, b) => a.maxPct - b.maxPct);
+      const sortedLevels = [...criterion.levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
       let matchedLevel = sortedLevels[0];
       for (const lvl of sortedLevels) {
-        if (pctC >= lvl.maxPct) matchedLevel = lvl;
+        if (pctC >= levelThreshold(lvl)) matchedLevel = lvl;
       }
       descText = matchedLevel.desc || "Score attribué";
     } else {
@@ -252,8 +265,10 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
         c.subCriteria.forEach((sc) => {
           ensureCursorSpaceForCriterion(18);
-          const isChecked = !!(subScoreBlock[sc.id] || subScoreBlock[String(sc.id)]);
-          const labelText = `${sc.label} (${sc.pts > 0 ? "+" : ""}${sc.pts} pts)`;
+          const earned = taskPoints(sc, subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)]);
+          const maxPts = Number(sc.pts) || 0;
+          const isChecked = earned >= maxPts && earned > 0;
+          const labelText = `${sc.label} (${earned}/${maxPts} pts)`;
           doc.font("Helvetica").fontSize(8);
           const labelH = doc.heightOfString(labelText, { width: labelW });
           const rowH = Math.max(chkSize, labelH);
