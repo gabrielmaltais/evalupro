@@ -110,7 +110,7 @@ export default function AdminSmtp() {
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-4 text-sm">{success}</div>}
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <div className="ui-card ui-card-body space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="text-sm">Host
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />

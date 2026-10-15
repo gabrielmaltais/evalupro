@@ -606,7 +606,7 @@ export default function AdminRubric() {
                   </button>
                 </div>
               </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="ui-card ui-card-body">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               <h2 className="text-xl font-bold text-gray-800">Paramètres Généraux</h2>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -722,7 +722,7 @@ export default function AdminRubric() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 relative">
+          <div className="ui-card ui-card-body relative">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold text-gray-800">Éditeur de Critères</h2>
                 <div className="flex items-center gap-4">
