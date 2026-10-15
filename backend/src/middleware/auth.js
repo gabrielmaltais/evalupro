@@ -8,7 +8,7 @@ async function auth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.sub).select("_id email name role");
+    const user = await User.findById(payload.sub).select("_id email name role activeSession");
     if (!user) return res.status(401).json({ message: "Utilisateur introuvable" });
     req.user = user;
     next();

@@ -41,7 +41,7 @@ router.post("/register", async (req, res) => {
     const exists = await User.findOne({ email: parsed.email.toLowerCase() });
     if (exists) return res.status(409).json({ message: "Email deja utilise" });
     const role = (await User.countDocuments()) === 0 ? "admin" : "teacher";
-    const user = await User.create({ ...parsed, role });
+    const user = await User.create({ ...parsed, role, groupsMigratedAt: new Date() });
     const token = signToken(user);
     res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (error) {

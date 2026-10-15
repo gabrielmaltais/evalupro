@@ -2,13 +2,20 @@ const express = require("express");
 const mongoose = require("mongoose");
 const { z } = require("zod");
 const Session = require("../models/Session");
-const Course = require("../models/Course");
-const Rubric = require("../models/Rubric");
+const Group = require("../models/Group");
+const Enrollment = require("../models/Enrollment");
 const Student = require("../models/Student");
 const Evaluation = require("../models/Evaluation");
+const User = require("../models/User");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
-const { archiveSession, restoreSession, autoArchiveExpiredSessions } = require("../services/sessionService");
+const {
+  archiveSession,
+  restoreSession,
+  autoArchiveExpiredSessions,
+  resolveActiveSession,
+  countSessionEvaluations,
+} = require("../services/sessionService");
 const { validateSessionDates, sessionStatus, archiveAfterDate } = require("../utils/sessionDates");
 const { toCsv } = require("../utils/csv");
 
@@ -26,10 +33,12 @@ const sessionSchema = z.object({
 });
 
 const copySchema = sessionSchema.extend({
-  courseIds: z.array(z.string()).optional(),
-  rubricIds: z.array(z.string()).optional(),
-  /** Groupes (noms) auxquels les grilles copiées s'appliquent dans la nouvelle session. */
-  groups: z.array(z.string().trim().min(1)).optional(),
+  /** Groupes à reprendre (par défaut: tous les groupes actifs de la session source). */
+  groupIds: z.array(z.string()).optional(),
+  /** Reprendre aussi les grilles importées (par défaut non: on réimporte les versions à jour). */
+  carryRubrics: z.boolean().optional(),
+  /** Inscrire dans les nouveaux groupes les mêmes élèves (leurs fiches permanentes sont réutilisées). */
+  carryStudents: z.boolean().optional(),
   archiveSource: z.boolean().optional(),
 });
 
@@ -42,33 +51,21 @@ function present(session, counts = {}) {
     ...plain,
     status: sessionStatus(plain),
     archiveAfter: archiveAfterDate(plain),
-    counts: { courses: 0, rubrics: 0, groups: 0, students: 0, ...counts },
+    counts: { groups: 0, students: 0, evaluations: 0, ...counts },
   };
 }
 
 async function countsFor(ownerId, sessionIds) {
   if (!sessionIds.length) return new Map();
-  const [courses, rubrics, students] = await Promise.all([
-    Course.aggregate([{ $match: { createdBy: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
-    Rubric.aggregate([
-      { $match: { createdBy: ownerId, course: { $ne: null } } },
-      { $lookup: { from: "courses", localField: "course", foreignField: "_id", as: "c" } },
-      { $unwind: "$c" },
-      { $match: { "c.session": { $in: sessionIds } } },
-      { $group: { _id: "$c.session", n: { $sum: 1 } } },
-    ]),
-    Student.aggregate([
-      { $match: { createdBy: ownerId, session: { $in: sessionIds } } },
-      { $group: { _id: "$session", n: { $sum: 1 }, groups: { $addToSet: "$group" } } },
-    ]),
+  const [groups, students, evaluations] = await Promise.all([
+    Group.aggregate([{ $match: { createdBy: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
+    Enrollment.aggregate([{ $match: { createdBy: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
+    Evaluation.aggregate([{ $match: { owner: ownerId, session: { $in: sessionIds } } }, { $group: { _id: "$session", n: { $sum: 1 } } }]),
   ]);
   const out = new Map(sessionIds.map((id) => [String(id), {}]));
-  courses.forEach((r) => (out.get(String(r._id)).courses = r.n));
-  rubrics.forEach((r) => (out.get(String(r._id)).rubrics = r.n));
-  students.forEach((r) => {
-    out.get(String(r._id)).students = r.n;
-    out.get(String(r._id)).groups = r.groups.filter(Boolean).length;
-  });
+  groups.forEach((r) => (out.get(String(r._id)).groups = r.n));
+  students.forEach((r) => (out.get(String(r._id)).students = r.n));
+  evaluations.forEach((r) => (out.get(String(r._id)).evaluations = r.n));
   return out;
 }
 
@@ -80,6 +77,38 @@ router.get("/", async (req, res) => {
     res.json(sessions.map((s) => present(s, counts.get(String(s._id)))));
   } catch (error) {
     res.status(500).json({ message: "Chargement des sessions impossible", details: error.message });
+  }
+});
+
+/** Session sur laquelle l'utilisateur travaille (null s'il n'en a aucune d'ouverte). */
+router.get("/active", async (req, res) => {
+  try {
+    await autoArchiveExpiredSessions(req.user._id);
+    const fresh = await User.findById(req.user._id).select("activeSession");
+    const session = await resolveActiveSession(fresh);
+    if (!session) return res.json({ session: null });
+    const counts = await countsFor(req.user._id, [session._id]);
+    res.json({ session: present(session, counts.get(String(session._id))) });
+  } catch (error) {
+    res.status(500).json({ message: "Chargement de la session active impossible", details: error.message });
+  }
+});
+
+router.put("/active", roles("admin", "teacher"), async (req, res) => {
+  try {
+    const { sessionId } = z.object({ sessionId: z.string().nullable() }).parse(req.body);
+    let session = null;
+    if (sessionId) {
+      if (!isId(sessionId)) return res.status(400).json({ message: "Session invalide" });
+      session = await Session.findOne(mine(req, { _id: sessionId, archivedAt: null }));
+      if (!session) return res.status(404).json({ message: "Session introuvable ou archivée" });
+    }
+    await User.updateOne({ _id: req.user._id }, { $set: { activeSession: session ? session._id : null } });
+    const fresh = await User.findById(req.user._id).select("activeSession");
+    const active = await resolveActiveSession(fresh);
+    res.json({ session: active ? present(active) : null });
+  } catch (error) {
+    res.status(400).json({ message: "Changement de session impossible", details: error.message });
   }
 });
 
@@ -110,15 +139,29 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   }
 });
 
-/** Supprime la session seulement : cours, grilles et groupes sont conservés, simplement détachés. */
+/**
+ * Supprime une session et ses groupes/inscriptions. Les cours, grilles et fiches d'élèves sont conservés.
+ * Si elle contient des évaluations, il faut confirmer avec `?force=1` (les évaluations sont alors conservées
+ * mais détachées de la session).
+ */
 router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
-    const item = await Session.findOneAndDelete(mine(req, { _id: req.params.id }));
+    const item = await Session.findOne(mine(req, { _id: req.params.id }));
     if (!item) return res.status(404).json({ message: "Session introuvable" });
-    const filter = { session: item._id };
+    const evaluations = await countSessionEvaluations(req.user._id, item._id);
+    const force = req.query.force === "1" || req.query.force === "true";
+    if (evaluations > 0 && !force) {
+      return res.status(409).json({
+        message: "Cette session contient des évaluations. Archive-la plutôt, ou confirme la suppression.",
+        evaluations,
+      });
+    }
+    await item.deleteOne();
     await Promise.all([
-      Course.updateMany(filter, { $set: { session: null } }),
-      Student.updateMany(filter, { $set: { session: null } }),
+      Enrollment.deleteMany({ session: item._id, createdBy: req.user._id }),
+      Group.deleteMany({ session: item._id, createdBy: req.user._id }),
+      Evaluation.updateMany({ owner: req.user._id, session: item._id }, { $set: { group: null, session: null } }),
+      User.updateOne({ _id: req.user._id, activeSession: item._id }, { $set: { activeSession: null } }),
     ]);
     res.status(204).send();
   } catch (error) {
@@ -130,7 +173,7 @@ router.post("/:id/archive", roles("admin", "teacher"), async (req, res) => {
   try {
     const item = await Session.findOne(mine(req, { _id: req.params.id }));
     if (!item) return res.status(404).json({ message: "Session introuvable" });
-    if (item.archivedAt) return res.json({ session: present(item), archived: { courses: 0, rubrics: 0, students: 0 } });
+    if (item.archivedAt) return res.json({ session: present(item), archived: { groups: 0, students: 0 } });
     const archived = await archiveSession(item, "manual");
     res.json({ session: present(item), archived });
   } catch (error) {
@@ -155,8 +198,9 @@ router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
 });
 
 /**
- * Nouvelle session à partir d'une autre : copie des cours et des grilles choisis (sans les évaluations
- * ni les étudiants). Les grilles copiées s'appliquent aux nouveaux groupes indiqués.
+ * Nouvelle session à partir d'une autre: reprend les groupes choisis avec les mêmes cours (ressources
+ * communes) mais sans leurs grilles, à réimporter une à une pour éviter les versions obsolètes (sauf
+ * `carryRubrics`). Reprend les mêmes élèves si demandé. Les évaluations ne sont jamais copiées.
  */
 router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   try {
@@ -166,13 +210,9 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
     const source = await Session.findOne(mine(req, { _id: req.params.id }));
     if (!source) return res.status(404).json({ message: "Session introuvable" });
 
-    const courseIds = (payload.courseIds || []).filter(isId);
-    const rubricIds = (payload.rubricIds || []).filter(isId);
-    const courses = courseIds.length ? await Course.find(mine(req, { _id: { $in: courseIds }, session: source._id })) : [];
-    // Seules les grilles rattachées à un cours copié peuvent être copiées (elles suivent leur nouveau cours).
-    const rubrics = rubricIds.length
-      ? await Rubric.find(mine(req, { _id: { $in: rubricIds }, course: { $in: courses.map((c) => c._id) } }))
-      : [];
+    const filter = mine(req, { session: source._id, archivedAt: null });
+    if (payload.groupIds) filter._id = { $in: payload.groupIds.filter(isId) };
+    const sourceGroups = await Group.find(filter);
 
     const created = await Session.create({
       name: payload.name,
@@ -183,34 +223,37 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
       createdBy: req.user._id,
     });
 
-    const groups = Array.from(new Set(payload.groups || []));
-    const newCourses = await Course.insertMany(
-      courses.map((c) => ({ title: c.title, code: c.code, competencies: c.competencies, session: created._id, createdBy: req.user._id }))
-    );
-    const courseMap = new Map(courses.map((c, i) => [String(c._id), newCourses[i]._id]));
-    await Rubric.insertMany(
-      rubrics.map((r) => ({
-        title: r.title,
-        taskTitle: r.taskTitle,
-        version: 1,
-        isActive: true,
-        linkCompetencies: r.linkCompetencies,
-        criteria: r.criteria,
-        feedbackMessages: r.feedbackMessages,
-        groups,
-        group: groups[0] || "",
-        course: courseMap.get(String(r.course)),
-        archiveWithCourse: r.archiveWithCourse,
+    const newGroups = await Group.insertMany(
+      sourceGroups.map((g) => ({
+        name: g.name,
+        session: created._id,
+        courses: g.courses,
+        rubrics: payload.carryRubrics ? g.rubrics : [],
+        color: g.color,
+        icon: g.icon,
         createdBy: req.user._id,
       }))
     );
+
+    let carried = 0;
+    if (payload.carryStudents && newGroups.length) {
+      const idMap = new Map(sourceGroups.map((g, i) => [String(g._id), newGroups[i]._id]));
+      const enrollments = await Enrollment.find({ group: { $in: sourceGroups.map((g) => g._id) }, createdBy: req.user._id, archivedAt: null }).lean();
+      const students = await Student.find({ _id: { $in: enrollments.map((e) => e.student) }, archivedAt: null }).select("_id").lean();
+      const alive = new Set(students.map((st) => String(st._id)));
+      const docs = enrollments
+        .filter((e) => alive.has(String(e.student)))
+        .map((e) => ({ student: e.student, group: idMap.get(String(e.group)), session: created._id, createdBy: req.user._id }));
+      if (docs.length) await Enrollment.insertMany(docs);
+      carried = docs.length;
+    }
 
     let archivedSource = null;
     if (payload.archiveSource && !source.archivedAt) archivedSource = await archiveSession(source, "manual");
 
     res.status(201).json({
-      session: present(created, { courses: courses.length, rubrics: rubrics.length }),
-      copied: { courses: courses.length, rubrics: rubrics.length },
+      session: present(created, { groups: newGroups.length, students: carried }),
+      copied: { groups: newGroups.length, students: carried },
       archivedSource,
     });
   } catch (error) {
@@ -218,14 +261,16 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   }
 });
 
-/** Notes de la session (étudiants rattachés à la session) au format CSV, à conserver avant de tout archiver. */
+/** Notes de la session (élèves inscrits) au format CSV, à conserver avant de tout archiver. */
 router.get("/:id/export", async (req, res) => {
   try {
     const session = await Session.findOne(mine(req, { _id: req.params.id }));
     if (!session) return res.status(404).json({ message: "Session introuvable" });
-    const students = await Student.find(mine(req, { session: session._id })).sort({ group: 1, lastName: 1, firstName: 1 }).lean();
+    const enrollments = await Enrollment.find({ session: session._id, createdBy: req.user._id }).populate("group", "name").lean();
+    const students = await Student.find({ _id: { $in: enrollments.map((e) => e.student) } }).lean();
+    const groupOf = new Map(enrollments.map((e) => [String(e.student), e.group?.name || ""]));
     const byId = new Map(students.map((s) => [String(s._id), s]));
-    const evaluations = await Evaluation.find({ owner: req.user._id, studentId: { $in: students.map((s) => s._id) } })
+    const evaluations = await Evaluation.find({ owner: req.user._id, session: session._id })
       .populate("rubric", "title taskTitle")
       .sort({ date: 1 })
       .lean();
@@ -233,14 +278,14 @@ router.get("/:id/export", async (req, res) => {
     const rows = [["Groupe", "Étudiant", "Courriel", "Grille", "Évaluation", "Date", "Note", "Sur", "Pourcentage"]];
     evaluations
       .sort((a, b) => {
-        const sa = byId.get(String(a.studentId));
-        const sb = byId.get(String(b.studentId));
-        return String(sa?.group || "").localeCompare(String(sb?.group || "")) || String(a.studentName).localeCompare(String(b.studentName));
+        const ga = groupOf.get(String(a.studentId)) || "";
+        const gb = groupOf.get(String(b.studentId)) || "";
+        return ga.localeCompare(gb) || String(a.studentName).localeCompare(String(b.studentName));
       })
       .forEach((ev) => {
         const st = byId.get(String(ev.studentId));
         const pct = ev.totalMax > 0 ? Math.round((Number(ev.totalScore || 0) / ev.totalMax) * 1000) / 10 : "";
-        rows.push([st?.group || "", ev.studentName, st?.email || "", ev.rubric?.title || "", ev.rubric?.taskTitle || "", ev.date, ev.totalScore, ev.totalMax, pct]);
+        rows.push([groupOf.get(String(ev.studentId)) || "", ev.studentName, st?.email || "", ev.rubric?.title || "", ev.rubric?.taskTitle || "", ev.date, ev.totalScore, ev.totalMax, pct]);
       });
 
     const filename = `Notes_${session.name}`.replace(/[^a-zA-Z0-9À-ÿ\s-]/g, "").trim().replace(/\s+/g, "_") || "Notes_session";

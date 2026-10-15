@@ -6,6 +6,7 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const User = require("../src/models/User");
 const Student = require("../src/models/Student");
 const Rubric = require("../src/models/Rubric");
+const Course = require("../src/models/Course");
 const Evaluation = require("../src/models/Evaluation");
 const EvaluationEmailDelivery = require("../src/models/EvaluationEmailDelivery");
 const { encryptSecret, decryptSecret } = require("../src/services/smtpConfigService");
@@ -43,8 +44,10 @@ test("chiffrement/dechiffrement SMTP", async () => {
 test("anti-doublon des livraisons sur evaluation+student+exam+owner", async () => {
   await EvaluationEmailDelivery.init();
   const user = await User.create({ name: "Admin", email: "admin", password: "AdminPro1", role: "admin" });
-  const student = await Student.create({ name: "Alice", email: "alice@x.com", group: "G1", createdBy: user._id });
+  const student = await Student.create({ name: "Alice", email: "alice@x.com", createdBy: user._id });
+  const course = await Course.create({ title: "Reseau", createdBy: user._id });
   const rubric = await Rubric.create({
+    course: course._id,
     title: "Reseau",
     taskTitle: "Examen 1",
     version: 1,

@@ -28,6 +28,8 @@ const criterionSchema = new mongoose.Schema(
     title: { type: String, required: true },
     // Champ informatif optionnel: lien du critère avec un élément de compétence.
     competencyElement: { type: String, default: "" },
+    // Compétence du cours (id) dont le critère découle: modifier la compétence met le critère à jour.
+    competencyId: { type: String, default: "" },
     weight: { type: Number, required: true, min: 0 },
     color: { type: String, default: "border-blue-500" },
     levels: { type: [levelSchema], default: [] },
@@ -44,13 +46,9 @@ const rubricSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: false },
     // Active l'affichage du champ "élément de compétence" dans l'éditeur de grille.
     linkCompetencies: { type: Boolean, default: false },
-    /** Cours auquel la grille est rattachée (facultatif). */
-    course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", default: null },
-    /** true : la grille est archivée avec son cours; false : elle reste active (grille persistante). */
-    archiveWithCourse: { type: Boolean, default: false },
+    /** Cours (le « dossier ») dans lequel la grille est classée. */
+    course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true },
     archivedAt: { type: Date, default: null },
-    group: { type: String, default: "" },
-    groups: { type: [String], default: [] },
     criteria: { type: [criterionSchema], default: [] },
     feedbackMessages: {
       type: [{ minPct: Number, maxPct: Number, message: String }],

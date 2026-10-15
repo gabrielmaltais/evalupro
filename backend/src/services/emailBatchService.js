@@ -7,6 +7,7 @@ const { sendMailWithCurrentConfig } = require("./emailService");
 const { createEvaluationPdfBuffer, getEvaluationPdfFileName } = require("./evaluationPdfService");
 const { buildEvaluationEmailParts } = require("./evaluationEmailTemplate");
 const { getActiveSmtpConfig } = require("./smtpConfigService");
+const { studentsOfGroup, groupNameFor } = require("./groupService");
 
 const batchProgress = new Map();
 
@@ -31,8 +32,8 @@ function getProgress(jobId) {
   return batchProgress.get(jobId) || null;
 }
 
-async function selectEvaluationsForBatch({ ownerId, group, rubricId }) {
-  const students = await Student.find({ createdBy: ownerId, group }).select("_id email name firstName lastName group");
+async function selectEvaluationsForBatch({ ownerId, groupId, rubricId }) {
+  const students = await studentsOfGroup(ownerId, groupId, "_id email name firstName lastName");
   const validStudents = students.filter((s) => s.email);
   const studentIds = validStudents.map((s) => s._id);
   if (!studentIds.length) return [];
@@ -59,12 +60,13 @@ async function runBatchJob({
   jobId,
   owner,
   group,
+  groupId,
   rubricId,
   skipAlreadySent = true,
   allowResendFailed = true,
   delayMs = Number(process.env.BATCH_DELAY_MS || 700),
 }) {
-  const targets = await selectEvaluationsForBatch({ ownerId: owner._id, group, rubricId });
+  const targets = await selectEvaluationsForBatch({ ownerId: owner._id, groupId, rubricId });
   let sent = 0;
   let failed = 0;
   let skipped = 0;
@@ -127,7 +129,7 @@ async function runBatchJob({
       delivery = await EvaluationEmailDelivery.create({
         evaluationId: evaluation._id,
         studentId: student._id,
-        group: student.group || "",
+        group: group || "",
         examKey,
         status: "queued",
         attempts: 0,
@@ -147,6 +149,7 @@ async function runBatchJob({
         owner: ownerForTemplate,
         student,
         rubric: evaluation.rubric,
+        group,
       });
       const info = await sendMailWithCurrentConfig(
         {
@@ -231,13 +234,14 @@ async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
     return { ok: true, alreadySent: true, delivery: existing };
   }
 
+  const groupName = await groupNameFor(student._id, evaluation.session);
   const jobId = makeJobId();
   let delivery = existing;
   if (!delivery) {
     delivery = await EvaluationEmailDelivery.create({
       evaluationId: evaluation._id,
       studentId: student._id,
-      group: student.group || "",
+      group: groupName,
       examKey,
       status: "queued",
       attempts: 0,
@@ -261,6 +265,7 @@ async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
       owner: ownerForTemplate,
       student,
       rubric: evaluation.rubric,
+      group: groupName,
     });
     const info = await sendMailWithCurrentConfig(
       {

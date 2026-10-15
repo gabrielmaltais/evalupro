@@ -26,7 +26,7 @@ const {
   studentFullNameFromDoc,
 } = require("../utils/studentName");
 
-function buildEvaluationEmailParts(smtpConfig, { owner, student, rubric }) {
+function buildEvaluationEmailParts(smtpConfig, { owner, student, rubric, group = "" }) {
   const examTitle = rubric.taskTitle || rubric.title || "Évaluation";
   const courseTitle = rubric.title || "";
   const vars = {
@@ -36,7 +36,7 @@ function buildEvaluationEmailParts(smtpConfig, { owner, student, rubric }) {
     examTitle,
     courseTitle,
     teacherName: owner.name || "Enseignant",
-    group: student.group || "",
+    group: String(group || ""),
   };
   const subjectTpl = (smtpConfig.emailSubjectTemplate && smtpConfig.emailSubjectTemplate.trim()) || DEFAULT_SUBJECT;
   const bodyTpl = (smtpConfig.emailBodyTemplate && smtpConfig.emailBodyTemplate.trim()) || DEFAULT_BODY;
