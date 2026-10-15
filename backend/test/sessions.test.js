@@ -21,7 +21,7 @@ test.beforeEach(async () => {
 });
 
 async function login(email) {
-  const reg = await request(app).post("/api/auth/register").send({ name: "T", email, password: "Password123!" });
+  const reg = await request(app).post("/api/auth/register").send({ name: "Test", email, password: "Password123!" });
   assert.equal(reg.statusCode, 201);
   return { Authorization: `Bearer ${reg.body.token}` };
 }
