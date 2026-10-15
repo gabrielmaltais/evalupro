@@ -291,7 +291,6 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
         name: g.name,
         session: created._id,
         courses: g.courses,
-        rubrics: payload.carryRubrics ? g.rubrics : [],
         color: g.color,
         icon: g.icon,
         createdBy: req.user._id,

@@ -78,15 +78,35 @@ test("les évaluations importées arrivent dans les groupes qui suivent le cours
   assert.equal(detail.courses.length, 0);
 });
 
-test("lier un cours à un groupe l'ajoute à la session", async () => {
+test("un groupe ne suit qu'un cours déjà dans la session", async () => {
   const h = await login("c@example.com");
   const { s, c, cur } = await setup(h);
   const g = (await post(h, "/api/groups", { name: "G1" })).body;
-  await put(h, `/api/groups/${g._id}`, { courses: [c._id] });
+  assert.equal((await put(h, `/api/groups/${g._id}`, { courses: [c._id] })).statusCode, 409);
+  await post(h, `/api/sessions/${s._id}/courses`, { courseId: c._id });
+  assert.equal((await put(h, `/api/groups/${g._id}`, { courses: [c._id] })).statusCode, 200);
   const list = (await get(h, `/api/sessions/${s._id}/courses`)).body;
-  assert.equal(list.length, 1);
   assert.equal(list[0].groups.length, 1);
   assert.deepEqual((await get(h, `/api/groups/${g._id}`)).body.rubrics.map((r) => r._id), [cur._id]);
+});
+
+test("les copies corrigées sont comptées par évaluation et une évaluation décochée reste suivie", async () => {
+  const h = await login("count@example.com");
+  const { s, c, cur } = await setup(h);
+  await post(h, `/api/sessions/${s._id}/courses`, { courseId: c._id });
+  await post(h, "/api/groups", { name: "G1", courses: [c._id] });
+  const st = (await post(h, "/api/students", { firstName: "Ana", lastName: "Roy", group: "G1" })).body;
+  const ev = await post(h, "/api/evaluations", { studentId: st._id, studentName: "Ana Roy", date: "2026-10-01", rubric: cur._id, scores: { c1: 5 } });
+  assert.equal(ev.statusCode, 201, JSON.stringify(ev.body));
+  let entry = (await get(h, `/api/sessions/${s._id}/courses`)).body[0];
+  assert.equal(entry.rubrics.find((r) => r._id === cur._id).correctedCount, 1);
+  let targets = (await get(h, "/api/evaluations/email-targets")).body;
+  assert.equal(targets.exams[0].retired, false);
+  await put(h, `/api/sessions/${s._id}/courses/${c._id}`, { rubricIds: [] });
+  targets = (await get(h, "/api/evaluations/email-targets")).body;
+  assert.equal(targets.exams[0].retired, true);
+  const rubrics = (await get(h, "/api/rubrics")).body;
+  assert.deepEqual(rubrics.find((r) => r._id === cur._id).groups, []);
 });
 
 test("une copie de session garde les cours, sans les évaluations par défaut", async () => {

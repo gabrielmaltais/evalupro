@@ -67,35 +67,12 @@ async function studentsOfGroup(ownerId, groupId, projection) {
   return Student.find({ _id: { $in: enrollments.map((e) => e.student) }, createdBy: ownerId, archivedAt: null }).select(projection);
 }
 
-/** Grilles utilisables en correction pour ce groupe: celles qui y ont été importées. */
+/** Grilles utilisables en correction pour ce groupe (calculées depuis la session, voir sessionCourseService). */
 async function availableRubrics(ownerId, group, { includeArchived = false } = {}) {
-  const filter = { createdBy: ownerId, _id: { $in: group.rubrics || [] } };
+  const ids = (await require("./sessionCourseService").rubricIdsByGroup(ownerId, [group])).get(String(group._id)) || [];
+  const filter = { createdBy: ownerId, _id: { $in: ids } };
   if (!includeArchived) filter.archivedAt = null;
   return Rubric.find(filter).sort({ title: 1 });
-}
-
-/** Groupes (de la session) dans lesquels la grille a été importée. */
-async function groupsOfRubric(ownerId, sessionId, rubric) {
-  if (!sessionId) return [];
-  return Group.find({ createdBy: ownerId, session: sessionId, rubrics: rubric._id }).sort({ name: 1 });
-}
-
-/**
- * Importe des grilles dans un groupe: leur cours est relié au groupe au passage (sans rien importer d'autre
- * de ce cours). Retourne le nombre de grilles ajoutées.
- */
-async function importRubrics(ownerId, group, rubricIds) {
-  const rubrics = await Rubric.find({ createdBy: ownerId, _id: { $in: rubricIds.filter(isId) } }).select("_id course");
-  if (!rubrics.length) return 0;
-  const have = new Set((group.rubrics || []).map(String));
-  const fresh = rubrics.filter((r) => !have.has(String(r._id)));
-  await Group.updateOne(
-    { _id: group._id },
-    { $addToSet: { rubrics: { $each: rubrics.map((r) => r._id) }, courses: { $each: rubrics.map((r) => r.course) } } }
-  );
-  // require tardif: sessionCourseService dépend de ce module.
-  await require("./sessionCourseService").addRubrics(ownerId, group.session, rubrics.map((r) => r._id));
-  return fresh.length;
 }
 
 module.exports = {
@@ -108,6 +85,4 @@ module.exports = {
   groupNameFor,
   studentsOfGroup,
   availableRubrics,
-  groupsOfRubric,
-  importRubrics,
 };

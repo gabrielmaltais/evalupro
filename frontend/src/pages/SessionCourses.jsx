@@ -8,8 +8,8 @@ import { Card, Chip, FormCard, btnDanger, btnPrimary, btnSecondary } from "../co
 const input = "w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:border-gray-600 dark:bg-gray-800";
 
 /**
- * Cours de la session en cours: on choisit les cours, on les lie aux groupes et on coche les évaluations
- * importées. Ce qui est coché ici est ce qu'on peut corriger (onglet Corriger).
+ * Ma session: les groupes de la session, ses cours, les évaluations cochées de chaque cours et les groupes qui
+ * suivent chaque cours. C'est la seule source de ce qu'on peut corriger (onglet Corriger), suivre et envoyer.
  */
 export default function SessionCourses() {
   const { active } = useSession();
@@ -17,7 +17,7 @@ export default function SessionCourses() {
   const [entries, setEntries] = useState([]);
   const [library, setLibrary] = useState([]);
   const [rubrics, setRubrics] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [allGroups, setAllGroups] = useState([]); // groupes communs, avec leur groupe de la session s'il y en a un
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [pick, setPick] = useState(null); // cours choisi dans la bibliothèque
@@ -31,7 +31,7 @@ export default function SessionCourses() {
       setEntries(e);
       setLibrary(c);
       setRubrics(r);
-      setGroups(g.filter((x) => x.activeGroup));
+      setAllGroups(g);
       setError("");
     } catch (err) {
       setError(String(err.message || err));
@@ -84,14 +84,27 @@ export default function SessionCourses() {
     closeAdd();
   }
 
-  function toggleRubric(entry, rubricId) {
+  function toggleRubric(entry, rubric) {
+    const rubricId = String(rubric._id);
     const ids = new Set(entry.rubrics.filter((r) => r.imported).map((r) => String(r._id)));
-    if (ids.has(rubricId)) ids.delete(rubricId);
-    else ids.add(rubricId);
+    if (ids.has(rubricId)) {
+      if (rubric.correctedCount > 0 && !window.confirm(`« ${rubric.title} » a déjà ${rubric.correctedCount} copie(s) corrigée(s). La décocher la retire de Corriger ; les copies sont conservées et reviennent si tu la recoches. Continuer ?`)) return;
+      ids.delete(rubricId);
+    } else ids.add(rubricId);
     act(() => api.setSessionCourseRubrics(sessionId, entry.course._id, [...ids]));
   }
 
-  // Seulement les groupes choisis pour la session (Session en cours > Groupes).
+  const groups = allGroups.filter((x) => x.activeGroup);
+  const readOnly = Boolean(active?.archivedAt);
+
+  // Ajouter un groupe à la session, ou le retirer (archivé: ses élèves et ses corrections restent, on peut le remettre).
+  function toggleSessionGroup(g) {
+    if (!g.activeGroup) return act(() => api.createGroup({ name: g.name }));
+    if (window.confirm(`Retirer « ${g.name} » de la session ? Ses élèves et ses corrections sont conservés ; tu pourras le remettre.`)) {
+      act(() => api.archiveGroupById(g.activeGroup._id));
+    }
+  }
+
   const linked = (g, courseId) => (g.activeGroup?.courses || []).some((c) => String(c) === String(courseId));
   function toggleGroup(g, courseId) {
     const cur = g.activeGroup.courses || [];
@@ -112,12 +125,27 @@ export default function SessionCourses() {
       <PageSectionTitle
         icon="fa-book-open"
         iconBgClass="bg-emerald-600"
-        title="Cours et évaluations"
-        subtitle={`Session : ${active.name}. Choisis les cours de la session, lie-les aux groupes et coche les évaluations à corriger.`}
+        title="Ma session"
+        subtitle={`Session : ${active.name}. 1) Choisis tes groupes. 2) Ajoute tes cours et coche leurs évaluations. 3) Indique quels groupes suivent chaque cours. Les groupes et leurs élèves se gèrent dans Ressources.`}
         className="!mb-0"
       />
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
+      <Card title="Groupes de la session">
+        {allGroups.length ? (
+          <div className="flex flex-wrap gap-2">
+            {allGroups.map((g) => (
+              <Chip key={g._id} icon={g.activeGroup ? "fa-check" : "fa-plus"} active={Boolean(g.activeGroup)} onClick={() => !readOnly && toggleSessionGroup(g)}>
+                {g.name}
+              </Chip>
+            ))}
+          </div>
+        ) : (
+          <Link to="/ressources/groupes" className={`${btnSecondary} inline-block`}>Créer un groupe dans Ressources</Link>
+        )}
+        <p className="mt-2 text-xs text-gray-500">Un groupe ajouté amène ses élèves ; un groupe retiré garde ses élèves et ses corrections.</p>
+      </Card>
 
       {adding ? (
         <FormCard mode="Ajout" title={pick ? `Évaluations de « ${pick.title} »` : "Ajouter un cours à la session"} accent="#059669" onBack={pick ? () => setPick(null) : closeAdd} backLabel={pick ? "Autre cours" : "Annuler"}>
@@ -180,7 +208,7 @@ export default function SessionCourses() {
           )}
         </FormCard>
       ) : (
-        <button type="button" className={btnPrimary} onClick={() => setAdding(true)} disabled={Boolean(active.archivedAt)}>
+        <button type="button" className={btnPrimary} onClick={() => setAdding(true)} disabled={readOnly}>
           <i className="fa-solid fa-plus mr-1" aria-hidden /> Ajouter un cours
         </button>
       )}
@@ -212,9 +240,10 @@ export default function SessionCourses() {
                   <div className="space-y-1.5">
                     {entry.rubrics.map((r) => (
                       <label key={r._id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={r.imported} onChange={() => toggleRubric(entry, String(r._id))} />
+                        <input type="checkbox" checked={r.imported} disabled={readOnly} onChange={() => toggleRubric(entry, r)} />
                         {r.title}
                         {!r.isActive && <span className="text-xs text-gray-400">(inactive)</span>}
+                        {r.correctedCount > 0 && <span className="text-xs font-semibold text-emerald-700">({r.correctedCount} copie{r.correctedCount > 1 ? "s" : ""} corrigée{r.correctedCount > 1 ? "s" : ""})</span>}
                       </label>
                     ))}
                   </div>
@@ -223,17 +252,17 @@ export default function SessionCourses() {
                 )}
               </div>
               <div>
-                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupes</p>
+                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupes qui suivent ce cours</p>
                 {groups.length ? (
                   <div className="flex flex-wrap gap-2">
                     {groups.map((g) => (
-                      <Chip key={g._id} active={linked(g, entry.course._id)} onClick={() => toggleGroup(g, entry.course._id)}>
+                      <Chip key={g._id} icon={linked(g, entry.course._id) ? "fa-check" : "fa-plus"} active={linked(g, entry.course._id)} onClick={() => !readOnly && toggleGroup(g, entry.course._id)}>
                         {g.name}
                       </Chip>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Aucun groupe dans la session. <Link to="/session/groupes" className="text-blue-600 underline">Choisir les groupes</Link></p>
+                  <p className="text-xs text-gray-400">Aucun groupe dans la session. Ajoute-en un plus haut.</p>
                 )}
               </div>
             </div>

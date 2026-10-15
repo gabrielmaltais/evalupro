@@ -16,38 +16,23 @@ const roles = require("../middleware/roles");
 const router = express.Router();
 
 /**
- * Une grille est classée dans un cours; elle est utilisable en correction pour les groupes de la session
- * active dans lesquels elle a été importée. `groups` (noms) en est la vue.
+ * Une grille est classée dans un cours; elle est utilisable en correction pour les groupes de la session active
+ * qui suivent ce cours quand elle y est cochée (page Ma session). `groups` (noms) en est la vue.
  */
 async function activeGroups(req) {
   const session = await resolveActiveSession(req.user);
-  if (!session) return [];
-  return Group.find({ createdBy: req.user._id, session: session._id, archivedAt: null }).sort({ name: 1 });
+  if (!session) return { session: null, groups: [] };
+  return { session, groups: await Group.find({ createdBy: req.user._id, session: session._id, archivedAt: null }).sort({ name: 1 }) };
 }
-
-const imported = (g, rubricId) => (g.rubrics || []).some((r) => String(r) === String(rubricId));
 
 async function withGroups(req, rubrics) {
-  const groups = await activeGroups(req);
+  const { session, groups } = await activeGroups(req);
+  const usable = new Map(groups.map((g) => [String(g._id), new Set(sessionCourses.rubricIdsOf(session, g))]));
   return rubrics.map((r) => {
     const plain = r.toObject ? r.toObject() : r;
-    const names = groups.filter((g) => imported(g, plain._id)).map((g) => g.name);
+    const names = groups.filter((g) => usable.get(String(g._id)).has(String(plain._id))).map((g) => g.name);
     return { ...plain, groups: names, group: names[0] || "" };
   });
-}
-
-/** Importe/retire la grille dans les groupes de la session active pour que seuls ceux indiqués l'aient. */
-async function setGroupsByName(req, rubric, rawNames) {
-  const names = new Set((rawNames || []).map((n) => String(n || "").trim()).filter(Boolean));
-  for (const g of await activeGroups(req)) {
-    const want = names.has(g.name);
-    if (want && !imported(g, rubric._id)) {
-      await Group.updateOne({ _id: g._id }, { $addToSet: { rubrics: rubric._id, courses: rubric.course } });
-      await sessionCourses.addRubrics(req.user._id, g.session, [rubric._id]);
-    } else if (!want && imported(g, rubric._id)) {
-      await Group.updateOne({ _id: g._id }, { $pull: { rubrics: rubric._id } });
-    }
-  }
 }
 
 /**
@@ -73,8 +58,6 @@ const rubricSchema = z.object({
   isActive: z.boolean().optional(),
   linkCompetencies: z.boolean().optional(),
   course: z.string().min(1, "Choisis le cours dans lequel classer la grille"),
-  group: z.string().optional(),
-  groups: z.array(z.string()).optional(),
   criteria: z.array(
     z.object({
       id: z.string().min(1),
@@ -124,11 +107,10 @@ router.get("/", async (req, res) => {
 
 router.post("/", roles("admin", "teacher"), async (req, res) => {
   try {
-    const { groups, group, ...payload } = rubricSchema.parse(req.body);
+    const payload = rubricSchema.parse(req.body);
     const course = await resolveCourse(req, payload.course);
     const created = await Rubric.create({ ...payload, course, createdBy: req.user._id });
     const item = await alignToCourse(req, created);
-    if (groups !== undefined || group !== undefined) await setGroupsByName(req, item, groups ?? [group]);
     const [out] = await withGroups(req, [item]);
     res.status(201).json(out);
   } catch (error) {
@@ -138,20 +120,18 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
 
 router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
-    const { groups, group, ...payload } = rubricSchema.partial().parse(req.body);
+    const payload = rubricSchema.partial().parse(req.body);
     const course = await resolveCourse(req, payload.course);
     if (course !== undefined) payload.course = course;
     const before = await Rubric.findOne(mine(req, req.params.id)).select("course");
     let item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
     if (before && String(before.course) !== String(item.course)) {
-      // Changer de cours: la grille quitte l'ancien cours des sessions et des groupes (l'éditeur la remet dans le nouveau).
+      // Changer de cours: la grille quitte l'ancien cours des sessions (l'éditeur la remet dans le nouveau).
       await pullFromSessions(req.user._id, item._id);
-      await Group.updateMany({ createdBy: req.user._id, rubrics: item._id }, { $pull: { rubrics: item._id } });
     }
     if (payload.criteria || payload.course) item = await alignToCourse(req, item);
     if (payload.criteria) await recomputeEvaluationTotals(item);
-    if (groups !== undefined || group !== undefined) await setGroupsByName(req, item, groups ?? [group]);
     const [out] = await withGroups(req, [item]);
     res.json(out);
   } catch (error) {
@@ -159,19 +139,76 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   }
 });
 
-/** Importe la grille dans les groupes indiqués de la session active (et la retire des autres). */
-router.put("/:id/groups", roles("admin", "teacher"), async (req, res) => {
+router.post("/:id/archive", roles("admin", "teacher"), async (req, res) => {
+  const item = await Rubric.findOneAndUpdate(mine(req, req.params.id, { archivedAt: null }), { $set: { archivedAt: new Date() } }, { new: true });
+  if (!item) return res.status(404).json({ message: "Rubric introuvable ou déjà archivée" });
+  res.json((await withGroups(req, [item]))[0]);
+});
+
+router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
+  const item = await Rubric.findOneAndUpdate(mine(req, req.params.id), { $set: { archivedAt: null } }, { new: true });
+  if (!item) return res.status(404).json({ message: "Rubric introuvable" });
+  res.json((await withGroups(req, [item]))[0]);
+});
+
+/**
+ * Duplique une grille (sans évaluations) pour la modifier sans toucher à l'original: dans le même cours, ou
+ * dans un autre (`courseId`, ce qui l'importe d'un cours à l'autre). La copie repart en version 1.
+ * Avec `replaceInGroups`, la copie prend la place de l'original dans les groupes de la session active.
+ */
+router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   try {
-    const { groupIds } = z.object({ groupIds: z.array(z.string()) }).parse(req.body);
-    const item = await Rubric.findOne(mine(req, req.params.id));
+    const src = await Rubric.findOne(mine(req, req.params.id));
+    if (!src) return res.status(404).json({ message: "Rubric introuvable" });
+    const course = await resolveCourse(req, req.body?.courseId === undefined ? src.course : req.body.courseId);
+    const sameCourse = String(course) === String(src.course);
+    const title = String(req.body?.title || "").trim() || (sameCourse ? `${src.title} (copie)` : src.title);
+    const item = await Rubric.create({
+      title,
+      taskTitle: src.taskTitle,
+      version: 1,
+      isActive: true,
+      linkCompetencies: src.linkCompetencies,
+      criteria: src.criteria,
+      feedbackMessages: src.feedbackMessages,
+      course,
+      createdBy: req.user._id,
+    });
+    if (req.body?.replaceInGroups === true) {
+      // La copie prend la place de l'original dans la session active (et dans son cours, que les mêmes groupes suivent).
+      const { session, groups } = await activeGroups(req);
+      if (session && !session.archivedAt && sessionCourses.rubricIdsOf(session, { courses: groups.flatMap((g) => g.courses) }).includes(String(src._id))) {
+        await sessionCourses.addRubrics(req.user._id, session._id, [item._id]);
+        await pullFromSessions(req.user._id, src._id, { _id: session._id });
+        const sameGroups = groups.filter((g) => sessionCourses.rubricIdsOf(session, g).includes(String(src._id)));
+        await Group.updateMany({ _id: { $in: sameGroups.map((g) => g._id) } }, { $addToSet: { courses: item.course } });
+      }
+    }
+    const [out] = await withGroups(req, [item]);
+    res.status(201).json(out);
+  } catch (error) {
+    res.status(400).json({ message: "Rubric invalide", details: error.message });
+  }
+});
+
+router.put("/:id", roles("admin", "teacher"), async (req, res) => {
+  try {
+    const payload = rubricSchema.partial().parse(req.body);
+    const course = await resolveCourse(req, payload.course);
+    if (course !== undefined) payload.course = course;
+    const before = await Rubric.findOne(mine(req, req.params.id)).select("course");
+    let item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
-    const wanted = new Set(groupIds.map(String));
-    const names = (await activeGroups(req)).filter((g) => wanted.has(String(g._id))).map((g) => g.name);
-    await setGroupsByName(req, item, names);
+    if (before && String(before.course) !== String(item.course)) {
+      // Changer de cours: la grille quitte l'ancien cours des sessions (l'éditeur la remet dans le nouveau).
+      await pullFromSessions(req.user._id, item._id);
+    }
+    if (payload.criteria || payload.course) item = await alignToCourse(req, item);
+    if (payload.criteria) await recomputeEvaluationTotals(item);
     const [out] = await withGroups(req, [item]);
     res.json(out);
   } catch (error) {
-    res.status(400).json({ message: "Importation impossible", details: error.message });
+    res.status(400).json({ message: "Rubric invalide", details: error.message });
   }
 });
 
@@ -229,7 +266,6 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
 router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   const deleted = await Rubric.findOneAndDelete(mine(req, req.params.id));
   if (!deleted) return res.status(404).json({ message: "Rubric introuvable" });
-  await Group.updateMany({ createdBy: req.user._id, rubrics: deleted._id }, { $pull: { rubrics: deleted._id } });
   await pullFromSessions(req.user._id, deleted._id);
   res.status(204).send();
 });

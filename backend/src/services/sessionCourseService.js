@@ -2,6 +2,7 @@ const Session = require("../models/Session");
 const Group = require("../models/Group");
 const Course = require("../models/Course");
 const Rubric = require("../models/Rubric");
+const Evaluation = require("../models/Evaluation");
 const { isId, httpError } = require("./groupService");
 
 const str = String;
@@ -19,26 +20,19 @@ async function rubricsOfCourse(ownerId, courseId, ids) {
 }
 
 /**
- * Aligne `Group.rubrics` sur les cours de la session: pour un cours de la session, un groupe qui le suit
- * reçoit exactement les évaluations importées au niveau de la session; les cours hors session ne sont pas touchés.
+ * Évaluations corrigeables pour un groupe: les évaluations cochées (au niveau de la session) des cours que le
+ * groupe suit. Rien n'est recopié dans le groupe: la session est la seule source.
  */
-async function syncGroups(ownerId, session) {
-  const fresh = session.courses ? session : await Session.findById(session);
-  const byCourse = new Map(fresh.courses.map((c) => [str(c.course), c.rubrics.map(str)]));
-  const groups = await Group.find({ createdBy: ownerId, session: fresh._id });
-  if (!groups.length) return;
-  const all = await Rubric.find({ createdBy: ownerId, _id: { $in: groups.flatMap((g) => g.rubrics) } })
-    .select("course")
-    .lean();
-  const courseOf = new Map(all.map((r) => [str(r._id), str(r.course)]));
-  for (const g of groups) {
-    const mine = new Set(g.courses.map(str));
-    const kept = g.rubrics.map(str).filter((id) => !byCourse.has(courseOf.get(id)));
-    const fromSession = [...byCourse.entries()].filter(([cid]) => mine.has(cid)).flatMap(([, ids]) => ids);
-    const next = [...new Set([...kept, ...fromSession])];
-    const same = next.length === g.rubrics.length && next.every((id) => g.rubrics.map(str).includes(id));
-    if (!same) await Group.updateOne({ _id: g._id }, { $set: { rubrics: next } });
-  }
+function rubricIdsOf(session, group) {
+  const followed = new Set((group.courses || []).map(str));
+  return (session?.courses || []).filter((c) => followed.has(str(c.course))).flatMap((c) => c.rubrics.map(str));
+}
+
+/** Même chose pour plusieurs groupes: Map(id du groupe -> ids de grilles). */
+async function rubricIdsByGroup(ownerId, groups) {
+  const sessions = await Session.find({ createdBy: ownerId, _id: { $in: [...new Set(groups.map((g) => str(g.session)))] } }).select("courses");
+  const byId = new Map(sessions.map((s) => [str(s._id), s]));
+  return new Map(groups.map((g) => [str(g._id), rubricIdsOf(byId.get(str(g.session)), g)]));
 }
 
 /** Ajoute le cours à la session (sans effet s'il y est déjà). `rubricIds` omis: les évaluations actives. */
@@ -50,7 +44,6 @@ async function addCourse(ownerId, session, courseId, rubricIds) {
   const rubrics = rubricIds ? await rubricsOfCourse(ownerId, course._id, rubricIds) : await defaultRubricIds(ownerId, course._id);
   session.courses.push({ course: course._id, rubrics });
   await session.save();
-  await syncGroups(ownerId, session);
   return course;
 }
 
@@ -59,7 +52,6 @@ async function setCourseRubrics(ownerId, session, courseId, rubricIds) {
   if (!entry) throw httpError(404, "Ce cours n'est pas dans la session");
   entry.rubrics = await rubricsOfCourse(ownerId, courseId, rubricIds);
   await session.save();
-  await syncGroups(ownerId, session);
 }
 
 /** Retire le cours de la session; les groupes ne le suivent plus et perdent ses évaluations. */
@@ -68,11 +60,7 @@ async function removeCourse(ownerId, session, courseId) {
   session.courses = session.courses.filter((c) => str(c.course) !== str(courseId));
   if (session.courses.length === before) throw httpError(404, "Ce cours n'est pas dans la session");
   await session.save();
-  const rubricIds = await Rubric.find({ createdBy: ownerId, course: courseId }).distinct("_id");
-  await Group.updateMany(
-    { createdBy: ownerId, session: session._id },
-    { $pull: { courses: courseId, rubrics: { $in: rubricIds } } }
-  );
+  await Group.updateMany({ createdBy: ownerId, session: session._id }, { $pull: { courses: courseId } });
 }
 
 /**
@@ -91,23 +79,24 @@ async function addRubrics(ownerId, sessionId, rubricIds) {
   await session.save();
 }
 
-/** Lie des cours à un groupe: ceux qui ne sont pas encore dans la session y sont ajoutés (évaluations actives). */
+/** Ajoute à la session les cours qui n'y sont pas encore (création d'un groupe qui reprend des cours). */
 async function ensureCoursesInSession(ownerId, session, courseIds) {
   for (const id of courseIds) await addCourse(ownerId, session, id);
-  await syncGroups(ownerId, session);
 }
 
 /** Vue pour la page: chaque cours de la session, ses évaluations (importées ou non) et ses groupes. */
 async function describe(ownerId, session) {
   const ids = session.courses.map((c) => c.course);
-  const [courses, rubrics, groups] = await Promise.all([
+  const [courses, rubrics, groups, counts] = await Promise.all([
     Course.find({ createdBy: ownerId, _id: { $in: ids } }).select("title code color icon archivedAt").lean(),
     Rubric.find({ createdBy: ownerId, course: { $in: ids }, archivedAt: null })
       .select("title taskTitle course isActive version")
       .sort({ title: 1 })
       .lean(),
     Group.find({ createdBy: ownerId, session: session._id, archivedAt: null }).select("name color icon courses").sort({ name: 1 }).lean(),
+    Evaluation.aggregate([{ $match: { owner: ownerId, session: session._id } }, { $group: { _id: "$rubric", n: { $sum: 1 } } }]),
   ]);
+  const corrected = new Map(counts.map((c) => [str(c._id), c.n]));
   const cById = new Map(courses.map((c) => [str(c._id), c]));
   return session.courses
     .map((entry) => {
@@ -116,7 +105,7 @@ async function describe(ownerId, session) {
       const imported = new Set(entry.rubrics.map(str));
       return {
         course,
-        rubrics: rubrics.filter((r) => str(r.course) === str(entry.course)).map((r) => ({ ...r, imported: imported.has(str(r._id)) })),
+        rubrics: rubrics.filter((r) => str(r.course) === str(entry.course)).map((r) => ({ ...r, imported: imported.has(str(r._id)), correctedCount: corrected.get(str(r._id)) || 0 })),
         groups: groups.filter((g) => g.courses.some((c) => str(c) === str(entry.course))).map(({ courses: _c, ...g }) => g),
       };
     })
@@ -147,4 +136,4 @@ async function backfillSessionCourses() {
   return done;
 }
 
-module.exports = { addRubrics, addCourse, setCourseRubrics, removeCourse, ensureCoursesInSession, syncGroups, describe, backfillSessionCourses };
+module.exports = { addRubrics, addCourse, setCourseRubrics, removeCourse, ensureCoursesInSession, rubricIdsOf, rubricIdsByGroup, describe, backfillSessionCourses };

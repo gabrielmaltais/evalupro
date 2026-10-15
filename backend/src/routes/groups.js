@@ -14,7 +14,7 @@ const { normalizeStudentPayload } = require("../utils/studentName");
 const { resolveActiveSession } = require("../services/sessionService");
 const sessionCourses = require("../services/sessionCourseService");
 const { ensureCommonGroup } = require("../services/commonGroupService");
-const { enrollStudent, unenrollStudent, availableRubrics, importRubrics, httpError, isId } = require("../services/groupService");
+const { enrollStudent, unenrollStudent, availableRubrics, httpError, isId } = require("../services/groupService");
 
 const router = express.Router();
 router.use(auth);
@@ -25,8 +25,6 @@ const groupSchema = z.object({
   name: z.string().trim().min(1, "Le nom du groupe est requis").max(120),
   session: z.string().optional(),
   courses: z.array(z.string()).optional(),
-  /** Grilles importées dans le groupe (leur cours est relié au passage). */
-  rubrics: z.array(z.string()).optional(),
   color: z.union([hex, z.literal("")]).optional(),
   icon: z.string().trim().max(80).optional(),
 });
@@ -63,11 +61,12 @@ async function ownedIds(Model, req, ids) {
 async function present(req, groups) {
   const list = groups.map((g) => (g.toObject ? g.toObject() : g));
   const ids = list.map((g) => g._id);
+  const rubricIdsOf = await sessionCourses.rubricIdsByGroup(req.user._id, list);
   const [students, evaluations, courses, rubrics] = await Promise.all([
     Enrollment.aggregate([{ $match: { group: { $in: ids }, archivedAt: null } }, { $group: { _id: "$group", n: { $sum: 1 } } }]),
     Evaluation.aggregate([{ $match: { owner: req.user._id, group: { $in: ids } } }, { $group: { _id: "$group", n: { $sum: 1 } } }]),
     Course.find(mine(req, { _id: { $in: list.flatMap((g) => g.courses || []) } })).select("title code archivedAt").lean(),
-    Rubric.find(mine(req, { _id: { $in: list.flatMap((g) => g.rubrics || []) } }))
+    Rubric.find(mine(req, { _id: { $in: [...rubricIdsOf.values()].flat() } }))
       .select("title taskTitle course archivedAt")
       .lean(),
   ]);
@@ -77,9 +76,10 @@ async function present(req, groups) {
   const courseById = new Map(courses.map((c) => [String(c._id), c]));
   const rubricById = new Map(rubrics.map((r) => [String(r._id), r]));
   return list.map((g) => {
-    const imported = (g.rubrics || []).map((id) => rubricById.get(String(id))).filter(Boolean);
+    const imported = (rubricIdsOf.get(String(g._id)) || []).map((id) => rubricById.get(String(id))).filter(Boolean);
     return {
       ...g,
+      rubrics: undefined,
       rubricList: imported,
       studentCount: sc.get(String(g._id)) || 0,
       evaluationCount: ec.get(String(g._id)) || 0,
@@ -144,7 +144,6 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
         await Enrollment.insertMany(members.map((student) => ({ student, group: item._id, session: session._id, createdBy: req.user._id })));
       }
     }
-    if (payload.rubrics?.length) await importRubrics(req.user._id, item, payload.rubrics);
     await sessionCourses.ensureCoursesInSession(req.user._id, await Session.findById(session._id), item.courses);
     res.status(201).json((await present(req, [await Group.findById(item._id)]))[0]);
   } catch (error) {
@@ -161,24 +160,14 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
     if (payload.color !== undefined) group.color = payload.color;
     if (payload.icon !== undefined) group.icon = payload.icon;
     if (payload.courses !== undefined) {
-      group.courses = await ownedIds(Course, req, payload.courses);
-      // Un cours retiré emporte les grilles qui en avaient été importées.
-      const keep = new Set(group.courses.map(String));
-      const imported = await Rubric.find(mine(req, { _id: { $in: group.rubrics } })).select("course").lean();
-      const drop = new Set(imported.filter((r) => !keep.has(String(r.course))).map((r) => String(r._id)));
-      group.rubrics = group.rubrics.filter((id) => !drop.has(String(id)));
+      // Un groupe ne suit que des cours de sa session: on les ajoute d'abord à la session (page Ma session).
+      const session = await Session.findOne(mine(req, { _id: group.session }));
+      const inSession = new Set((session?.courses || []).map((c) => String(c.course)));
+      const wanted = await ownedIds(Course, req, payload.courses);
+      if (wanted.some((id) => !inSession.has(String(id)))) throw httpError(409, "Ajoute d'abord ce cours à la session.");
+      group.courses = wanted;
     }
     await group.save();
-    if (payload.courses !== undefined) {
-      const session = await Session.findOne(mine(req, { _id: group.session }));
-      if (session && !session.archivedAt) await sessionCourses.ensureCoursesInSession(req.user._id, session, group.courses);
-    }
-    if (payload.rubrics !== undefined) {
-      // Remplace la sélection de grilles: on retire d'abord ce qui n'est plus voulu, puis on importe.
-      const wanted = new Set(payload.rubrics.map(String));
-      await Group.updateOne({ _id: group._id }, { $pull: { rubrics: { $nin: Array.from(wanted).filter(isId) } } });
-      await importRubrics(req.user._id, group, payload.rubrics);
-    }
     res.json((await present(req, [await Group.findById(group._id)]))[0]);
   } catch (error) {
     sendError(res, error, "Groupe invalide");
@@ -208,26 +197,6 @@ router.get("/:id/rubrics", async (req, res) => {
   } catch (error) {
     sendError(res, error, "Chargement des grilles impossible");
   }
-});
-
-/** Importe des grilles dans le groupe, à tout moment de la session (relie leur cours au passage). */
-router.post("/:id/rubrics", roles("admin", "teacher"), async (req, res) => {
-  try {
-    const { rubricIds } = z.object({ rubricIds: z.array(z.string()).min(1) }).parse(req.body);
-    const group = await Group.findOne(mine(req, { _id: req.params.id }));
-    if (!group) return res.status(404).json({ message: "Groupe introuvable" });
-    const added = await importRubrics(req.user._id, group, rubricIds);
-    res.json({ added, group: (await present(req, [await Group.findById(group._id)]))[0] });
-  } catch (error) {
-    sendError(res, error, "Importation impossible");
-  }
-});
-
-/** Retire une grille du groupe (la grille reste dans ses ressources; les notes déjà données sont conservées). */
-router.delete("/:id/rubrics/:rubricId", roles("admin", "teacher"), async (req, res) => {
-  const group = await Group.findOneAndUpdate(mine(req, { _id: req.params.id }), { $pull: { rubrics: req.params.rubricId } }, { new: true });
-  if (!group) return res.status(404).json({ message: "Groupe introuvable" });
-  res.json((await present(req, [group]))[0]);
 });
 
 const enrollSchema = z.union([

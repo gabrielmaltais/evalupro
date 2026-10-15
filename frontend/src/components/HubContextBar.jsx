@@ -16,8 +16,9 @@ export default function HubContextBar({
     const course = String(ex?.title || "").trim();
     const evaluation = String(ex?.taskTitle || "").trim();
     const version = `v${ex?.version ?? 1}`;
-    if (course && evaluation && course !== evaluation) return `${course} — ${evaluation} (${version})`;
-    return `${evaluation || course || "Examen"} (${version})`;
+    const retired = ex?.retired ? " · retirée de la session" : "";
+    if (course && evaluation && course !== evaluation) return `${course} — ${evaluation} (${version}${retired})`;
+    return `${evaluation || course || "Examen"} (${version}${retired})`;
   }
 
   const [courses, setCourses] = useState([]);
@@ -87,7 +88,7 @@ export default function HubContextBar({
               <span className="ui-label">Cours</span>
               {courseIds.length === 0 ? (
                 <Link to="/session/cours" className="text-xs font-medium text-blue-700 underline dark:text-blue-300">
-                  Aucune évaluation disponible : choisis-en dans « Cours et évaluations ».
+                  Aucune évaluation disponible : coche-en dans « Ma session ».
                 </Link>
               ) : (
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Cours">

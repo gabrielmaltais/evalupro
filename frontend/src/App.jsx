@@ -6,7 +6,6 @@ import AdminCourses from "./pages/AdminCourses";
 import AdminSessions from "./pages/AdminSessions";
 import AdminStudents from "./pages/AdminStudents";
 import SessionCourses from "./pages/SessionCourses";
-import SessionGroups from "./pages/SessionGroups";
 import AdminUsers from "./pages/AdminUsers";
 import AccountSettings from "./pages/AccountSettings";
 import MainLayout from "./components/MainLayout";
@@ -32,7 +31,7 @@ export default function App() {
         <Route path="/session" element={<SessionLayout />}>
           <Route index element={<Evaluations />} />
           <Route path="cours" element={<SessionCourses />} />
-          <Route path="groupes" element={<SessionGroups />} />
+          <Route path="groupes" element={<Navigate to="/session/cours" replace />} />
         </Route>
         <Route path="/ressources" element={<ResourcesLayout />}>
           <Route index element={<Navigate to="/ressources/cours" replace />} />

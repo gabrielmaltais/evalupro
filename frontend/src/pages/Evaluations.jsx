@@ -253,6 +253,7 @@ export default function Evaluations() {
       return "";
     }
   });
+  const [hubLoaded, setHubLoaded] = useState(false);
   const [, setGroupDashboard] = useState([]);
   const [emailTargets, setEmailTargets] = useState({ groups: [], exams: [] });
   const [deliveries, setDeliveries] = useState([]);
@@ -381,6 +382,7 @@ export default function Evaluations() {
       setGroupDashboard(dashboard || []);
       setEmailTargets(targets || { groups: [], exams: [] });
       setDeliveries(sends || []);
+      setHubLoaded(true);
       setHubSelectedGroup((prev) => prev || targets?.groups?.[0] || "");
       setEmailBatchConfig((prev) => {
         const examIds = new Set((targets?.exams || []).map((e) => String(e.rubricId)));
@@ -391,7 +393,7 @@ export default function Evaluations() {
           rubricId,
         };
       });
-      const availableActiveRubrics = (rubricList || []).filter((r) => r?.isActive && (r.groups || []).length > 0);
+      const availableActiveRubrics = (rubricList || []).filter((r) => (r.groups || []).length > 0);
       if (!form.rubric && availableActiveRubrics[0]) {
         const rememberedHubRubricId = localStorage.getItem(HUB_LAST_EXAM_STORAGE_KEY);
         const rememberedRubricId = rememberedHubRubricId || localStorage.getItem(EVAL_LAST_RUBRIC_STORAGE_KEY);
@@ -518,7 +520,7 @@ export default function Evaluations() {
   const activeRubricsForCorrection = useMemo(() => {
     const group = studentPickerGroup ? normalizeGroupLabel(studentPickerGroup) : "";
     return rubrics.filter((r) => {
-      if (!r?.isActive) return false;
+      // Cochée dans « Ma session » (r.groups vient de la session), qu'elle soit « active » ou non dans la bibliothèque.
       const rubricGroups = Array.isArray(r?.groups)
         ? r.groups.map((g) => String(g || "").trim()).filter(Boolean)
         : [];
@@ -693,6 +695,17 @@ export default function Evaluations() {
     }
     return examsForSend.map((ex) => ({ ...ex, courseId: courseOf.get(String(ex.rubricId)) || "" }));
   }, [evalPageTab, activeRubricsForCorrection, examsForSend, rubrics]);
+  // Une sélection mémorisée qui n'existe plus dans la session (groupe retiré, évaluation décochée) est abandonnée.
+  useEffect(() => {
+    if (!hubLoaded) return;
+    if (hubSelectedGroup && !hubGroupKeys.includes(hubSelectedGroup)) {
+      setHubSelectedGroup("");
+      return;
+    }
+    if (evalPageTab === "corriger" && form.rubric && !form._id && !hubExamOptions.some((ex) => ex.rubricId === String(form.rubric))) {
+      setForm((f) => ({ ...f, rubric: "" }));
+    }
+  }, [hubLoaded, hubSelectedGroup, hubGroupKeys, hubExamOptions, evalPageTab, form.rubric, form._id]);
   const hubBarStats = useMemo(() => {
     const totalStudents = hubFilteredStudents.length;
     const selectedRubricId = String(selectedHubExamId || "");

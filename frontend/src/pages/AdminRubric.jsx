@@ -23,9 +23,7 @@ export default function AdminRubric() {
   const { active } = useSession();
   // Liaison avec la session en cours: cours de la session (et évaluations importées) et ses groupes.
   const [sessionEntries, setSessionEntries] = useState([]);
-  const [sessionGroups, setSessionGroups] = useState([]);
   const [useInSession, setUseInSession] = useState(true);
-  const [pickedGroups, setPickedGroups] = useState([]);
   const [sessionDirty, setSessionDirty] = useState(false);
   const [sessionKey, setSessionKey] = useState("");
   const presetCourse = searchParams.get("course") || "";
@@ -97,9 +95,7 @@ export default function AdminRubric() {
 
   async function loadSessionLinks() {
     if (!active?._id) return;
-    const [entries, common] = await Promise.all([api.listSessionCourses(active._id), api.listCommonGroups()]);
-    setSessionEntries(entries);
-    setSessionGroups(common.filter((g) => g.activeGroup));
+    setSessionEntries(await api.listSessionCourses(active._id));
   }
 
   useEffect(() => {
@@ -124,18 +120,15 @@ export default function AdminRubric() {
 
   const sessionEntry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
   const importedHere = (rid) => sessionEntries.some((e) => e.rubrics.some((r) => String(r._id) === String(rid) && r.imported));
-  const followsCourse = (g, cid) => (g.activeGroup?.courses || []).some((c) => String(c) === String(cid));
   // Valeurs par défaut de la section session, recalculées quand on change d'évaluation ou de cours.
-  const wantedKey = `${selectedId || "new"}|${courseId}|${sessionEntries.length}|${sessionGroups.length}`;
+  const wantedKey = `${selectedId || "new"}|${courseId}|${sessionEntries.length}`;
   if (sessionKey !== wantedKey) {
     setSessionKey(wantedKey);
-    const linked = sessionGroups.filter((g) => followsCourse(g, courseId)).map((g) => g._id);
     setUseInSession(selectedId ? importedHere(selectedId) : true);
-    setPickedGroups(linked.length || selectedId ? linked : sessionGroups.map((g) => g._id));
     setSessionDirty(false);
   }
 
-  /** Après l'enregistrement: l'évaluation est importée (ou retirée) dans la session et ses groupes suivent le cours. */
+  /** Après l'enregistrement: l'évaluation est cochée (ou décochée) dans la session. */
   async function applySessionLinks(rid) {
     if (!active?._id || active.archivedAt || !courseId) return;
     const entry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
@@ -143,12 +136,6 @@ export default function AdminRubric() {
     if (useInSession) {
       if (!entry) await api.addSessionCourse(active._id, courseId, [rid]);
       else if (!imported.includes(String(rid))) await api.setSessionCourseRubrics(active._id, courseId, [...imported, String(rid)]);
-      for (const g of sessionGroups) {
-        const want = pickedGroups.includes(g._id);
-        if (want === followsCourse(g, courseId)) continue;
-        const cur = g.activeGroup.courses || [];
-        await api.updateGroup(g.activeGroup._id, { courses: want ? [...cur, courseId] : cur.filter((c) => String(c) !== String(courseId)) });
-      }
     } else if (imported.includes(String(rid))) {
       await api.setSessionCourseRubrics(active._id, courseId, imported.filter((id) => id !== String(rid)));
     }
@@ -783,35 +770,11 @@ export default function AdminRubric() {
                           <input type="checkbox" checked={useInSession} onChange={(e) => { setUseInSession(e.target.checked); setSessionDirty(true); }} />
                           À corriger cette session
                         </label>
-                        {useInSession && (
-                          <div>
-                            <span className="ui-label">Groupes qui la corrigent</span>
-                            {sessionGroups.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {sessionGroups.map((g) => (
-                                  <Chip
-                                    key={g._id}
-                                    active={pickedGroups.includes(g._id)}
-                                    icon={pickedGroups.includes(g._id) ? "fa-check" : "fa-users"}
-                                    onClick={() => {
-                                      setPickedGroups((prev) => (prev.includes(g._id) ? prev.filter((x) => x !== g._id) : [...prev, g._id]));
-                                      setSessionDirty(true);
-                                    }}
-                                  >
-                                    {g.name}
-                                  </Chip>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-gray-600">Aucun groupe dans la session. <Link to="/session/groupes" className="font-semibold text-blue-600 underline">Choisir les groupes</Link></p>
-                            )}
-                            <p className="mt-1.5 text-xs text-gray-500">
-                              <i className="fa-solid fa-link mr-1" aria-hidden />
-                              {courseLabel(courseId)} → cette évaluation → {pickedGroups.length ? `${pickedGroups.length} groupe(s)` : "aucun groupe"}
-                              {sessionEntry ? "" : " · le cours sera ajouté à la session"}
-                            </p>
-                          </div>
-                        )}
+                        <p className="text-xs text-gray-500">
+                          <i className="fa-solid fa-link mr-1" aria-hidden />
+                          {useInSession ? `${courseLabel(courseId)} · ${sessionEntry ? "cochée dans la session" : "le cours sera ajouté à la session"}. Les groupes qui suivent le cours se choisissent dans « Ma session ».` : "Non cochée : elle n'apparaît pas dans Corriger."}
+                          {!useInSession && sessionEntry?.rubrics.find((r) => String(r._id) === String(selectedId))?.correctedCount > 0 && ` Attention : ${sessionEntry.rubrics.find((r) => String(r._id) === String(selectedId)).correctedCount} copie(s) déjà corrigée(s) (conservées).`}
+                        </p>
                       </div>
                     )}
                   </section>

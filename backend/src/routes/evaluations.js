@@ -133,9 +133,10 @@ const sendOneSchema = z.object({
 });
 
 router.get("/email-targets", async (req, res) => {
-  const query = { owner: req.user._id };
   const active = await resolveActiveSession(req.user);
-  query.$or = [{ session: null }, ...(active ? [{ session: active._id }] : [])];
+  // Seulement les copies de la session en cours (celles d'avant les sessions n'y sont plus mêlées).
+  const query = { owner: req.user._id, session: active ? active._id : null };
+  const imported = new Set((active?.courses || []).flatMap((c) => c.rubrics.map(String)));
   const [groups, rubrics] = await Promise.all([
     active
       ? Group.find({ createdBy: req.user._id, session: active._id, archivedAt: null }).distinct("name")
@@ -152,6 +153,8 @@ router.get("/email-targets", async (req, res) => {
         title: ev.rubric.title,
         taskTitle: ev.rubric.taskTitle,
         version: ev.rubric.version,
+        // Décochée dans la session mais déjà corrigée: reste visible pour le suivi et l'envoi.
+        retired: !imported.has(key),
       });
     }
   });
