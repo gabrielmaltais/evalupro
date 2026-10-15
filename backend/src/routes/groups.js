@@ -13,6 +13,7 @@ const roles = require("../middleware/roles");
 const { normalizeStudentPayload } = require("../utils/studentName");
 const { resolveActiveSession } = require("../services/sessionService");
 const sessionCourses = require("../services/sessionCourseService");
+const { ensureCommonGroup } = require("../services/commonGroupService");
 const { enrollStudent, unenrollStudent, availableRubrics, importRubrics, httpError, isId } = require("../services/groupService");
 
 const router = express.Router();
@@ -109,12 +110,14 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
     const payload = groupSchema.parse(req.body);
     const session = await targetSession(req, payload.session);
     if (session.archivedAt) throw httpError(409, "Cette session est archivée.");
+    // Le groupe commun du même nom donne son style (et apparaît dans Ressources s'il est nouveau).
+    const common = await ensureCommonGroup(req.user._id, payload.name, payload);
     const item = await Group.create({
       name: payload.name,
       session: session._id,
       courses: await ownedIds(Course, req, payload.courses),
-      color: payload.color || "",
-      icon: payload.icon || "",
+      color: payload.color || common.color || "",
+      icon: payload.icon || common.icon || "",
       createdBy: req.user._id,
     });
     if (payload.rubrics?.length) await importRubrics(req.user._id, item, payload.rubrics);

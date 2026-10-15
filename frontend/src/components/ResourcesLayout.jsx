@@ -4,9 +4,10 @@ import TabStrip from "./TabStrip";
 const TABS = [
   { id: "cours", label: "Cours", icon: "fa-book-open", to: "/ressources/cours" },
   { id: "grilles", label: "Évaluations", icon: "fa-sliders", to: "/ressources/grilles" },
+  { id: "groupes", label: "Groupes", icon: "fa-users", to: "/ressources/groupes" },
 ];
 
-/** Section « Ressources » : cours et grilles, communs à toutes les sessions. */
+/** Section « Ressources » : cours, évaluations et groupes, communs à toutes les sessions. */
 export default function ResourcesLayout() {
   const { pathname } = useLocation();
   const tabs = TABS.map((t) => ({ ...t, active: pathname === t.to }));

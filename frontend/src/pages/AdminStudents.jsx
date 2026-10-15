@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { studentDisplayName, splitFullName } from "../lib/studentDisplay";
 import PageSectionTitle from "../components/PageSectionTitle";
 import GroupResourcesPanel from "../components/GroupResourcesPanel";
-import { FormCard } from "../components/ui";
+import { Chip, FormCard } from "../components/ui";
 import { useSession } from "../lib/sessionState";
 
 /** Une ligne d’import : nom seul, ou nom + courriel (tab, point-virgule, ou virgule si la partie droite ressemble à un mail). */
@@ -54,6 +54,10 @@ export default function AdminStudents() {
   const [bulkText, setBulkText] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [commonGroups, setCommonGroups] = useState([]);
+  useEffect(() => {
+    if (creatingGroup) api.listCommonGroups().then(setCommonGroups, () => setCommonGroups([]));
+  }, [creatingGroup]);
   const [renameGroupTo, setRenameGroupTo] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -208,8 +212,8 @@ export default function AdminStudents() {
       setError(String(e.message || e));
     }
   }
-  async function prepareNewGroup() {
-    const groupName = newGroupName.trim();
+  async function prepareNewGroup(name = newGroupName) {
+    const groupName = name.trim();
     if (!groupName) {
       setError("Nom du groupe requis.");
       return;
@@ -424,6 +428,17 @@ export default function AdminStudents() {
             }}
             backLabel="Annuler"
           >
+            {commonGroups.some((g) => !g.activeGroup) && (
+              <div>
+                <span className="ui-label">Mes groupes (Ressources)</span>
+                <div className="flex flex-wrap gap-2">
+                  {commonGroups.filter((g) => !g.activeGroup).map((g) => (
+                    <Chip key={g._id} icon="fa-plus" onClick={() => prepareNewGroup(g.name)}>{g.name}</Chip>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Un clic l'ajoute à cette session ; tu lui associes ensuite les cours de la session.</p>
+              </div>
+            )}
             <form
               className="flex flex-col gap-3 sm:flex-row sm:items-end"
               onSubmit={(e) => {
@@ -432,7 +447,7 @@ export default function AdminStudents() {
               }}
             >
               <label className="min-w-0 flex-1">
-                <span className="ui-label">Nom du groupe</span>
+                <span className="ui-label">Ou un nouveau groupe</span>
                 <input autoFocus className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Ex : 420-AB1" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
               </label>
               <button type="submit" className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Créer le groupe</button>

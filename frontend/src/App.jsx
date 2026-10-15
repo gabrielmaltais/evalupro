@@ -6,6 +6,7 @@ import AdminCourses from "./pages/AdminCourses";
 import AdminSessions from "./pages/AdminSessions";
 import AdminStudents from "./pages/AdminStudents";
 import SessionCourses from "./pages/SessionCourses";
+import ResourceGroups from "./pages/ResourceGroups";
 import AdminUsers from "./pages/AdminUsers";
 import AccountSettings from "./pages/AccountSettings";
 import MainLayout from "./components/MainLayout";
@@ -37,6 +38,7 @@ export default function App() {
           <Route index element={<Navigate to="/ressources/cours" replace />} />
           <Route path="cours" element={<AdminCourses />} />
           <Route path="grilles" element={<AdminRubric />} />
+          <Route path="groupes" element={<ResourceGroups />} />
         </Route>
         <Route path="/sessions" element={<SessionsLayout />}>
           <Route index element={<AdminSessions view="sessions" />} />

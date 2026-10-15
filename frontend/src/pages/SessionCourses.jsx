@@ -27,7 +27,7 @@ export default function SessionCourses() {
   const load = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const [e, c, r, g] = await Promise.all([api.listSessionCourses(sessionId), api.listCourses(), api.listRubrics(), api.listGroups()]);
+      const [e, c, r, g] = await Promise.all([api.listSessionCourses(sessionId), api.listCourses(), api.listRubrics(), api.listCommonGroups()]);
       setEntries(e);
       setLibrary(c);
       setRubrics(r);
@@ -91,10 +91,13 @@ export default function SessionCourses() {
     act(() => api.setSessionCourseRubrics(sessionId, entry.course._id, [...ids]));
   }
 
-  function toggleGroup(group, courseId) {
-    const has = (group.courses || []).some((c) => String(c) === String(courseId));
-    const courses = has ? group.courses.filter((c) => String(c) !== String(courseId)) : [...(group.courses || []), courseId];
-    act(() => api.updateGroup(group._id, { courses }));
+  // Les groupes sont communs: un groupe pas encore dans la session y est ajouté avec ce cours.
+  const linked = (g, courseId) => (g.activeGroup?.courses || []).some((c) => String(c) === String(courseId));
+  function toggleGroup(g, courseId) {
+    if (!g.activeGroup) return act(() => api.createGroup({ name: g.name, courses: [courseId] }));
+    const cur = g.activeGroup.courses || [];
+    const courses = linked(g, courseId) ? cur.filter((c) => String(c) !== String(courseId)) : [...cur, courseId];
+    act(() => api.updateGroup(g.activeGroup._id, { courses }));
   }
 
   if (!active) {
@@ -225,13 +228,13 @@ export default function SessionCourses() {
                 {groups.length ? (
                   <div className="flex flex-wrap gap-2">
                     {groups.map((g) => (
-                      <Chip key={g._id} active={(g.courses || []).some((c) => String(c) === String(entry.course._id))} onClick={() => toggleGroup(g, entry.course._id)}>
+                      <Chip key={g._id} active={linked(g, entry.course._id)} onClick={() => toggleGroup(g, entry.course._id)}>
                         {g.name}
                       </Chip>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Aucun groupe. <Link to="/session/groupes" className="text-blue-600 underline">Créer un groupe</Link></p>
+                  <p className="text-xs text-gray-400">Aucun groupe. <Link to="/ressources/groupes" className="text-blue-600 underline">Créer un groupe</Link></p>
                 )}
               </div>
             </div>
