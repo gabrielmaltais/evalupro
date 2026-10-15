@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { normalizeImportedRubric, parseAiJson, tasksTotal } from "../lib/rubricTemplate";
-import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES } from "../lib/aiTemplate";
-import { competenciesForAi } from "../lib/courseHelpers";
+import { normalizeImportedRubric, parseAiJson, tasksTotal, unwrapAiTemplateEnvelope } from "../lib/rubricTemplate";
+import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, isTemplatePlaceholder, LEVEL_SCALES } from "../lib/aiTemplate";
+import { alignCriteriaToCourse, competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
 import { Chip } from "../components/ui";
 import { useSession } from "../lib/sessionState";
-
-/** Si le JSON vient du gabarit IA enveloppé, extraire la grille importable. */
-function unwrapAiTemplateEnvelope(raw) {
-  if (!raw || typeof raw !== "object") return raw;
-  if (raw.template_a_remplir && typeof raw.template_a_remplir === "object") return raw.template_a_remplir;
-  return raw;
-}
 
 const DEFAULT_CRITERION = {
   id: "cx",
@@ -77,16 +70,9 @@ export default function AdminRubric() {
   const [showPasteJsonModal, setShowPasteJsonModal] = useState(false);
   const [pastedJsonText, setPastedJsonText] = useState("");
   const [courses, setCourses] = useState([]);
-  const [aiConfig, setAiConfig] = useState(() => {
-    let courseId = "";
-    try {
-      courseId = localStorage.getItem("evalupro_ai_course") || "";
-    } catch {
-      /* stockage indisponible */
-    }
-    return { ...DEFAULT_AI_CONFIG, courseId };
-  });
-
+  // Le cours du gabarit est toujours celui de l'éditeur (étape 1): une seule source, jamais de décalage.
+  const [aiConfig, setAiConfig] = useState(DEFAULT_AI_CONFIG);
+  const [courseNotice, setCourseNotice] = useState("");
 
   async function refresh() {
     try {
@@ -204,6 +190,7 @@ export default function AdminRubric() {
   }, [savedSnapshot]);
 
   function selectRubric(r) {
+    setCourseNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
     setEditorOpen(true);
     setSelectedId(r._id);
@@ -236,6 +223,7 @@ export default function AdminRubric() {
   }
 
   function startNew() {
+    setCourseNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
     setEditorOpen(true);
     setSelectedId(null);
@@ -400,17 +388,53 @@ export default function AdminRubric() {
     a.remove();
   }
 
-  const selectedCourse = courses.find((c) => c._id === aiConfig.courseId) || null;
+  const selectedCourse = courses.find((c) => c._id === courseId) || null;
   const selectedCourseCompetencies = competenciesForAi(selectedCourse);
-  const buildAITemplate = () => buildAITemplateJson({ ...aiConfig, course: selectedCourse });
+  const buildAITemplate = () => buildAITemplateJson({ ...aiConfig, courseId, course: selectedCourse });
 
-  function chooseAiCourse(courseId) {
-    setAiConfig((c) => ({ ...c, courseId }));
-    try {
-      localStorage.setItem("evalupro_ai_course", courseId);
-    } catch {
-      /* stockage indisponible */
+  /**
+   * Change le cours de l'évaluation. Les critères liés aux compétences de l'ancien cours sont rattachés à celles
+   * du nouveau cours quand le titre correspond, sinon le lien est coupé (le texte reste): jamais de lien orphelin.
+   */
+  function changeCourse(nextId) {
+    if (nextId === courseId) return;
+    const next = courses.find((c) => c._id === nextId);
+    const hadLinks = criteria.some((c) => c.competencyId);
+    const al = alignCriteriaToCourse(criteria, next?.competencies);
+    setCourseId(nextId);
+    if (next && (!title || title === "Nouvelle Évaluation" || courses.some((x) => x.title === title))) setTitle(next.title);
+    if (hadLinks || al.linked) setCriteria(al.criteria);
+    if (hadLinks) {
+      const lost = criteria.filter((c) => c.competencyId).length - al.linked;
+      setCourseNotice(
+        lost > 0
+          ? `Cours changé : ${al.linked} critère(s) rattaché(s) aux compétences de « ${next?.title || "ce cours"} », ${lost} détaché(s) (leur texte est conservé).`
+          : `Cours changé : les ${al.linked} critère(s) sont rattachés aux compétences de « ${next?.title} ».`
+      );
+    } else {
+      setCourseNotice("");
     }
+  }
+
+  /** Ajoute un critère vide pour chaque compétence du cours qu'aucun critère ne couvre. */
+  function addMissingCompetencies() {
+    const al = alignCriteriaToCourse(criteria, selectedCourse?.competencies);
+    const fresh = al.missing.map((comp, i) => ({
+      ...DEFAULT_CRITERION,
+      id: `c${criteria.length + i + 1}-${comp.id}`.slice(0, 60),
+      title: comp.title,
+      competencyElement: comp.title,
+      competencyId: comp.id,
+      weight: 10,
+      subCriteria: [],
+    }));
+    setCriteria([...al.criteria, ...fresh]);
+    setLinkCompetencies(true);
+  }
+
+  function openAiConfigurator() {
+    if (!showEditor) startNew();
+    setShowAIModal(true);
   }
 
   function downloadAITemplate() {
@@ -441,32 +465,56 @@ export default function AdminRubric() {
 
   function applyImportedRubric(json) {
     const result = normalizeImportedRubric(unwrapAiTemplateEnvelope(json), { defaultFeedbackMessages: DEFAULT_FEEDBACK });
-    if (result.ok) {
-      const imported = result.rubric;
-      setTitle(imported.title);
-      setTaskTitle(imported.taskTitle);
-      setCriteria(imported.criteria);
-      setLinkCompetencies(imported.linkCompetencies === true);
-      if (aiConfig.courseId) setCourseId(aiConfig.courseId);
-      setVersion(1);
-      setSelectedId(null);
-      setFeedbackMessages(imported.feedbackMessages);
-      setGroups(imported.groups);
-      const notes = [
-        ...result.warnings,
-        ...result.aValider.map((item) => `À valider : ${item}`),
-      ];
-      setSuccess(
-        `Évaluation importée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts.` +
-          (notes.length ? `\n\nÀ vérifier avant d'enregistrer :\n- ${notes.join("\n- ")}` : "")
-      );
-      setError("");
-      /* Ne pas réinitialiser savedSnapshot : sinon l'effet synchrone réécrit le snapshot avec le
-         formulaire importé et l'UI affiche « tout enregistré » alors qu'aucun POST n'a eu lieu. */
-      return true;
+    if (!result.ok) {
+      setError(result.error);
+      return false;
     }
-    setError(result.error);
-    return false;
+    const imported = result.rubric;
+    const course = courses.find((c) => c._id === courseId) || null;
+    // Les critères sont rattachés aux compétences du cours choisi MAINTENANT (même si le cours a changé depuis la génération).
+    const al = alignCriteriaToCourse(imported.criteria, course?.competencies);
+    const placeholders = [
+      ...imported.criteria.flatMap((c) => [
+        ...(c.subCriteria || []).filter((t) => isTemplatePlaceholder(t.label) || isTemplatePlaceholder(t.feedback)).map(() => c.title),
+        ...(c.levels || []).filter((l) => isTemplatePlaceholder(l.desc)).map(() => c.title),
+      ]),
+      ...(imported.feedbackMessages || []).filter((m) => isTemplatePlaceholder(m.message)).map(() => "rétroaction globale"),
+    ];
+    const keptName = !isTemplatePlaceholder(imported.taskTitle);
+    if (!keptName) {
+      // Le nom de l'évaluation est resté celui du gabarit: on garde ce que l'enseignant avait saisi.
+      imported.taskTitle = taskTitle && !isTemplatePlaceholder(taskTitle) && taskTitle !== "Tâche" ? taskTitle : "";
+    }
+    setEditorOpen(true);
+    setTitle(course ? course.title : imported.title);
+    setTaskTitle(imported.taskTitle);
+    setCriteria(al.criteria);
+    setLinkCompetencies(imported.linkCompetencies === true || al.linked > 0);
+    setVersion(1);
+    setSelectedId(null);
+    setFeedbackMessages(imported.feedbackMessages);
+    setCourseNotice("");
+    const notes = [
+      ...result.warnings,
+      ...result.aValider.filter((item) => !isTemplatePlaceholder(item)).map((item) => `À valider : ${item}`),
+    ];
+    if (!course) notes.push("Choisis le cours (étape 1) pour rattacher les critères à ses compétences.");
+    else if (!(course.competencies || []).length) notes.push(`Le cours « ${course.title} » n'a pas de compétences : les critères ne sont pas rattachés.`);
+    else {
+      if (al.unlinked) notes.push(`${al.unlinked} critère(s) ne correspondent à aucune compétence de « ${course.title} » (titre modifié par l'IA ?).`);
+      if (al.missing.length) notes.push(`Compétence(s) du cours sans critère : ${al.missing.map((c) => c.title).join(" ; ")}. Utilise « Ajouter les compétences manquantes ».`);
+    }
+    if (placeholders.length) notes.push(`Du texte du gabarit n'a pas été remplacé par l'IA (${[...new Set(placeholders)].join(" ; ")}).`);
+    if (!imported.taskTitle) notes.push("Donne un nom à l'évaluation (étape 2).");
+    setSuccess(
+      `Évaluation importée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts` +
+        (course && al.linked ? `, ${al.linked} rattaché(s) aux compétences du cours.` : ".") +
+        (notes.length ? `\n\nÀ vérifier avant d'enregistrer :\n- ${notes.join("\n- ")}` : "")
+    );
+    setError("");
+    /* Ne pas réinitialiser savedSnapshot : sinon l'effet synchrone réécrit le snapshot avec le
+       formulaire importé et l'UI affiche « tout enregistré » alors qu'aucun POST n'a eu lieu. */
+    return true;
   }
 
   function handleImportJSON(e) {
@@ -566,7 +614,7 @@ export default function AdminRubric() {
             <button type="button" onClick={exportJSON} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" title="Exporter l'évaluation ouverte en JSON">
               <i className="fa-solid fa-download text-xs" aria-hidden />
             </button>
-            <button type="button" onClick={() => setShowAIModal(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-purple-200 bg-white text-purple-600 hover:bg-purple-50" title="Créer avec une IA (gabarit)">
+            <button type="button" onClick={openAiConfigurator} className="flex h-8 w-8 items-center justify-center rounded-lg border border-purple-200 bg-white text-purple-600 hover:bg-purple-50" title="Créer avec une IA (gabarit)">
               <i className="fa-solid fa-robot text-xs" aria-hidden />
             </button>
           </div>
@@ -704,17 +752,14 @@ export default function AdminRubric() {
                           key={c._id}
                           active={courseId === c._id}
                           icon="fa-book"
-                          onClick={() => {
-                            setCourseId(c._id);
-                            // Le titre affiché suit le cours tant qu'il n'a pas été personnalisé.
-                            if (!title || title === "Nouvelle Évaluation" || courses.some((x) => x.title === title)) setTitle(c.title);
-                          }}
+                          onClick={() => changeCourse(c._id)}
                         >
                           {c.code ? `${c.code} · ` : ""}{c.title}
                         </Chip>
                       ))}
                       {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours : <Link to="/ressources/cours" className="font-semibold text-blue-600 underline">crée-en un d&apos;abord</Link>.</p>}
                     </div>
+                    {courseNotice && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><i className="fa-solid fa-link-slash mr-1" aria-hidden />{courseNotice}</p>}
                   </section>
 
                   {/* 2. Identification */}
@@ -792,12 +837,35 @@ export default function AdminRubric() {
             <div className="flex justify-between items-center mb-6">
                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">4</span> Critères</h3>
                 <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => setShowAIModal(true)} className="rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50" title="Gabarit à donner à une IA pour générer les critères">
+                      <i className="fa-solid fa-robot mr-1.5" aria-hidden />Avec une IA
+                    </button>
                     <span className="text-sm font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Total : {totalPoints} pts</span>
                     <button type="button" onClick={addCriterion} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-2 text-sm">
                         <i className="fa-solid fa-plus"></i> Ajouter Critère
                     </button>
                 </div>
             </div>
+
+            {selectedCourse && (selectedCourse.competencies || []).length > 0 && (() => {
+              const cov = alignCriteriaToCourse(criteria, selectedCourse.competencies);
+              const ok = cov.unlinked === 0 && cov.missing.length === 0;
+              return (
+                <div className={`mb-4 rounded-lg border px-3 py-2 text-xs ${ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                  <p className="font-semibold">
+                    <i className={`fa-solid ${ok ? "fa-circle-check" : "fa-circle-exclamation"} mr-1.5`} aria-hidden />
+                    Compétences de « {selectedCourse.title} » : {(selectedCourse.competencies || []).length - cov.missing.length} sur {(selectedCourse.competencies || []).length} couvertes
+                    {cov.unlinked ? ` · ${cov.unlinked} critère(s) non rattaché(s)` : ""}
+                  </p>
+                  {cov.missing.length > 0 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span>Sans critère : {cov.missing.map((m) => m.title).join(" ; ")}</span>
+                      <button type="button" onClick={addMissingCompetencies} className="rounded-md bg-amber-600 px-2 py-1 font-semibold text-white hover:bg-amber-700">Ajouter les compétences manquantes</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="space-y-6">
               {criteria.map((c, idx) => (
@@ -844,6 +912,11 @@ export default function AdminRubric() {
                       <div className="min-w-0">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                           Élément de compétence <span className="font-normal normal-case text-gray-400">(optionnel)</span>
+                          {selectedCourse && (selectedCourse.competencies || []).length > 0 && (
+                            c.competencyId
+                              ? <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-emerald-700">Lié au cours</span>
+                              : <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-amber-800">Non lié au cours</span>
+                          )}
                         </label>
                         <input
                           type="text"
@@ -1137,12 +1210,13 @@ export default function AdminRubric() {
               {/* Cours : compétences ajoutées automatiquement au gabarit */}
               <section className="space-y-1.5">
                 <label className="block text-xs font-bold text-gray-800"><i className="fa-solid fa-book-open mr-1 text-emerald-600 text-[11px]"></i> Cours du gabarit</label>
-                <select value={aiConfig.courseId} onChange={(e) => chooseAiCourse(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-400">
+                <select value={courseId} onChange={(e) => changeCourse(e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-400">
                   <option value="">— Aucun cours (je fournirai les compétences à l&apos;IA) —</option>
-                  {courses.map((c) => (
+                  {courses.filter((c) => !c.archivedAt).map((c) => (
                     <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title} ({(c.competencies || []).length} compétence(s))</option>
                   ))}
                 </select>
+                <p className="text-[11px] text-gray-500">C&apos;est le cours de l&apos;évaluation en cours (étape 1) : le gabarit et l&apos;import restent toujours d&apos;accord.</p>
                 {selectedCourse && selectedCourseCompetencies.length > 0 && (
                   <ul className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-950 space-y-0.5">
                     {selectedCourseCompetencies.map((comp, i) => (

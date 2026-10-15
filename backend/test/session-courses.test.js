@@ -121,3 +121,33 @@ test("les données d'un autre utilisateur restent inaccessibles", async () => {
   const mineSession = (await post(other, "/api/sessions", { name: "X", startDate: "2026-08-24", endDate: "2099-12-20" })).body;
   assert.equal((await post(other, `/api/sessions/${mineSession._id}/courses`, { courseId: c._id })).statusCode, 404);
 });
+
+test("les liens de compétence suivent le cours: changer de cours coupe les liens et sort la grille de l'ancien cours de la session", async () => {
+  const h = await login("align@example.com");
+  const s = (await post(h, "/api/sessions", { name: "A26", startDate: "2026-08-24", endDate: "2099-12-20" })).body;
+  const c1 = (await post(h, "/api/courses", { title: "Réseaux", competencies: [{ id: "k1", title: "Installer les services" }] })).body;
+  const c2 = (await post(h, "/api/courses", { title: "Python", competencies: [{ id: "k9", title: "Programmer" }] })).body;
+  const crit = (extra) => [{ id: "c1", title: "Installer les services", weight: 10, ...extra }];
+  const body = (course, criteria) => ({ title: "Réseaux", taskTitle: "Examen", version: 1, course, isActive: true, criteria });
+
+  // Un id inconnu du cours est remplacé par la compétence du même titre; l'ancien nom (accents, casse) suffit.
+  const r = (await post(h, "/api/rubrics", body(c1._id, crit({ competencyId: "bidon", competencyElement: "INSTALLER les services" })))).body;
+  assert.equal(r.criteria[0].competencyId, "k1");
+  assert.equal(r.criteria[0].competencyElement, "Installer les services");
+
+  // Importée dans la session, puis déplacée vers un autre cours.
+  await post(h, `/api/sessions/${s._id}/courses`, { courseId: c1._id });
+  assert.equal((await get(h, `/api/sessions/${s._id}/courses`)).body[0].rubrics[0].imported, true);
+  const moved = (await put(h, `/api/rubrics/${r._id}`, body(c2._id, r.criteria))).body;
+  assert.equal(moved.criteria[0].competencyId, "", "le lien vers l'ancien cours est coupé");
+  assert.equal(moved.criteria[0].title, "Installer les services", "le texte reste");
+  const view = (await get(h, `/api/sessions/${s._id}/courses`)).body;
+  assert.equal(view[0].rubrics.filter((x) => x.imported).length, 0, "plus importée dans l'ancien cours");
+
+  // Un seul critère par compétence: un doublon n'est pas lié deux fois.
+  const dup = (await post(h, "/api/rubrics", body(c1._id, [
+    { id: "a", title: "A", weight: 5, competencyId: "k1" },
+    { id: "b", title: "B", weight: 5, competencyId: "k1" },
+  ]))).body;
+  assert.deepEqual(dup.criteria.map((c) => c.competencyId), ["k1", ""]);
+});

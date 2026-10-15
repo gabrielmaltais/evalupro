@@ -65,4 +65,40 @@ async function syncCourseRubrics(ownerId, courseId, oldComps, newComps) {
   return { updated, skipped };
 }
 
-module.exports = { syncCriteria, syncCourseRubrics };
+const key = (v) =>
+  String(v ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/**
+ * Garantit que les liens critère -> compétence ne pointent que vers des compétences du cours de la grille:
+ * un `competencyId` inconnu de ce cours est remplacé par la compétence du même titre, sinon coupé (le texte reste).
+ * Appelé à chaque enregistrement et quand la grille change de cours, donc quel que soit le client.
+ */
+function alignCriteria(criteria, competencies) {
+  const comps = (competencies || []).filter((c) => c && c.id && c.title);
+  const byId = new Map(comps.map((c) => [c.id, c]));
+  const byTitle = new Map(comps.map((c) => [key(c.title), c]));
+  const used = new Set();
+  let changed = false;
+  const next = (criteria || []).map((cr) => {
+    const plain = cr.toObject ? cr.toObject() : { ...cr };
+    const hit = (plain.competencyId && byId.get(plain.competencyId)) || (plain.competencyElement && byTitle.get(key(plain.competencyElement))) || null;
+    if (hit && !used.has(hit.id)) {
+      used.add(hit.id);
+      if (plain.competencyId !== hit.id || plain.competencyElement !== hit.title) changed = true;
+      return { ...plain, competencyId: hit.id, competencyElement: hit.title };
+    }
+    if (plain.competencyId) {
+      changed = true;
+      return { ...plain, competencyId: "" };
+    }
+    return plain;
+  });
+  return { criteria: next, changed };
+}
+
+module.exports = { syncCriteria, syncCourseRubrics, alignCriteria };

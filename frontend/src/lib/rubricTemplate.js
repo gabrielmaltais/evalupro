@@ -233,28 +233,46 @@ export function normalizeImportedRubric(json, options = {}) {
   };
 }
 
+/** Si l'IA a renvoyé tout le gabarit, ne garde que `template_a_remplir`; un tableau seul est lu comme la liste des critères. */
+export function unwrapAiTemplateEnvelope(raw) {
+  if (Array.isArray(raw)) return { criteria: raw };
+  if (!raw || typeof raw !== "object") return raw;
+  if (raw.template_a_remplir && typeof raw.template_a_remplir === "object") return raw.template_a_remplir;
+  return raw;
+}
+
+/** Corrige les défauts courants des JSON écrits par une IA: guillemets typographiques, virgules en trop, commentaires. */
+function repairJson(text) {
+  return text
+    .replace(/[\u201C\u201D\u201E]/g, '"')
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/,\s*([}\]])/g, "$1");
+}
+
 /**
- * Lit le JSON collé par l'utilisateur, même si l'IA l'a entouré de ```json ... ``` ou de texte.
- * Retourne l'objet, ou lève une erreur si aucun JSON valide n'est trouvé.
+ * Lit la réponse collée par l'utilisateur, quelle que soit l'IA: JSON pur, entouré de ```json ... ```,
+ * précédé ou suivi de texte, avec virgules en trop ou guillemets typographiques. Retourne l'objet, ou lève une
+ * erreur (message précis si la réponse semble coupée).
  */
 export function parseAiJson(text) {
   const raw = String(text ?? "").trim().replace(/^\uFEFF/, "");
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    const candidates = [fenced?.[1], start >= 0 && end > start ? raw.slice(start, end + 1) : null].filter(Boolean);
-    for (const candidate of candidates) {
+  const fenced = [...raw.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((m) => m[1]);
+  const start = raw.search(/[{[]/);
+  const end = Math.max(raw.lastIndexOf("}"), raw.lastIndexOf("]"));
+  const candidates = [raw, ...fenced, start >= 0 && end > start ? raw.slice(start, end + 1) : null].filter(Boolean);
+  for (const candidate of candidates) {
+    for (const attempt of [candidate, repairJson(candidate)]) {
       try {
-        return JSON.parse(candidate);
+        const parsed = JSON.parse(attempt);
+        if (parsed && typeof parsed === "object") return parsed;
       } catch {
         /* essai suivant */
       }
     }
-    throw new Error("JSON invalide");
   }
+  const opens = (raw.match(/[{[]/g) || []).length;
+  const closes = (raw.match(/[}\]]/g) || []).length;
+  throw new Error(opens > closes ? "Réponse incomplète: l'IA s'est arrêtée avant la fin. Demande-lui de continuer, puis colle la réponse complète." : "JSON invalide");
 }
 
 /** Total des points des tâches d'un critère. */

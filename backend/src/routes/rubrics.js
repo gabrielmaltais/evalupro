@@ -8,6 +8,7 @@ const Session = require("../models/Session");
 const Evaluation = require("../models/Evaluation");
 const { resolveActiveSession } = require("../services/sessionService");
 const sessionCourses = require("../services/sessionCourseService");
+const { alignCriteria } = require("../services/courseSync");
 const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
@@ -47,6 +48,15 @@ async function setGroupsByName(req, rubric, rawNames) {
       await Group.updateOne({ _id: g._id }, { $pull: { rubrics: rubric._id } });
     }
   }
+}
+
+/** Aligne les liens de compétence de la grille sur son cours (voir alignCriteria) et l'enregistre au besoin. */
+async function alignToCourse(req, rubric) {
+  const course = await Course.findOne({ _id: rubric.course, createdBy: req.user._id }).select("competencies").lean();
+  const { criteria, changed } = alignCriteria(rubric.criteria, course?.competencies);
+  if (!changed) return rubric;
+  rubric.criteria = criteria;
+  return rubric.save();
 }
 
 const rubricSchema = z.object({
@@ -109,7 +119,8 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
   try {
     const { groups, group, ...payload } = rubricSchema.parse(req.body);
     const course = await resolveCourse(req, payload.course);
-    const item = await Rubric.create({ ...payload, course, createdBy: req.user._id });
+    const created = await Rubric.create({ ...payload, course, createdBy: req.user._id });
+    const item = await alignToCourse(req, created);
     if (groups !== undefined || group !== undefined) await setGroupsByName(req, item, groups ?? [group]);
     const [out] = await withGroups(req, [item]);
     res.status(201).json(out);
@@ -123,8 +134,15 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
     const { groups, group, ...payload } = rubricSchema.partial().parse(req.body);
     const course = await resolveCourse(req, payload.course);
     if (course !== undefined) payload.course = course;
-    const item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
+    const before = await Rubric.findOne(mine(req, req.params.id)).select("course");
+    let item = await Rubric.findOneAndUpdate(mine(req, req.params.id), payload, { new: true });
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
+    if (before && String(before.course) !== String(item.course)) {
+      // Changer de cours: la grille quitte l'ancien cours des sessions et des groupes (l'éditeur la remet dans le nouveau).
+      await Session.updateMany({ createdBy: req.user._id }, { $pull: { "courses.$[].rubrics": item._id } });
+      await Group.updateMany({ createdBy: req.user._id, rubrics: item._id }, { $pull: { rubrics: item._id } });
+    }
+    if (payload.criteria || payload.course) item = await alignToCourse(req, item);
     if (payload.criteria) await recomputeEvaluationTotals(item);
     if (groups !== undefined || group !== undefined) await setGroupsByName(req, item, groups ?? [group]);
     const [out] = await withGroups(req, [item]);

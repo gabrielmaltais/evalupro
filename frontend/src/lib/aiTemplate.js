@@ -240,3 +240,20 @@ export function buildAITemplate(config = {}) {
     template_a_remplir,
   };
 }
+
+/**
+ * Vrai si le texte est encore une consigne du gabarit que l'IA devait remplacer (titre, tâche, rétroaction,
+ * descripteur de niveau, message global ou « à valider »). Sert à avertir avant d'enregistrer.
+ */
+export function isTemplatePlaceholder(text) {
+  const t = String(text ?? "").trim().toLowerCase();
+  if (!t) return false;
+  return Object.values(TEXT).some((T) => {
+    const exact = [T.title, T.taskTitle, T.criterionTitle, T.competency, T.taskFeedback, T.feedbackMsg, T.toValidate];
+    if (exact.some((x) => t === String(x).trim().toLowerCase())) return true;
+    if (t.startsWith(String(T.taskLabel).trim().toLowerCase())) return true; // « Tâche précise… 1 »
+    return Object.values(LEVEL_SCALES)
+      .flat()
+      .some((lvl) => t === T.levelDesc(lvl.label).trim().toLowerCase());
+  });
+}
