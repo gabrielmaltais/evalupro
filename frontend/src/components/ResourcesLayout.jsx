@@ -4,7 +4,7 @@ import TabStrip from "./TabStrip";
 const TABS = [
   { id: "cours", label: "Cours", icon: "fa-book-open", to: "/ressources/cours" },
   { id: "grilles", label: "Évaluations", icon: "fa-sliders", to: "/ressources/grilles" },
-  { id: "groupes", label: "Groupes", icon: "fa-users", to: "/ressources/groupes" },
+  { id: "groupes", label: "Groupes et élèves", icon: "fa-users-between-lines", to: "/ressources/groupes" },
 ];
 
 /** Section « Ressources » : cours, évaluations et groupes, communs à toutes les sessions. */

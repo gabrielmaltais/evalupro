@@ -49,6 +49,13 @@ test("un groupe commun se retrouve d'une session à l'autre, avec des cours prop
   assert.deepEqual(gb.courseList.map((c) => c.title), ["Sécurité"]);
   list = (await get(h, "/api/common-groups")).body;
   assert.deepEqual(list[0].sessions.map((s) => s.name).sort(), ["A26", "H27"]);
+  list = (await get(h, "/api/common-groups")).body;
+
+  // Les élèves du groupe le suivent dans la nouvelle session.
+  const ga = (await get(h, `/api/groups?session=${a._id}`)).body[0];
+  await post(h, `/api/groups/${ga._id}/students`, { firstName: "Ana", lastName: "Roy" });
+  const gc = (await post(h, "/api/groups", { name: "TI-1", session: (await post(h, "/api/sessions", { name: "E27", startDate: "2027-05-10", endDate: "2099-12-31" })).body._id })).body;
+  assert.equal(gc.studentCount, 1);
 
   // Renommer le groupe commun renomme le groupe dans chaque session.
   await put(h, `/api/common-groups/${list[0]._id}`, { name: "TI-A", color: "#00ff00" });

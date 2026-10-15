@@ -120,6 +120,20 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
       icon: payload.icon || common.icon || "",
       createdBy: req.user._id,
     });
+    // Les élèves appartiennent au groupe (ressource commune): ils le suivent dans la nouvelle session.
+    const earlier = await Group.find(mine(req, { name: item.name, _id: { $ne: item._id } })).sort({ createdAt: -1 }).select("_id");
+    let members = [];
+    for (const g of earlier) {
+      members = await Enrollment.find({ group: g._id, archivedAt: null }).distinct("student");
+      if (members.length) break; // la dernière session où le groupe avait des élèves
+    }
+    if (members.length) {
+      const taken = new Set((await Enrollment.find({ session: session._id }).distinct("student")).map(String));
+      members = members.filter((id) => !taken.has(String(id)));
+      if (members.length) {
+        await Enrollment.insertMany(members.map((student) => ({ student, group: item._id, session: session._id, createdBy: req.user._id })));
+      }
+    }
     if (payload.rubrics?.length) await importRubrics(req.user._id, item, payload.rubrics);
     await sessionCourses.ensureCoursesInSession(req.user._id, await Session.findById(session._id), item.courses);
     res.status(201).json((await present(req, [await Group.findById(item._id)]))[0]);

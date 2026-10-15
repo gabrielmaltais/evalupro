@@ -1,25 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useSession } from "../lib/sessionState";
 import PageSectionTitle from "../components/PageSectionTitle";
-import { Card, FormCard, btnDanger, btnPrimary, btnSecondary } from "../components/ui";
-
-const input = "w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-800";
-const EMPTY = { _id: null, name: "", color: "" };
+import { Card, Chip, btnSecondary } from "../components/ui";
 
 /**
- * Groupes communs: ils existent une fois et se retrouvent dans chaque session. Les cours et les élèves,
- * eux, s'associent à chaque session (Session en cours > Cours et évaluations / Groupes et élèves).
+ * Groupes de la session en cours: les groupes (et leurs élèves) se gèrent dans Ressources; ici on choisit
+ * ceux de la session et on leur associe les cours de cette session.
  */
-export default function ResourceGroups() {
+export default function SessionGroups() {
   const { active } = useSession();
   const [groups, setGroups] = useState([]);
-  const [editing, setEditing] = useState(null);
+  const [courses, setCourses] = useState([]);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      setGroups(await api.listCommonGroups());
+      const [g, c] = await Promise.all([api.listCommonGroups(), api.listCourses()]);
+      setGroups(g);
+      setCourses(c.filter((x) => !x.archivedAt));
+      setError("");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -35,82 +36,76 @@ export default function ResourceGroups() {
     try {
       await fn();
       await load();
-      return true;
     } catch (e) {
       setError(String(e.message || e));
-      return false;
     }
   }
 
-  async function save() {
-    const payload = { name: editing.name.trim(), color: editing.color || "" };
-    if (!payload.name) return setError("Le nom du groupe est requis.");
-    const ok = await act(() => (editing._id ? api.updateCommonGroup(editing._id, payload) : api.createCommonGroup(payload)));
-    if (ok) setEditing(null);
+  const linked = (g, courseId) => (g.activeGroup?.courses || []).some((c) => String(c) === String(courseId));
+  function toggleCourse(g, courseId) {
+    const cur = g.activeGroup.courses || [];
+    const next = linked(g, courseId) ? cur.filter((c) => String(c) !== String(courseId)) : [...cur, courseId];
+    act(() => api.updateGroup(g.activeGroup._id, { courses: next }));
   }
+
+  if (!active) {
+    return (
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <p className="ui-info text-sm">Crée ou choisis d'abord une session dans <Link to="/sessions" className="font-semibold text-blue-600 underline">Sessions</Link>.</p>
+      </main>
+    );
+  }
+
+  const inSession = groups.filter((g) => g.activeGroup);
+  const others = groups.filter((g) => !g.activeGroup);
+  const readOnly = Boolean(active.archivedAt);
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <PageSectionTitle
-        icon="fa-users"
+        icon="fa-users-between-lines"
         iconBgClass="bg-blue-600"
-        title="Mes groupes"
-        subtitle="Un groupe existe une fois et se retrouve dans chaque session. À chaque session, tu lui associes ses cours (Cours et évaluations) et ses élèves."
+        title="Groupes"
+        subtitle={`Session : ${active.name}. Associe à chaque groupe ses cours de la session. Les groupes et leurs élèves se gèrent dans Ressources.`}
         className="!mb-0"
       />
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      {editing ? (
-        <FormCard mode={editing._id ? "Modification" : "Nouveau groupe"} title={editing._id ? editing.name || "Groupe" : "Nom et couleur du groupe"} onBack={() => setEditing(null)} backLabel="Mes groupes">
-          <div className="grid gap-3 sm:grid-cols-[2fr_auto_auto] sm:items-end">
-            <label>
-              <span className="ui-label">Nom</span>
-              <input autoFocus className={input} placeholder="Ex : 420-AB1" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-            </label>
-            <label>
-              <span className="ui-label">Couleur</span>
-              <input type="color" className="h-10 w-16 rounded border border-gray-300" value={editing.color || "#2563eb"} onChange={(e) => setEditing({ ...editing, color: e.target.value })} />
-            </label>
-            <button type="button" className={btnPrimary} onClick={save}>Enregistrer</button>
-          </div>
-          {editing._id && <p className="ui-info text-xs text-gray-600">Le nouveau nom s'applique au groupe dans toutes ses sessions.</p>}
-        </FormCard>
-      ) : (
-        <button type="button" className={btnPrimary} onClick={() => setEditing(EMPTY)}>
-          <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouveau groupe
-        </button>
-      )}
+      {inSession.length === 0 && <p className="ui-info text-sm">Aucun groupe dans cette session pour l'instant.</p>}
 
-      {groups.length === 0 && <p className="ui-info text-sm">Aucun groupe pour l'instant.</p>}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {groups.map((g) => (
-          <Card
-            key={g._id}
-            title={<><span className="inline-block h-3 w-3 rounded-full" style={{ background: g.color || "#94a3b8" }} aria-hidden /> {g.name}</>}
-            actions={
-              <>
-                <button type="button" className={`${btnSecondary} !px-2 !py-1 text-xs`} onClick={() => setEditing({ _id: g._id, name: g.name, color: g.color })}>Modifier</button>
-                {g.sessions.length === 0 && (
-                  <button type="button" className={`${btnDanger} !px-2 !py-1 text-xs`} onClick={() => window.confirm(`Supprimer « ${g.name} » ?`) && act(() => api.deleteCommonGroup(g._id))}>
-                    Supprimer
-                  </button>
-                )}
-              </>
-            }
-          >
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              {g.sessions.length ? `Sessions : ${g.sessions.map((s) => s.name).join(", ")}` : "Pas encore utilisé dans une session."}
-            </p>
-            {active && !g.activeGroup && !active.archivedAt && (
-              <button type="button" className={`${btnSecondary} mt-3 text-xs`} onClick={() => act(() => api.createGroup({ name: g.name }))}>
-                <i className="fa-solid fa-plus mr-1" aria-hidden /> Ajouter à la session « {active.name} »
-              </button>
+      <div className="grid gap-4 md:grid-cols-2">
+        {inSession.map((g) => (
+          <Card key={g._id} title={<><span className="inline-block h-3 w-3 rounded-full" style={{ background: g.color || "#94a3b8" }} aria-hidden /> {g.name}</>}>
+            <p className="mb-2 text-xs font-bold uppercase text-gray-500">Cours</p>
+            {courses.length ? (
+              <div className="flex flex-wrap gap-2">
+                {courses.map((c) => (
+                  <Chip key={c._id} icon="fa-book" active={linked(g, c._id)} onClick={() => !readOnly && toggleCourse(g, c._id)}>
+                    {c.title}
+                  </Chip>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Aucun cours. <Link to="/ressources/cours" className="text-blue-600 underline">Créer un cours</Link></p>
             )}
           </Card>
         ))}
       </div>
+
+      {others.length > 0 && !readOnly && (
+        <Card title="Ajouter un groupe à la session">
+          <div className="flex flex-wrap gap-2">
+            {others.map((g) => (
+              <Chip key={g._id} icon="fa-plus" onClick={() => act(() => api.createGroup({ name: g.name }))}>{g.name}</Chip>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-500">Ses élèves le suivent. Pour créer ou modifier un groupe : <Link to="/ressources/groupes" className="text-blue-600 underline">Ressources › Groupes et élèves</Link>.</p>
+        </Card>
+      )}
+      {groups.length === 0 && (
+        <Link to="/ressources/groupes" className={`${btnSecondary} inline-block`}>Créer un groupe dans Ressources</Link>
+      )}
     </main>
   );
 }

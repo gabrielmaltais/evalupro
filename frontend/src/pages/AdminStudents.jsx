@@ -203,8 +203,11 @@ export default function AdminStudents() {
       return;
     }
     try {
-      await api.renameGroup(selectedGroup, renameGroupTo.trim());
-      setSuccess("Groupe renommé.");
+      // Le groupe est une ressource commune: il est renommé dans toutes ses sessions.
+      const common = (await api.listCommonGroups()).find((g) => g.name === selectedGroup);
+      if (common) await api.updateCommonGroup(common._id, { name: renameGroupTo.trim() });
+      else await api.renameGroup(selectedGroup, renameGroupTo.trim());
+      setSuccess("Groupe renommé dans toutes ses sessions.");
       setSelectedGroup(renameGroupTo.trim());
       setRenameGroupTo("");
       await refresh();
@@ -227,7 +230,7 @@ export default function AdminStudents() {
       setSelectedGroup(groupName);
       startNew();
       setGroup(groupName);
-      setSuccess(`Groupe « ${groupName} » créé. Lie-lui des cours, puis ajoute des élèves.`);
+      setSuccess(`Groupe « ${groupName} » créé. Ajoute-lui des élèves ; ses cours s'associent dans Session en cours › Groupes.`);
       await refresh();
     } catch (e) {
       setError(String(e.message || e));
@@ -317,7 +320,7 @@ export default function AdminStudents() {
           icon="fa-users-between-lines"
           iconBgClass="bg-blue-600"
           title="Groupes et élèves"
-          subtitle={active ? `Session : ${active.name}. Chaque groupe a ses cours et ses élèves.` : "Crée d'abord une session pour y ajouter des groupes."}
+          subtitle={active ? `Tes groupes et leurs élèves : ils te suivent d'une session à l'autre. Session en cours : ${active.name}.` : "Crée d'abord une session pour y ajouter des groupes."}
         />
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{error}</div>}
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm border border-green-100">{success}</div>}
@@ -419,7 +422,7 @@ export default function AdminStudents() {
         {creatingGroup && (
           <FormCard
             mode="Nouveau groupe"
-            title={active ? `Dans la session « ${active.name} »` : "Aucune session en cours"}
+            title={active ? `Il sera aussi ajouté à la session « ${active.name} »` : "Aucune session en cours"}
             accent="#059669"
             onBack={() => {
               setCreatingGroup(false);
@@ -436,7 +439,7 @@ export default function AdminStudents() {
                     <Chip key={g._id} icon="fa-plus" onClick={() => prepareNewGroup(g.name)}>{g.name}</Chip>
                   ))}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Un clic l'ajoute à cette session ; tu lui associes ensuite les cours de la session.</p>
+                <p className="mt-1 text-xs text-gray-500">Un clic le remet dans la session en cours, avec ses élèves.</p>
               </div>
             )}
             <form
@@ -452,7 +455,7 @@ export default function AdminStudents() {
               </label>
               <button type="submit" className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Créer le groupe</button>
             </form>
-            <p className="ui-info text-xs text-gray-600">Ensuite, tu pourras lui lier des cours et y inscrire des élèves.</p>
+            <p className="ui-info text-xs text-gray-600">Ensuite, tu pourras y inscrire des élèves.</p>
           </FormCard>
         )}
         {!creatingGroup && selectedGroupId && <GroupResourcesPanel key={selectedGroupId} groupId={selectedGroupId} onChanged={refresh} />}
@@ -467,7 +470,7 @@ export default function AdminStudents() {
                     <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouveau groupe
                   </button>
                 </div>
-                <p className="mb-3 text-xs text-gray-500">Clique un groupe pour voir ses élèves et ses cours.</p>
+                <p className="mb-3 text-xs text-gray-500">Clique un groupe pour voir ses élèves.</p>
                 <div className="space-y-2 max-h-[44vh] overflow-y-auto pr-1">
                   {displayedGroupDashboard.map((g) => {
                     const isActive = selectedGroup === g.group;

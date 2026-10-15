@@ -14,7 +14,7 @@ export default function SessionLayout() {
     { id: "suivi", label: "Suivi d'évaluation", icon: "fa-list-check", to: "/session?tab=suivi" },
     { id: "envois", label: "Envois", icon: "fa-paper-plane", to: "/session?tab=envois" },
     { id: "cours", label: "Cours et évaluations", icon: "fa-book-open", to: "/session/cours" },
-    { id: "groupes", label: "Groupes et élèves", icon: "fa-users-between-lines", to: "/session/groupes" },
+    { id: "groupes", label: "Groupes", icon: "fa-users", to: "/session/groupes" },
   ].map((t) => ({ ...t, active: sub ? t.id === sub : activeEval === t.id }));
   return (
     <div className="flex w-full flex-1 flex-col">
