@@ -9,9 +9,7 @@ const studentSchema = new mongoose.Schema(
     /** Nom complet dénormalisé (Prénom + nom), conservé pour recherche et données existantes */
     name: { type: String, required: true, trim: true },
     email: { type: String },
-    group: { type: String }, // optional group/class name
-    /** Session à laquelle appartient le groupe de l'étudiant; archivedAt = groupe archivé. */
-    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
+    /** Fiche permanente; le groupe d'un élève dans une session est donné par son inscription (Enrollment). */
     archivedAt: { type: Date, default: null },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },

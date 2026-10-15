@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Login from "./pages/Login";
 import Evaluations from "./pages/Evaluations";
 import AdminRubric from "./pages/AdminRubric";
@@ -8,9 +8,15 @@ import AdminStudents from "./pages/AdminStudents";
 import AdminUsers from "./pages/AdminUsers";
 import AccountSettings from "./pages/AccountSettings";
 import MainLayout from "./components/MainLayout";
-import EvaluationsLayout from "./components/EvaluationsLayout";
-import ClassesLayout from "./components/ClassesLayout";
+import SessionLayout from "./components/SessionLayout";
+import ResourcesLayout from "./components/ResourcesLayout";
+import SessionsLayout from "./components/SessionsLayout";
 import { getToken } from "./lib/api";
+
+function RedirectKeepSearch({ to }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 function PrivateShell() {
   return getToken() ? <MainLayout /> : <Navigate to="/login" replace />;
@@ -21,25 +27,34 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<PrivateShell />}>
-        <Route path="/evaluations" element={<EvaluationsLayout />}>
+        <Route path="/session" element={<SessionLayout />}>
           <Route index element={<Evaluations />} />
-          <Route path="grilles" element={<AdminRubric />} />
-          <Route path="cours" element={<Navigate to="/classes/cours" replace />} />
-          <Route path="sessions" element={<Navigate to="/classes/sessions" replace />} />
-        </Route>
-        <Route path="/classes" element={<ClassesLayout />}>
-          <Route index element={<Navigate to="/classes/cours" replace />} />
-          <Route path="cours" element={<AdminCourses />} />
           <Route path="groupes" element={<AdminStudents />} />
-          <Route path="sessions" element={<AdminSessions view="sessions" />} />
+        </Route>
+        <Route path="/ressources" element={<ResourcesLayout />}>
+          <Route index element={<Navigate to="/ressources/cours" replace />} />
+          <Route path="cours" element={<AdminCourses />} />
+          <Route path="grilles" element={<AdminRubric />} />
+        </Route>
+        <Route path="/sessions" element={<SessionsLayout />}>
+          <Route index element={<AdminSessions view="sessions" />} />
           <Route path="archives" element={<AdminSessions view="archives" />} />
         </Route>
-        <Route path="/admin/rubrics" element={<Navigate to="/evaluations/grilles" replace />} />
-        <Route path="/admin/students" element={<Navigate to="/classes/groupes" replace />} />
+        <Route path="/evaluations" element={<RedirectKeepSearch to="/session" />} />
+        <Route path="/evaluations/grilles" element={<Navigate to="/ressources/grilles" replace />} />
+        <Route path="/evaluations/cours" element={<Navigate to="/ressources/cours" replace />} />
+        <Route path="/evaluations/sessions" element={<Navigate to="/sessions" replace />} />
+        <Route path="/classes" element={<Navigate to="/ressources/cours" replace />} />
+        <Route path="/classes/cours" element={<Navigate to="/ressources/cours" replace />} />
+        <Route path="/classes/groupes" element={<Navigate to="/session/groupes" replace />} />
+        <Route path="/classes/sessions" element={<Navigate to="/sessions" replace />} />
+        <Route path="/classes/archives" element={<Navigate to="/sessions/archives" replace />} />
+        <Route path="/admin/rubrics" element={<Navigate to="/ressources/grilles" replace />} />
+        <Route path="/admin/students" element={<Navigate to="/session/groupes" replace />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/account" element={<AccountSettings />} />
         <Route path="/admin/smtp" element={<Navigate to="/admin/users" replace />} />
-        <Route path="*" element={<Navigate to="/evaluations" replace />} />
+        <Route path="*" element={<Navigate to="/session" replace />} />
       </Route>
     </Routes>
   );

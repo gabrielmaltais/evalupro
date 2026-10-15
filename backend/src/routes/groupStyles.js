@@ -1,7 +1,8 @@
 const express = require("express");
 const { z } = require("zod");
-const GroupStyle = require("../models/GroupStyle");
+const Group = require("../models/Group");
 const { auth } = require("../middleware/auth");
+const { resolveActiveSession } = require("../services/sessionService");
 
 const router = express.Router();
 router.use(auth);
@@ -16,9 +17,20 @@ const upsertSchema = z.object({
   icon: z.string().trim().max(80).optional(),
 });
 
+const toStyle = (g) => ({ _id: g._id, groupKey: g.name, color: g.color || "", icon: g.icon || "" });
+
+/** Couleur et icône sont portées par le groupe; cette route les expose par nom de groupe (session active). */
+async function activeGroup(req, groupKey) {
+  const session = await resolveActiveSession(req.user);
+  if (!session) return null;
+  return Group.findOne({ createdBy: req.user._id, session: session._id, name: groupKey });
+}
+
 router.get("/", async (req, res) => {
-  const items = await GroupStyle.find({ createdBy: req.user._id }).sort({ groupKey: 1 }).lean();
-  res.json(items);
+  const session = await resolveActiveSession(req.user);
+  if (!session) return res.json([]);
+  const groups = await Group.find({ createdBy: req.user._id, session: session._id }).sort({ name: 1 }).lean();
+  res.json(groups.filter((g) => g.color || g.icon).map(toStyle));
 });
 
 router.put("/:groupKey", async (req, res) => {
@@ -26,25 +38,13 @@ router.put("/:groupKey", async (req, res) => {
     const groupKey = decodeURIComponent(req.params.groupKey).trim();
     if (!groupKey) return res.status(400).json({ message: "Nom de groupe requis" });
     const body = upsertSchema.parse(req.body || {});
-    const color = body.color !== undefined ? String(body.color || "").trim() : undefined;
-    const icon = body.icon !== undefined ? String(body.icon || "").trim() : undefined;
-
-    const $set = {
-      ...(color !== undefined ? { color } : {}),
-      ...(icon !== undefined ? { icon } : {}),
-    };
-    if (Object.keys($set).length === 0) {
-      const existing = await GroupStyle.findOne({ createdBy: req.user._id, groupKey }).lean();
-      if (existing) return res.json(existing);
-      return res.status(400).json({ message: "Indiquez une couleur ou une icône." });
-    }
-
-    const doc = await GroupStyle.findOneAndUpdate(
-      { createdBy: req.user._id, groupKey },
-      { $set },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-    );
-    res.json(doc);
+    const group = await activeGroup(req, groupKey);
+    if (!group) return res.status(404).json({ message: "Groupe introuvable dans la session active" });
+    if (body.color === undefined && body.icon === undefined) return res.json(toStyle(group));
+    if (body.color !== undefined) group.color = String(body.color || "").trim();
+    if (body.icon !== undefined) group.icon = String(body.icon || "").trim();
+    await group.save();
+    res.json(toStyle(group));
   } catch (error) {
     res.status(400).json({ message: "Style de groupe invalide", details: error.message });
   }
@@ -52,7 +52,12 @@ router.put("/:groupKey", async (req, res) => {
 
 router.delete("/:groupKey", async (req, res) => {
   const groupKey = decodeURIComponent(req.params.groupKey).trim();
-  await GroupStyle.deleteOne({ createdBy: req.user._id, groupKey });
+  const group = await activeGroup(req, groupKey);
+  if (group) {
+    group.color = "";
+    group.icon = "";
+    await group.save();
+  }
   res.status(204).send();
 });
 

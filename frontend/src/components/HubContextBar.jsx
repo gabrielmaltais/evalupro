@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export default function HubContextBar({
   selectedGroup,
   setSelectedGroup,
@@ -53,6 +55,11 @@ export default function HubContextBar({
                 <i className="fa-solid fa-chevron-down text-[10px]" aria-hidden />
               </span>
             </div>
+            {(examOptions || []).length === 0 && (
+              <Link to="/session/groupes" className="mt-1 block text-xs font-medium text-blue-700 underline dark:text-blue-300">
+                Aucune grille disponible : importe-en dans un groupe (Groupes et élèves).
+              </Link>
+            )}
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:w-[420px]">

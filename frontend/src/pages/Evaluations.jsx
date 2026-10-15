@@ -391,7 +391,7 @@ export default function Evaluations() {
           rubricId,
         };
       });
-      const availableActiveRubrics = (rubricList || []).filter((r) => r?.isActive);
+      const availableActiveRubrics = (rubricList || []).filter((r) => r?.isActive && (r.groups || []).length > 0);
       if (!form.rubric && availableActiveRubrics[0]) {
         const rememberedHubRubricId = localStorage.getItem(HUB_LAST_EXAM_STORAGE_KEY);
         const rememberedRubricId = rememberedHubRubricId || localStorage.getItem(EVAL_LAST_RUBRIC_STORAGE_KEY);
@@ -524,7 +524,8 @@ export default function Evaluations() {
         : [];
       const legacyGroup = String(r?.group || "").trim();
       const allGroups = Array.from(new Set([...rubricGroups, ...(legacyGroup ? [legacyGroup] : [])]));
-      if (allGroups.length === 0) return true;
+      // Une grille n'est proposée que si elle est importée dans un groupe de la session en cours.
+      if (allGroups.length === 0) return false;
       if (!group) return true;
       return allGroups.includes(group);
     });
@@ -2140,13 +2141,13 @@ export default function Evaluations() {
                               {row.evaluation ? (
                                 <div className="flex flex-wrap items-center justify-end gap-2">
                                   <Link
-                                    to={`/evaluations?load=${row.evaluation._id}&tab=corriger`}
+                                    to={`/session?load=${row.evaluation._id}&tab=corriger`}
                                     className="font-medium text-blue-600 hover:underline dark:text-blue-400"
                                   >
                                     Voir
                                   </Link>
                                   <Link
-                                    to={`/evaluations?load=${row.evaluation._id}&download=true&tab=corriger`}
+                                    to={`/session?load=${row.evaluation._id}&download=true&tab=corriger`}
                                     className="text-slate-700 hover:underline dark:text-slate-300"
                                   >
                                     PDF

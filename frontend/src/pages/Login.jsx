@@ -30,7 +30,7 @@ export default function Login() {
     try {
       const data = mode === "login" ? await api.login(form) : await api.register(form);
       setToken(data.token);
-      navigate("/evaluations");
+      navigate("/session");
     } catch (err) {
       let errorMsg = err.message || String(err);
       try {

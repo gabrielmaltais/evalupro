@@ -13,6 +13,9 @@ const evaluationSchema = new mongoose.Schema(
     totalScore: { type: Number, default: 0 },
     totalMax: { type: Number, default: 0 },
     rubric: { type: mongoose.Schema.Types.ObjectId, ref: "Rubric", required: true },
+    /** Contexte de la note: groupe et session de l'élève au moment de la correction (facultatif pour les anciennes données). */
+    group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", default: null },
+    session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     /** Repère visuel optionnel (pastille / icône) pour tri visuel en correction */
     markerColor: { type: String, default: "" },

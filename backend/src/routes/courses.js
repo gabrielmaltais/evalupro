@@ -1,10 +1,9 @@
 const express = require("express");
 const { z } = require("zod");
-const mongoose = require("mongoose");
 const Course = require("../models/Course");
-const Session = require("../models/Session");
 const Rubric = require("../models/Rubric");
-const { archiveCourseRubrics, restoreCourseRubrics } = require("../services/sessionService");
+const Group = require("../models/Group");
+const { syncCourseRubrics } = require("../services/courseSync");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 const { normalizeCompetencies } = require("../utils/courseCompetencies");
@@ -19,21 +18,10 @@ const courseSchema = z.object({
     .array(z.object({ id: z.string().optional(), title: z.string(), description: z.string().optional() }))
     .max(100)
     .optional(),
-  session: z.string().nullable().optional(),
 });
 
 function ownerFilter(req, extra = {}) {
   return { ...extra, createdBy: req.user._id };
-}
-
-/** Vérifie que la session appartient à l'utilisateur; retourne l'id, null, ou undefined si non fournie. */
-async function resolveSession(req, value) {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
-  if (!mongoose.isValidObjectId(value)) throw new Error("Session invalide");
-  const s = await Session.findOne({ _id: value, createdBy: req.user._id }).select("_id");
-  if (!s) throw new Error("Session introuvable");
-  return s._id;
 }
 
 router.get("/", async (req, res) => {
@@ -45,9 +33,7 @@ router.get("/", async (req, res) => {
 router.post("/", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = courseSchema.parse(req.body);
-    const session = await resolveSession(req, payload.session);
     const item = await Course.create({
-      session: session || null,
       title: payload.title,
       code: payload.code || "",
       competencies: normalizeCompetencies(payload.competencies),
@@ -62,32 +48,35 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
 router.put("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
     const payload = courseSchema.partial().parse(req.body);
-    const update = {};
-    if (payload.title !== undefined) update.title = payload.title;
-    if (payload.code !== undefined) update.code = payload.code;
-    const session = await resolveSession(req, payload.session);
-    if (session !== undefined) update.session = session;
-    if (payload.competencies !== undefined) update.competencies = normalizeCompetencies(payload.competencies);
-    const item = await Course.findOneAndUpdate(ownerFilter(req, { _id: req.params.id }), update, {
-      new: true,
-      runValidators: true,
-    });
+    const item = await Course.findOne(ownerFilter(req, { _id: req.params.id }));
     if (!item) return res.status(404).json({ message: "Cours introuvable" });
-    res.json(item);
+    const before = (item.competencies || []).map((c) => ({ id: c.id, title: c.title, description: c.description }));
+    if (payload.title !== undefined) item.title = payload.title;
+    if (payload.code !== undefined) item.code = payload.code;
+    if (payload.competencies !== undefined) item.competencies = normalizeCompetencies(payload.competencies);
+    await item.save();
+    // Les grilles du cours qui n'ont pas encore servi suivent les compétences modifiées.
+    const sync =
+      payload.competencies !== undefined
+        ? await syncCourseRubrics(req.user._id, item._id, before, item.competencies.map((c) => ({ id: c.id, title: c.title })))
+        : { updated: 0, skipped: 0 };
+    res.json({ ...item.toObject(), sync });
   } catch (error) {
     res.status(400).json({ message: "Cours invalide", details: error.message });
   }
 });
 
+/** Archiver un cours (action explicite) range aussi ses grilles actives; restaurer remet celles qu'il avait rangées. */
 router.post("/:id/archive", roles("admin", "teacher"), async (req, res) => {
+  const when = new Date();
   const item = await Course.findOneAndUpdate(
     ownerFilter(req, { _id: req.params.id, archivedAt: null }),
-    { $set: { archivedAt: new Date() } },
+    { $set: { archivedAt: when } },
     { new: true }
   );
   if (!item) return res.status(404).json({ message: "Cours introuvable ou déjà archivé" });
-  const rubrics = await archiveCourseRubrics([item._id], item.archivedAt);
-  res.json({ ...item.toObject(), archivedRubrics: rubrics });
+  const r = await Rubric.updateMany({ course: item._id, archivedAt: null }, { $set: { archivedAt: when } });
+  res.json({ ...item.toObject(), archivedRubrics: r.modifiedCount });
 });
 
 router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
@@ -96,21 +85,19 @@ router.post("/:id/restore", roles("admin", "teacher"), async (req, res) => {
   const when = before.archivedAt;
   before.archivedAt = null;
   await before.save();
-  const rubrics = await restoreCourseRubrics([before._id], when);
-  res.json({ ...before.toObject(), restoredRubrics: rubrics });
+  const r = when ? await Rubric.updateMany({ course: before._id, archivedAt: when }, { $set: { archivedAt: null } }) : { modifiedCount: 0 };
+  res.json({ ...before.toObject(), restoredRubrics: r.modifiedCount });
 });
 
-/** Copie un cours (avec ses compétences) dans une session, ou sans session si sessionId est absent. */
+/** Copie un cours (avec ses compétences). */
 router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   try {
     const src = await Course.findOne(ownerFilter(req, { _id: req.params.id }));
     if (!src) return res.status(404).json({ message: "Cours introuvable" });
-    const session = await resolveSession(req, req.body?.sessionId);
     const item = await Course.create({
       title: src.title,
       code: src.code,
       competencies: src.competencies,
-      session: session || null,
       createdBy: req.user._id,
     });
     res.status(201).json(item);
@@ -119,11 +106,20 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
   }
 });
 
+/** Supprime un cours vide; s'il contient des grilles, il faut d'abord les déplacer ou les supprimer (ou archiver le cours). */
 router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   try {
-    const deleted = await Course.findOneAndDelete(ownerFilter(req, { _id: req.params.id }));
-    if (!deleted) return res.status(404).json({ message: "Cours introuvable" });
-    await Rubric.updateMany({ course: deleted._id }, { $set: { course: null } });
+    const course = await Course.findOne(ownerFilter(req, { _id: req.params.id }));
+    if (!course) return res.status(404).json({ message: "Cours introuvable" });
+    const rubrics = await Rubric.countDocuments({ course: course._id });
+    if (rubrics > 0) {
+      return res.status(409).json({
+        message: "Ce cours contient encore des grilles: déplace-les ou supprime-les d'abord, ou archive le cours.",
+        rubrics,
+      });
+    }
+    await course.deleteOne();
+    await Group.updateMany({ createdBy: req.user._id, courses: course._id }, { $pull: { courses: course._id } });
     res.status(204).send();
   } catch (error) {
     res.status(400).json({ message: "Suppression invalide", details: error.message });

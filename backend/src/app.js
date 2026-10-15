@@ -10,6 +10,7 @@ const courseRoutes = require("./routes/courses");
 const sessionRoutes = require("./routes/sessions");
 
 const studentRoutes = require("./routes/students");
+const groupRoutes = require("./routes/groups");
 const userRoutes = require("./routes/users");
 const adminSmtpRoutes = require("./routes/adminSmtp");
 const groupStyleRoutes = require("./routes/groupStyles");
@@ -39,6 +40,7 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/students", studentRoutes);
+app.use("/api/groups", groupRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminSmtpRoutes);
 app.use("/api/group-styles", groupStyleRoutes);

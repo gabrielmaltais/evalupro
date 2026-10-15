@@ -7,6 +7,7 @@ const port = process.env.PORT || 4000;
 
 const User = require("./models/User");
 const { autoArchiveExpiredSessions } = require("./services/sessionService");
+const { migrateGroupsForPending } = require("./services/groupMigration");
 
 async function start() {
   await connectDb(process.env.MONGODB_URI);
@@ -31,6 +32,15 @@ async function start() {
     }
   } catch (error) {
     console.error("Erreur lors de la vérification/création de l'administrateur par défaut:", error);
+  }
+
+  // Convertit une seule fois, par utilisateur, les anciennes données (groupes en texte) en groupes et inscriptions.
+  try {
+    const migrated = await migrateGroupsForPending();
+    const n = Object.keys(migrated).length;
+    if (n) console.log("🔁 Données converties pour %d utilisateur(s).", n);
+  } catch (error) {
+    console.error("Conversion des groupes impossible:", error);
   }
 
   // Archive les sessions échues sans attendre qu'un utilisateur ouvre la page (au démarrage, puis toutes les heures).

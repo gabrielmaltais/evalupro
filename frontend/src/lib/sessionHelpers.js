@@ -19,16 +19,14 @@ export function formatSessionDate(str) {
   return d.toLocaleDateString("fr-CA", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-/** Résumé "2 cours · 3 grilles · 1 groupe (24 étudiants)" d'une session. */
+/** Résumé "2 groupes · 40 élèves · 12 évaluations" du contenu d'une session. */
 export function sessionCountsLabel(counts = {}) {
   const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
-  const parts = [
-    plural(counts.courses || 0, "cours", "cours"),
-    plural(counts.rubrics || 0, "grille", "grilles"),
+  return [
     plural(counts.groups || 0, "groupe", "groupes"),
-  ];
-  const students = counts.students || 0;
-  return `${parts.join(" · ")}${students ? ` (${plural(students, "étudiant", "étudiants")})` : ""}`;
+    plural(counts.students || 0, "élève", "élèves"),
+    plural(counts.evaluations || 0, "évaluation", "évaluations"),
+  ].join(" · ");
 }
 
 /** Nom proposé pour la session suivante: "Automne 2025" → "Automne 2026", sinon "… (copie)". */

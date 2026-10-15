@@ -53,8 +53,10 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     let errorMsg = "Erreur API";
+    let payload = null;
     try {
       const data = await response.clone().json();
+      payload = data;
       errorMsg = data.message || errorMsg;
       if (data.details) {
         errorMsg = `${errorMsg} (${data.details})`;
@@ -62,7 +64,10 @@ async function request(path, options = {}) {
     } catch {
       errorMsg = await response.text() || errorMsg;
     }
-    throw new Error(errorMsg);
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    err.data = payload;
+    throw err;
   }
   if (response.status === 204) return null;
   return response.json();
@@ -104,7 +109,9 @@ export const api = {
   listSessions: () => request("/api/sessions"),
   createSession: (payload) => request("/api/sessions", { method: "POST", body: JSON.stringify(payload) }),
   updateSession: (id, payload) => request(`/api/sessions/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-  deleteSession: (id) => request(`/api/sessions/${id}`, { method: "DELETE" }),
+  deleteSession: (id, { force = false } = {}) => request(`/api/sessions/${id}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+  getActiveSession: () => request("/api/sessions/active"),
+  setActiveSession: (sessionId) => request("/api/sessions/active", { method: "PUT", body: JSON.stringify({ sessionId: sessionId || null }) }),
   archiveSession: (id) => request(`/api/sessions/${id}/archive`, { method: "POST" }),
   restoreSession: (id) => request(`/api/sessions/${id}/restore`, { method: "POST" }),
   copySession: (id, payload) => request(`/api/sessions/${id}/copy`, { method: "POST", body: JSON.stringify(payload) }),
@@ -122,6 +129,21 @@ export const api = {
   archiveGroup: (group) => request("/api/students/groups/archive", { method: "POST", body: JSON.stringify({ group }) }),
   restoreGroup: (group) => request("/api/students/groups/restore", { method: "POST", body: JSON.stringify({ group }) }),
   setGroupSession: (group, sessionId) => request("/api/students/groups/session", { method: "POST", body: JSON.stringify({ group, sessionId: sessionId || null }) }),
+  listGroups: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/api/groups${qs ? `?${qs}` : ""}`);
+  },
+  restoreGroupById: (id) => request(`/api/groups/${id}/restore`, { method: "POST" }),
+  archiveGroupById: (id) => request(`/api/groups/${id}/archive`, { method: "POST" }),
+  getGroup: (id) => request(`/api/groups/${id}`),
+  createGroup: (payload) => request("/api/groups", { method: "POST", body: JSON.stringify(payload) }),
+  updateGroup: (id, payload) => request(`/api/groups/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteGroupById: (id, { force = false } = {}) => request(`/api/groups/${id}${force ? "?force=1" : ""}`, { method: "DELETE" }),
+  importGroupRubrics: (id, rubricIds) => request(`/api/groups/${id}/rubrics`, { method: "POST", body: JSON.stringify({ rubricIds }) }),
+  removeGroupRubric: (id, rubricId) => request(`/api/groups/${id}/rubrics/${rubricId}`, { method: "DELETE" }),
+  enrollInGroup: (id, payload) => request(`/api/groups/${id}/students`, { method: "POST", body: JSON.stringify(payload) }),
+  unenrollFromGroup: (id, studentId) => request(`/api/groups/${id}/students/${studentId}`, { method: "DELETE" }),
+  listLibraryStudents: () => request("/api/students?scope=library"),
   createCourse: (payload) => request("/api/courses", { method: "POST", body: JSON.stringify(payload) }),
   updateCourse: (id, payload) => request(`/api/courses/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCourse: (id) => request(`/api/courses/${id}`, { method: "DELETE" }),

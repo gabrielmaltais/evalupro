@@ -1,15 +1,20 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { z } = require("zod");
 const Evaluation = require("../models/Evaluation");
 const Rubric = require("../models/Rubric");
 const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const Student = require("../models/Student");
+const Group = require("../models/Group");
+const Enrollment = require("../models/Enrollment");
 const { auth } = require("../middleware/auth");
 const { generateSummary } = require("../services/gemini");
 const { startBatchJob, getProgress, sendOneEvaluationEmail } = require("../services/emailBatchService");
 const { createEvaluationPdfBuffer, getEvaluationPdfFileName } = require("../services/evaluationPdfService");
 const { studentFullNameFromDoc } = require("../utils/studentName");
 const { computeEvaluationTotals } = require("../utils/evaluationTotals");
+const { resolveActiveSession } = require("../services/sessionService");
+const { studentsOfGroup } = require("../services/groupService");
 
 const router = express.Router();
 router.use(auth);
@@ -44,6 +49,20 @@ function normalizeMarkerIcon(raw) {
   return String(raw).trim().slice(0, 80);
 }
 
+/**
+ * Contexte d'une note: la session (celle de l'évaluation, sinon la session active) et le groupe dans lequel
+ * l'élève y est inscrit. Conservé tel quel même si l'élève change de groupe plus tard.
+ */
+async function evaluationContext(user, studentId, sessionId) {
+  const session = sessionId || (await resolveActiveSession(user))?._id || null;
+  let group = null;
+  if (session && studentId) {
+    const e = await Enrollment.findOne({ student: studentId, session }).select("group").lean();
+    group = e?.group || null;
+  }
+  return { session, group };
+}
+
 function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -51,9 +70,20 @@ function escapeRegex(text) {
 router.get("/", async (req, res) => {
   const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
   const limit = Math.min(5000, Math.max(1, Math.floor(Number(req.query.limit)) || 10));
-  const query = req.user.role === "admin" ? {} : { owner: req.user._id };
+  // Données isolées par utilisateur: chacun ne voit que ses évaluations (administrateur compris).
+  const query = { owner: req.user._id };
   if (req.query.studentName) query.studentName = new RegExp(escapeRegex(req.query.studentName), "i");
   if (req.query.studentId) query.studentId = req.query.studentId;
+  // Par défaut: évaluations de la session active (et celles sans session). L'historique d'un élève, ou
+  // `session=all`, couvre toutes les sessions; `session=<id>` en cible une.
+  if (!req.query.studentId && req.query.session !== "all") {
+    if (req.query.session && mongoose.isValidObjectId(req.query.session)) {
+      query.session = req.query.session;
+    } else {
+      const active = await resolveActiveSession(req.user);
+      query.$or = [{ session: null }, ...(active ? [{ session: active._id }] : [])];
+    }
+  }
   const [items, total] = await Promise.all([
     Evaluation.find(query).populate("rubric", "title taskTitle version").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Evaluation.countDocuments(query),
@@ -81,6 +111,7 @@ router.post("/", async (req, res) => {
     if (!createData.studentId) {
       delete createData.studentId;
     }
+    Object.assign(createData, await evaluationContext(req.user, createData.studentId));
     const item = await Evaluation.create(createData);
     res.status(201).json(item);
   } catch (error) {
@@ -102,9 +133,13 @@ const sendOneSchema = z.object({
 });
 
 router.get("/email-targets", async (req, res) => {
-  const query = req.user.role === "admin" ? {} : { owner: req.user._id };
+  const query = { owner: req.user._id };
+  const active = await resolveActiveSession(req.user);
+  query.$or = [{ session: null }, ...(active ? [{ session: active._id }] : [])];
   const [groups, rubrics] = await Promise.all([
-    Student.find({ createdBy: req.user._id, archivedAt: null, group: { $nin: [null, ""] } }).distinct("group"),
+    active
+      ? Group.find({ createdBy: req.user._id, session: active._id, archivedAt: null }).distinct("name")
+      : [],
     Evaluation.find(query).populate("rubric", "title taskTitle version archivedAt").sort({ createdAt: -1 }),
   ]);
   const examMap = new Map();
@@ -126,9 +161,15 @@ router.get("/email-targets", async (req, res) => {
 router.post("/email-batches", async (req, res) => {
   try {
     const payload = batchSchema.parse(req.body);
+    const active = await resolveActiveSession(req.user);
+    const group = active
+      ? await Group.findOne({ createdBy: req.user._id, session: active._id, name: payload.group })
+      : null;
+    if (!group) return res.status(404).json({ message: "Groupe introuvable dans la session active" });
     const jobId = startBatchJob({
       owner: req.user,
-      group: payload.group,
+      group: group.name,
+      groupId: group._id,
       rubricId: payload.rubricId,
       skipAlreadySent: payload.skipAlreadySent !== false,
       allowResendFailed: payload.allowResendFailed !== false,
@@ -174,7 +215,7 @@ router.get("/email-deliveries", async (req, res) => {
       select: "studentName date rubric",
       populate: { path: "rubric", select: "title taskTitle version" },
     })
-    .populate("studentId", "name firstName lastName email group")
+    .populate("studentId", "name firstName lastName email")
     .sort({ updatedAt: -1 })
     .limit(300);
   res.json(items);
@@ -187,8 +228,7 @@ router.post("/email-batches/:jobId/retry-failed", async (req, res) => {
       jobId: req.params.jobId,
       status: "failed",
     })
-      .populate("evaluationId", "rubric")
-      .populate("studentId", "group");
+      .populate("evaluationId", "rubric");
 
     if (!failed.length) return res.json({ message: "Aucune erreur a relancer", jobId: null });
 
@@ -196,10 +236,15 @@ router.post("/email-batches/:jobId/retry-failed", async (req, res) => {
     if (!firstEval?.rubric) {
       return res.status(400).json({ message: "Relance impossible: donnees incompletes" });
     }
-    const group = failed[0].group || failed[0].studentId?.group || "";
+    const active = await resolveActiveSession(req.user);
+    const groupDoc = active
+      ? await Group.findOne({ createdBy: req.user._id, session: active._id, name: failed[0].group })
+      : null;
+    if (!groupDoc) return res.status(400).json({ message: "Relance impossible: le groupe n'existe plus dans la session active" });
     const jobId = startBatchJob({
       owner: req.user,
-      group,
+      group: groupDoc.name,
+      groupId: groupDoc._id,
       rubricId: String(firstEval.rubric),
       skipAlreadySent: true,
       allowResendFailed: true,
@@ -272,6 +317,10 @@ router.put("/:id", async (req, res) => {
     if (item.studentId) {
       const st = await Student.findOne({ _id: item.studentId, createdBy: req.user._id }).lean();
       if (st) item.studentName = studentFullNameFromDoc(st);
+    }
+    // L'élève a changé: la note suit son inscription dans la session de l'évaluation.
+    if (Object.prototype.hasOwnProperty.call(payload, "studentId") && item.studentId) {
+      Object.assign(item, await evaluationContext(req.user, item.studentId, item.session));
     }
     await item.save();
     res.json(item);

@@ -211,6 +211,7 @@ export function normalizeImportedRubric(json, options = {}) {
       ),
       weight: Number(Math.max(0, weight).toFixed(2)),
       competencyElement: asText(firstDefined(criterion.competencyElement, criterion.elementCompetence, criterion.élémentCompétence), ""),
+      ...(typeof criterion.competencyId === "string" && criterion.competencyId ? { competencyId: criterion.competencyId } : {}),
       color: VALID_COLORS.has(criterion.color) ? criterion.color : options.defaultColor || "border-blue-500",
       levels: normalizeLevels(firstDefined(criterion.levels, criterion.niveaux, criterion.performanceLevels, criterion.descriptors)),
       subCriteria: normalizeSubCriteria(rawSubCriteria, criterionId, Math.max(0, weight), usedIds),

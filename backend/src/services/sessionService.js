@@ -1,30 +1,14 @@
 const Session = require("../models/Session");
-const Course = require("../models/Course");
-const Rubric = require("../models/Rubric");
-const Student = require("../models/Student");
-const { shouldAutoArchive, todayStr } = require("../utils/sessionDates");
-
-/** Archive les grilles « archivées avec le cours » des cours donnés (celles encore actives seulement). */
-async function archiveCourseRubrics(courseIds, when) {
-  if (!courseIds.length) return 0;
-  const r = await Rubric.updateMany(
-    { course: { $in: courseIds }, archiveWithCourse: true, archivedAt: null },
-    { $set: { archivedAt: when } }
-  );
-  return r.modifiedCount;
-}
-
-/** Restaure les grilles que l'archivage de ces cours (à cette date précise) avait rangées. */
-async function restoreCourseRubrics(courseIds, when) {
-  if (!courseIds.length || !when) return 0;
-  const r = await Rubric.updateMany({ course: { $in: courseIds }, archivedAt: when }, { $set: { archivedAt: null } });
-  return r.modifiedCount;
-}
+const Group = require("../models/Group");
+const Enrollment = require("../models/Enrollment");
+const Evaluation = require("../models/Evaluation");
+const User = require("../models/User");
+const { shouldAutoArchive, todayStr, sessionStatus } = require("../utils/sessionDates");
 
 /**
- * Archive une session et tout ce qui lui est rattaché (cours, grilles, groupes d'étudiants).
- * Seuls les éléments encore actifs reçoivent la date d'archivage de la session : à la restauration,
- * on ne remet donc en service que ce que cette archive a elle-même rangé.
+ * Archive une session et son contenu (groupes et inscriptions). Les cours, grilles et fiches d'élèves
+ * sont des ressources communes: ils ne bougent pas. Seuls les éléments encore actifs reçoivent la date
+ * d'archivage de la session: à la restauration, on ne remet donc en service que ce que cette archive a rangé.
  */
 async function archiveSession(session, by = "manual") {
   const when = new Date();
@@ -32,13 +16,13 @@ async function archiveSession(session, by = "manual") {
   session.archivedBy = by;
   await session.save();
   const filter = { session: session._id, archivedAt: null };
-  const [courses, students] = await Promise.all([
-    Course.updateMany(filter, { $set: { archivedAt: when } }),
-    Student.updateMany(filter, { $set: { archivedAt: when } }),
+  const [groups, enrollments] = await Promise.all([
+    Group.updateMany(filter, { $set: { archivedAt: when } }),
+    Enrollment.updateMany(filter, { $set: { archivedAt: when } }),
   ]);
-  const ids = await Course.find({ session: session._id, archivedAt: when }).distinct("_id");
-  const rubrics = await archiveCourseRubrics(ids, when);
-  return { courses: courses.modifiedCount, rubrics, students: students.modifiedCount };
+  // Si c'était la session active, l'utilisateur retombe sur la session la plus pertinente.
+  await User.updateOne({ _id: session.createdBy, activeSession: session._id }, { $set: { activeSession: null } });
+  return { groups: groups.modifiedCount, students: enrollments.modifiedCount };
 }
 
 async function restoreSession(session) {
@@ -46,15 +30,13 @@ async function restoreSession(session) {
   session.archivedAt = null;
   session.archivedBy = "";
   await session.save();
-  if (!when) return { courses: 0, rubrics: 0, students: 0 };
+  if (!when) return { groups: 0, students: 0 };
   const filter = { session: session._id, archivedAt: when };
-  const ids = await Course.find(filter).distinct("_id");
-  const rubrics = await restoreCourseRubrics(ids, when);
-  const [courses, students] = await Promise.all([
-    Course.updateMany(filter, { $set: { archivedAt: null } }),
-    Student.updateMany(filter, { $set: { archivedAt: null } }),
+  const [groups, enrollments] = await Promise.all([
+    Group.updateMany(filter, { $set: { archivedAt: null } }),
+    Enrollment.updateMany(filter, { $set: { archivedAt: null } }),
   ]);
-  return { courses: courses.modifiedCount, rubrics, students: students.modifiedCount };
+  return { groups: groups.modifiedCount, students: enrollments.modifiedCount };
 }
 
 /** Archive les sessions échues (fin + délai de grâce dépassés). Sans ownerId : toutes les sessions. */
@@ -71,4 +53,27 @@ async function autoArchiveExpiredSessions(ownerId, today = todayStr()) {
   return archived;
 }
 
-module.exports = { archiveCourseRubrics, restoreCourseRubrics, archiveSession, restoreSession, autoArchiveExpiredSessions };
+/**
+ * Session sur laquelle travaille l'utilisateur: celle qu'il a choisie si elle est encore active, sinon
+ * la session en cours (ou la plus récente à venir/en délai de grâce); null s'il n'en a aucune.
+ */
+async function resolveActiveSession(user, today = todayStr()) {
+  if (user.activeSession) {
+    const chosen = await Session.findOne({ _id: user.activeSession, createdBy: user._id, archivedAt: null });
+    if (chosen) return chosen;
+  }
+  const open = await Session.find({ createdBy: user._id, archivedAt: null }).sort({ startDate: -1 });
+  if (!open.length) return null;
+  return (
+    open.find((s) => sessionStatus(s, today) === "ongoing") ||
+    open.find((s) => sessionStatus(s, today) === "grace") ||
+    open[0]
+  );
+}
+
+/** Nombre d'évaluations liées à des sessions (pour avertir avant une suppression). */
+async function countSessionEvaluations(ownerId, sessionId) {
+  return Evaluation.countDocuments({ owner: ownerId, session: sessionId });
+}
+
+module.exports = { archiveSession, restoreSession, autoArchiveExpiredSessions, resolveActiveSession, countSessionEvaluations };
