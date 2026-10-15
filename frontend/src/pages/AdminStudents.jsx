@@ -248,7 +248,7 @@ export default function AdminStudents() {
   }
 
   async function archiveGroup(groupName) {
-    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Sessions > Archives.`)) return;
+    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Ressources › Sessions › Archives.`)) return;
     try {
       await api.archiveGroup(groupName);
       if (selectedGroup === groupName) setSelectedGroup("");
@@ -326,7 +326,7 @@ export default function AdminStudents() {
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm border border-green-100">{success}</div>}
         {!active && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            Aucune session en cours. <Link to="/sessions" className="font-semibold underline">Crée une session</Link> pour y ajouter des groupes et des élèves.
+            Aucune session en cours. <Link to="/ressources/sessions" className="font-semibold underline">Crée une session</Link> pour y ajouter des groupes et des élèves.
           </div>
         )}
         {formOpen && (

@@ -39,20 +39,22 @@ export default function App() {
           <Route path="cours" element={<AdminCourses />} />
           <Route path="grilles" element={<AdminRubric />} />
           <Route path="groupes" element={<AdminStudents />} />
+          <Route path="sessions" element={<SessionsLayout />}>
+            <Route index element={<AdminSessions view="sessions" />} />
+            <Route path="archives" element={<AdminSessions view="archives" />} />
+          </Route>
         </Route>
-        <Route path="/sessions" element={<SessionsLayout />}>
-          <Route index element={<AdminSessions view="sessions" />} />
-          <Route path="archives" element={<AdminSessions view="archives" />} />
-        </Route>
+        <Route path="/sessions" element={<Navigate to="/ressources/sessions" replace />} />
+        <Route path="/sessions/archives" element={<Navigate to="/ressources/sessions/archives" replace />} />
         <Route path="/evaluations" element={<RedirectKeepSearch to="/session" />} />
         <Route path="/evaluations/grilles" element={<Navigate to="/ressources/grilles" replace />} />
         <Route path="/evaluations/cours" element={<Navigate to="/ressources/cours" replace />} />
-        <Route path="/evaluations/sessions" element={<Navigate to="/sessions" replace />} />
+        <Route path="/evaluations/sessions" element={<Navigate to="/ressources/sessions" replace />} />
         <Route path="/classes" element={<Navigate to="/ressources/cours" replace />} />
         <Route path="/classes/cours" element={<Navigate to="/ressources/cours" replace />} />
         <Route path="/classes/groupes" element={<Navigate to="/ressources/groupes" replace />} />
-        <Route path="/classes/sessions" element={<Navigate to="/sessions" replace />} />
-        <Route path="/classes/archives" element={<Navigate to="/sessions/archives" replace />} />
+        <Route path="/classes/sessions" element={<Navigate to="/ressources/sessions" replace />} />
+        <Route path="/classes/archives" element={<Navigate to="/ressources/sessions/archives" replace />} />
         <Route path="/admin/rubrics" element={<Navigate to="/ressources/grilles" replace />} />
         <Route path="/admin/students" element={<Navigate to="/ressources/groupes" replace />} />
         <Route path="/admin/users" element={<AdminUsers />} />

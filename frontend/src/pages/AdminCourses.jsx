@@ -161,7 +161,7 @@ export default function AdminCourses() {
       await api.archiveCourse(course._id);
       setCourse(EMPTY_COURSE);
       await refresh();
-      setSuccess("Cours archivé avec ses grilles. Tu peux le restaurer dans Sessions > Archives.");
+      setSuccess("Cours archivé avec ses grilles. Tu peux le restaurer dans Ressources › Sessions › Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }

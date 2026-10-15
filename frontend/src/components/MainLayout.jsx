@@ -100,12 +100,11 @@ function AppNav() {
   const links = [
     { to: "/session", label: "Session en cours", icon: "fa-graduation-cap", end: false },
     { to: "/ressources", label: "Ressources", icon: "fa-book-open", end: false },
-    { to: "/sessions", label: "Sessions", icon: "fa-calendar-days", end: false },
   ];
 
   return (
     <nav className="flex min-w-0 justify-center" aria-label="Navigation principale">
-      <div className="grid w-full grid-cols-3 gap-0.5 rounded-2xl bg-gray-100/90 p-1 shadow-inner ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60 sm:gap-1 lg:flex lg:w-auto lg:items-center">
+      <div className="grid w-full grid-cols-2 gap-0.5 rounded-2xl bg-gray-100/90 p-1 shadow-inner ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60 sm:gap-1 lg:flex lg:w-auto lg:items-center">
         {links.map((l) => (
           <NavLink
             key={l.to}

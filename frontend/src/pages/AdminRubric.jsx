@@ -296,7 +296,7 @@ export default function AdminRubric() {
       startNew();
       setEditorOpen(false);
       await refresh();
-      setSuccess("Évaluation archivée. Tu peux la restaurer dans Sessions > Archives.");
+      setSuccess("Évaluation archivée. Tu peux la restaurer dans Ressources › Sessions › Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }

@@ -102,7 +102,7 @@ export default function SessionCourses() {
   if (!active) {
     return (
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <p className="ui-info text-sm">Crée ou choisis d'abord une session dans <Link to="/sessions" className="font-semibold text-blue-600 underline">Sessions</Link>.</p>
+        <p className="ui-info text-sm">Crée ou choisis d'abord une session dans <Link to="/ressources/sessions" className="font-semibold text-blue-600 underline">Sessions</Link>.</p>
       </main>
     );
   }
