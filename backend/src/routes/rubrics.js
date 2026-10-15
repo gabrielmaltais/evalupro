@@ -50,6 +50,13 @@ async function setGroupsByName(req, rubric, rawNames) {
   }
 }
 
+/**
+ * Retire la grille des cours des sessions. Le filtre ne vise que les sessions qui la contiennent: `courses.$[]`
+ * échoue (« path must exist ») sur une session ancienne qui n'a pas encore de champ `courses`.
+ */
+const pullFromSessions = (ownerId, rubricId, extra = {}) =>
+  Session.updateMany({ createdBy: ownerId, "courses.rubrics": rubricId, ...extra }, { $pull: { "courses.$[].rubrics": rubricId } });
+
 /** Aligne les liens de compétence de la grille sur son cours (voir alignCriteria) et l'enregistre au besoin. */
 async function alignToCourse(req, rubric) {
   const course = await Course.findOne({ _id: rubric.course, createdBy: req.user._id }).select("competencies").lean();
@@ -139,7 +146,7 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
     if (!item) return res.status(404).json({ message: "Rubric introuvable" });
     if (before && String(before.course) !== String(item.course)) {
       // Changer de cours: la grille quitte l'ancien cours des sessions et des groupes (l'éditeur la remet dans le nouveau).
-      await Session.updateMany({ createdBy: req.user._id }, { $pull: { "courses.$[].rubrics": item._id } });
+      await pullFromSessions(req.user._id, item._id);
       await Group.updateMany({ createdBy: req.user._id, rubrics: item._id }, { $pull: { rubrics: item._id } });
     }
     if (payload.criteria || payload.course) item = await alignToCourse(req, item);
@@ -209,7 +216,7 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
         await Group.updateOne({ _id: g._id }, { $addToSet: { rubrics: item._id, courses: item.course } });
         await Group.updateOne({ _id: g._id }, { $pull: { rubrics: src._id } });
         await sessionCourses.addRubrics(req.user._id, g.session, [item._id]);
-        await Session.updateOne({ _id: g.session }, { $pull: { "courses.$[].rubrics": src._id } });
+        await pullFromSessions(req.user._id, src._id, { _id: g.session });
       }
     }
     const [out] = await withGroups(req, [item]);
@@ -223,7 +230,7 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   const deleted = await Rubric.findOneAndDelete(mine(req, req.params.id));
   if (!deleted) return res.status(404).json({ message: "Rubric introuvable" });
   await Group.updateMany({ createdBy: req.user._id, rubrics: deleted._id }, { $pull: { rubrics: deleted._id } });
-  await Session.updateMany({ createdBy: req.user._id }, { $pull: { "courses.$[].rubrics": deleted._id } });
+  await pullFromSessions(req.user._id, deleted._id);
   res.status(204).send();
 });
 

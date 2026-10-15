@@ -6,6 +6,7 @@ import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, isTemplatePl
 import { alignCriteriaToCourse, competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
 import { Chip } from "../components/ui";
+import CoursePicker from "../components/CoursePicker";
 import { useSession } from "../lib/sessionState";
 
 const DEFAULT_CRITERION = {
@@ -263,7 +264,7 @@ export default function AdminRubric() {
       return;
     }
     try {
-      const payload = { title, taskTitle, version, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages };
+      const payload = { title: selectedCourse?.title || title, taskTitle, version, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages };
       let rid = selectedId;
       if (selectedId) {
         await api.updateRubric(selectedId, payload);
@@ -402,7 +403,7 @@ export default function AdminRubric() {
     const hadLinks = criteria.some((c) => c.competencyId);
     const al = alignCriteriaToCourse(criteria, next?.competencies);
     setCourseId(nextId);
-    if (next && (!title || title === "Nouvelle Évaluation" || courses.some((x) => x.title === title))) setTitle(next.title);
+    if (next) setTitle(next.title);
     if (hadLinks || al.linked) setCriteria(al.criteria);
     if (hadLinks) {
       const lost = criteria.filter((c) => c.competencyId).length - al.linked;
@@ -746,33 +747,17 @@ export default function AdminRubric() {
                   {/* 1. Cours */}
                   <section>
                     <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">1</span> Cours</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {courses.filter((c) => !c.archivedAt).map((c) => (
-                        <Chip
-                          key={c._id}
-                          active={courseId === c._id}
-                          icon="fa-book"
-                          onClick={() => changeCourse(c._id)}
-                        >
-                          {c.code ? `${c.code} · ` : ""}{c.title}
-                        </Chip>
-                      ))}
-                      {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours : <Link to="/ressources/cours" className="font-semibold text-blue-600 underline">crée-en un d&apos;abord</Link>.</p>}
-                    </div>
+                    <CoursePicker courses={courses.filter((c) => !c.archivedAt)} value={courseId} onChange={changeCourse} />
                     {courseNotice && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><i className="fa-solid fa-link-slash mr-1" aria-hidden />{courseNotice}</p>}
                   </section>
 
                   {/* 2. Identification */}
                   <section>
                     <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">2</span> Évaluation</h3>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_2fr_6rem]">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_6rem]">
                       <label>
                         <span className="ui-label">Nom de l&apos;évaluation</span>
                         <input type="text" placeholder="Ex : Examen 1, TP 2…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
-                      </label>
-                      <label>
-                        <span className="ui-label">Titre sur la copie (cours)</span>
-                        <input type="text" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" value={title} onChange={(e) => setTitle(e.target.value)} />
                       </label>
                       <label>
                         <span className="ui-label">Version</span>

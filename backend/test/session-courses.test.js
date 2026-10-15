@@ -151,3 +151,15 @@ test("les liens de compétence suivent le cours: changer de cours coupe les lien
   ]))).body;
   assert.deepEqual(dup.criteria.map((c) => c.competencyId), ["k1", ""]);
 });
+
+test("une session ancienne sans champ `courses` n'empêche ni de changer une grille de cours ni de la supprimer", async () => {
+  const h = await login("old@example.com");
+  const s = (await post(h, "/api/sessions", { name: "Ancienne", startDate: "2026-08-24", endDate: "2099-12-20" })).body;
+  await mongoose.connection.collection("sessions").updateOne({ _id: new mongoose.Types.ObjectId(s._id) }, { $unset: { courses: "" } });
+  const c1 = (await post(h, "/api/courses", { title: "A" })).body;
+  const c2 = (await post(h, "/api/courses", { title: "B" })).body;
+  const body = (course) => ({ title: "A", taskTitle: "Ex", version: 1, course, isActive: true, criteria: [{ id: "c1", title: "C", weight: 5 }] });
+  const r = (await post(h, "/api/rubrics", body(c1._id))).body;
+  assert.equal((await put(h, `/api/rubrics/${r._id}`, body(c2._id))).status, 200);
+  assert.equal((await request(app).delete(`/api/rubrics/${r._id}`).set(h)).status, 204);
+});
