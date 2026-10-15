@@ -6,6 +6,7 @@ import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES
 import { competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
 import { Chip } from "../components/ui";
+import { useSession } from "../lib/sessionState";
 
 /** Si le JSON vient du gabarit IA enveloppé, extraire la grille importable. */
 function unwrapAiTemplateEnvelope(raw) {
@@ -24,7 +25,15 @@ const DEFAULT_CRITERION = {
 };
 
 export default function AdminRubric() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { active } = useSession();
+  // Liaison avec la session en cours: cours de la session (et évaluations importées) et ses groupes.
+  const [sessionEntries, setSessionEntries] = useState([]);
+  const [sessionGroups, setSessionGroups] = useState([]);
+  const [useInSession, setUseInSession] = useState(true);
+  const [pickedGroups, setPickedGroups] = useState([]);
+  const [sessionDirty, setSessionDirty] = useState(false);
+  const [sessionKey, setSessionKey] = useState("");
   const presetCourse = searchParams.get("course") || "";
   const [rubrics, setRubrics] = useState([]);
   const [rubricFilterCourse, setRubricFilterCourse] = useState(presetCourse);
@@ -93,14 +102,72 @@ export default function AdminRubric() {
         if (found) selectRubric(found);
       }
       setGroupOptions((dashboard || []).filter((x) => x.groupId).map((x) => x.group));
+      await loadSessionLinks();
     } catch (e) {
       setError(String(e.message || e));
     }
   }
 
+  async function loadSessionLinks() {
+    if (!active?._id) return;
+    const [entries, common] = await Promise.all([api.listSessionCourses(active._id), api.listCommonGroups()]);
+    setSessionEntries(entries);
+    setSessionGroups(common.filter((g) => g.activeGroup));
+  }
+
   useEffect(() => {
     refresh();
   }, []);
+
+  // La session active peut arriver après le premier chargement.
+  useEffect(() => {
+    loadSessionLinks().catch((e) => setError(String(e.message || e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?._id]);
+
+  // Bouton « Nouvelle évaluation » de l'en-tête: ?new=1 ouvre l'éditeur vide.
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    startNew();
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const sessionEntry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
+  const importedHere = (rid) => sessionEntries.some((e) => e.rubrics.some((r) => String(r._id) === String(rid) && r.imported));
+  const followsCourse = (g, cid) => (g.activeGroup?.courses || []).some((c) => String(c) === String(cid));
+  // Valeurs par défaut de la section session, recalculées quand on change d'évaluation ou de cours.
+  const wantedKey = `${selectedId || "new"}|${courseId}|${sessionEntries.length}|${sessionGroups.length}`;
+  if (sessionKey !== wantedKey) {
+    setSessionKey(wantedKey);
+    const linked = sessionGroups.filter((g) => followsCourse(g, courseId)).map((g) => g._id);
+    setUseInSession(selectedId ? importedHere(selectedId) : true);
+    setPickedGroups(linked.length || selectedId ? linked : sessionGroups.map((g) => g._id));
+    setSessionDirty(false);
+  }
+
+  /** Après l'enregistrement: l'évaluation est importée (ou retirée) dans la session et ses groupes suivent le cours. */
+  async function applySessionLinks(rid) {
+    if (!active?._id || active.archivedAt || !courseId) return;
+    const entry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
+    const imported = entry ? entry.rubrics.filter((r) => r.imported).map((r) => String(r._id)) : [];
+    if (useInSession) {
+      if (!entry) await api.addSessionCourse(active._id, courseId, [rid]);
+      else if (!imported.includes(String(rid))) await api.setSessionCourseRubrics(active._id, courseId, [...imported, String(rid)]);
+      for (const g of sessionGroups) {
+        const want = pickedGroups.includes(g._id);
+        if (want === followsCourse(g, courseId)) continue;
+        const cur = g.activeGroup.courses || [];
+        await api.updateGroup(g.activeGroup._id, { courses: want ? [...cur, courseId] : cur.filter((c) => String(c) !== String(courseId)) });
+      }
+    } else if (imported.includes(String(rid))) {
+      await api.setSessionCourseRubrics(active._id, courseId, imported.filter((id) => id !== String(rid)));
+    }
+    await loadSessionLinks();
+    setSessionDirty(false);
+  }
 
   // Cours (et leurs compétences) proposés dans le configurateur de gabarit.
   useEffect(() => {
@@ -208,14 +275,19 @@ export default function AdminRubric() {
       return;
     }
     try {
+      const payload = { title, taskTitle, version, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages };
+      let rid = selectedId;
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
-        setSuccess("Évaluation modifiée avec succès !");
+        await api.updateRubric(selectedId, payload);
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
-        setSelectedId(newRubric._id);
-        setSuccess("Nouvelle évaluation créée avec succès !");
+        rid = (await api.createRubric(payload))._id;
+        setSelectedId(rid);
       }
+      await applySessionLinks(rid);
+      setSuccess(
+        `${selectedId ? "Évaluation enregistrée." : "Nouvelle évaluation créée."}` +
+          (active && useInSession ? ` Elle est à corriger dans la session « ${active.name} ».` : "")
+      );
       setSavedSnapshot(buildSnapshot());
       await refresh();
     } catch (e) {
@@ -469,37 +541,38 @@ export default function AdminRubric() {
           <PageSectionTitle
             icon="fa-sliders"
             iconBgClass="bg-slate-700"
-            title="Administration des Évaluations"
-            subtitle="Configuration"
+            title="Évaluations"
+            subtitle="Chaque évaluation est rangée dans un cours. Crée-la, puis choisis si elle est à corriger cette session et par quels groupes."
           />
         </div>
         
         {/* LEFT COLUMN: List (cachée sur petit écran pendant l'édition, pour que le formulaire soit en haut) */}
         <div className={`lg:col-span-1 space-y-4 ${showEditor ? "hidden lg:block" : ""}`}>
-          <div className="flex gap-2">
-            <button type="button" onClick={startNew} className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 font-medium py-2 px-2 rounded-lg transition-all flex items-center justify-center gap-2 text-sm">
-                <i className="fa-solid fa-plus"></i> <span className="hidden xl:inline">Nouvelle</span>
-            </button>
-            <label className="bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center cursor-pointer text-sm" title="Importer depuis JSON">
-                <i className="fa-solid fa-upload"></i>
-                <input type="file" className="hidden" accept=".json" onChange={handleImportJSON} />
+          <button type="button" onClick={startNew} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+            <i className="fa-solid fa-plus" aria-hidden /> Nouvelle évaluation
+          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="mr-auto text-xs font-semibold text-gray-500">Importer / exporter</span>
+            <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" title="Importer un fichier JSON">
+              <i className="fa-solid fa-upload text-xs" aria-hidden />
+              <input type="file" className="hidden" accept=".json" onChange={handleImportJSON} />
             </label>
-            <button type="button" onClick={() => setShowPasteJsonModal(true)} className="bg-white text-teal-600 border border-teal-200 hover:bg-teal-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Coller un JSON">
-                <i className="fa-solid fa-paste"></i>
+            <button type="button" onClick={() => setShowPasteJsonModal(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" title="Coller un JSON">
+              <i className="fa-solid fa-paste text-xs" aria-hidden />
             </button>
-            <button type="button" onClick={() => setImporting({ target: rubricFilterCourse || courseId || "", source: "" })} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Importer une évaluation d'un autre cours">
-                <i className="fa-solid fa-file-import"></i>
+            <button type="button" onClick={() => setImporting({ target: rubricFilterCourse || courseId || "", source: "" })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" title="Copier une évaluation d'un autre cours">
+              <i className="fa-solid fa-file-import text-xs" aria-hidden />
             </button>
-            <button onClick={exportJSON} className="bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Exporter en JSON">
-                <i className="fa-solid fa-download"></i>
+            <button type="button" onClick={exportJSON} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" title="Exporter l'évaluation ouverte en JSON">
+              <i className="fa-solid fa-download text-xs" aria-hidden />
             </button>
-            <button onClick={() => setShowAIModal(true)} className="bg-white text-purple-600 border border-purple-200 hover:bg-purple-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Configurer et télécharger un gabarit IA">
-                <i className="fa-solid fa-robot"></i>
+            <button type="button" onClick={() => setShowAIModal(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-purple-200 bg-white text-purple-600 hover:bg-purple-50" title="Créer avec une IA (gabarit)">
+              <i className="fa-solid fa-robot text-xs" aria-hidden />
             </button>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <h3 className="bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 border-b border-gray-100">Évaluations Enregistrées</h3>
+            <h3 className="bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 border-b border-gray-100">Mes évaluations</h3>
             <div className="space-y-2 border-b border-gray-100 bg-white px-3 py-3">
               <input
                 type="text"
@@ -569,9 +642,9 @@ export default function AdminRubric() {
                     <div className="text-xs text-gray-500 flex justify-between mt-1 items-center">
                       <span className="truncate pr-2" title={r.title}>{r.title} (v{r.version})</span>
                       <div className="flex items-center gap-2">
-                        {(Array.isArray(r.groups) && r.groups.length > 0) && (
-                          <span className="text-slate-500 text-[11px] font-medium truncate max-w-[10rem]" title={r.groups.join(", ")}>
-                            {r.groups.join(", ")}
+                        {importedHere(r._id) && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700" title={(r.groups || []).join(", ") || "Cette session"}>
+                            Cette session
                           </span>
                         )}
                         {r.isActive ? (
@@ -605,110 +678,119 @@ export default function AdminRubric() {
                 <div className="ui-card-head">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="ui-mode">{selectedId ? "Modification" : "Nouvelle évaluation"}</span>
-                    <h2 className="min-w-0 truncate">{selectedId ? taskTitle || title : "Choisis le cours, puis remplis l'évaluation"}</h2>
+                    <h2 className="min-w-0 truncate">{selectedId ? taskTitle || title : "Cours, nom, session, puis critères"}</h2>
                   </div>
-                  <button type="button" onClick={closeEditor} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes évaluations
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 normal-case tracking-normal">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${hasUnsavedChanges || sessionDirty ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                      <i className={`fa-solid ${hasUnsavedChanges || sessionDirty ? "fa-circle-exclamation" : "fa-check"}`} aria-hidden />
+                      {hasUnsavedChanges || sessionDirty ? "Non enregistré" : "Enregistré"}
+                    </span>
+                    <button type="button" onClick={save} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+                      <i className="fa-solid fa-save mr-1" aria-hidden /> Enregistrer
+                    </button>
+                    <button type="button" onClick={closeEditor} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                      <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes évaluations
+                    </button>
+                  </div>
                 </div>
-              </div>
-          <div className="ui-card ui-card-body">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-              <h2 className="text-xl font-bold text-gray-800">Paramètres Généraux</h2>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                {hasUnsavedChanges ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                    <i className="fa-solid fa-circle-exclamation" />
-                    Modifications non enregistrées
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
-                    <i className="fa-solid fa-check" />
-                    Tout est enregistré
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={!hasUnsavedChanges}
-                  className="bg-gray-900 hover:bg-black dark:bg-emerald-500 dark:hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-slate-950 font-semibold py-2.5 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500/60"
-                >
-                  <i className="fa-solid fa-save"></i> Enregistrer
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre du Cours</label>
-                  <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={title} onChange={e => setTitle(e.target.value)} />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre du Travail (Tâche)</label>
-                  <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Version (Sera enregistrée comme nouvelle)</label>
-                  <input type="number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={version} onChange={e => setVersion(Number(e.target.value))} />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Importée dans ces groupes (session en cours)</label>
-                  <div className="flex flex-wrap gap-2">
-                    {groupOptions.length === 0 && (
-                      <p className="ui-info text-xs text-gray-600">Aucun groupe dans la session en cours.</p>
+
+                <div className="ui-card-body space-y-6">
+                  {/* 1. Cours */}
+                  <section>
+                    <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">1</span> Cours</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {courses.filter((c) => !c.archivedAt).map((c) => (
+                        <Chip
+                          key={c._id}
+                          active={courseId === c._id}
+                          icon="fa-book"
+                          onClick={() => {
+                            setCourseId(c._id);
+                            // Le titre affiché suit le cours tant qu'il n'a pas été personnalisé.
+                            if (!title || title === "Nouvelle Évaluation" || courses.some((x) => x.title === title)) setTitle(c.title);
+                          }}
+                        >
+                          {c.code ? `${c.code} · ` : ""}{c.title}
+                        </Chip>
+                      ))}
+                      {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours : <Link to="/ressources/cours" className="font-semibold text-blue-600 underline">crée-en un d&apos;abord</Link>.</p>}
+                    </div>
+                  </section>
+
+                  {/* 2. Identification */}
+                  <section>
+                    <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">2</span> Évaluation</h3>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_2fr_6rem]">
+                      <label>
+                        <span className="ui-label">Nom de l&apos;évaluation</span>
+                        <input type="text" placeholder="Ex : Examen 1, TP 2…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
+                      </label>
+                      <label>
+                        <span className="ui-label">Titre sur la copie (cours)</span>
+                        <input type="text" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" value={title} onChange={(e) => setTitle(e.target.value)} />
+                      </label>
+                      <label>
+                        <span className="ui-label">Version</span>
+                        <input type="number" min={1} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" value={version} onChange={(e) => setVersion(Number(e.target.value))} />
+                      </label>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-700 dark:text-gray-200">
+                      <label className="inline-flex items-center gap-2"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active (proposée par défaut aux sessions)</label>
+                      <label className="inline-flex items-center gap-2"><input type="checkbox" checked={linkCompetencies} onChange={(e) => setLinkCompetencies(e.target.checked)} /> Lier aux éléments de compétence</label>
+                    </div>
+                  </section>
+
+                  {/* 3. Session en cours */}
+                  <section className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 dark:border-indigo-500/25 dark:bg-indigo-950/30">
+                    <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs text-white">3</span> Session en cours{active ? ` : ${active.name}` : ""}</h3>
+                    {!active ? (
+                      <p className="text-xs text-gray-600">Aucune session en cours : l&apos;évaluation sera seulement rangée dans son cours.</p>
+                    ) : !courseId ? (
+                      <p className="text-xs text-gray-600">Choisis d&apos;abord le cours.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          <input type="checkbox" checked={useInSession} onChange={(e) => { setUseInSession(e.target.checked); setSessionDirty(true); }} />
+                          À corriger cette session
+                        </label>
+                        {useInSession && (
+                          <div>
+                            <span className="ui-label">Groupes qui la corrigent</span>
+                            {sessionGroups.length ? (
+                              <div className="flex flex-wrap gap-2">
+                                {sessionGroups.map((g) => (
+                                  <Chip
+                                    key={g._id}
+                                    active={pickedGroups.includes(g._id)}
+                                    icon={pickedGroups.includes(g._id) ? "fa-check" : "fa-users"}
+                                    onClick={() => {
+                                      setPickedGroups((prev) => (prev.includes(g._id) ? prev.filter((x) => x !== g._id) : [...prev, g._id]));
+                                      setSessionDirty(true);
+                                    }}
+                                  >
+                                    {g.name}
+                                  </Chip>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-600">Aucun groupe dans la session. <Link to="/session/groupes" className="font-semibold text-blue-600 underline">Choisir les groupes</Link></p>
+                            )}
+                            <p className="mt-1.5 text-xs text-gray-500">
+                              <i className="fa-solid fa-link mr-1" aria-hidden />
+                              {courseLabel(courseId)} → cette évaluation → {pickedGroups.length ? `${pickedGroups.length} groupe(s)` : "aucun groupe"}
+                              {sessionEntry ? "" : " · le cours sera ajouté à la session"}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     )}
-                    {groupOptions.map((g) => (
-                      <Chip
-                        key={g}
-                        active={groups.includes(g)}
-                        icon={groups.includes(g) ? "fa-check" : "fa-users"}
-                        onClick={() => setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))}
-                      >
-                        {g}
-                      </Chip>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">Seuls les groupes cochés pourront corriger avec cette grille. Tu peux en ajouter à tout moment.</p>
-              </div>
-              <div className="flex items-end">
-                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                  />
-                  Évaluation active (visible dans Corriger)
-                </label>
-              </div>
-              <div className="flex items-end">
-                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={linkCompetencies}
-                    onChange={(e) => setLinkCompetencies(e.target.checked)}
-                  />
-                  Lier l&apos;évaluation aux éléments de compétence (informatif)
-                </label>
-              </div>
-              <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
-                <label className="mb-1 block text-sm font-medium text-gray-700">Cours (le dossier où l'évaluation est classée)</label>
-                <div className="flex flex-wrap gap-2">
-                  {courses.map((c) => (
-                    <Chip key={c._id} active={courseId === c._id} icon="fa-folder-open" onClick={() => setCourseId(c._id)}>
-                      {c.code ? `${c.code} · ` : ""}{c.title}
-                    </Chip>
-                  ))}
-                  {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours: crée-en un d&apos;abord.</p>}
+                  </section>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Modifier une compétence du cours met à jour les évaluations pas encore utilisées. Pas de cours ? <Link to="/ressources/cours" className="font-semibold text-blue-600 hover:underline">Crée-le dans Ressources</Link>.
-                </p>
               </div>
-            </div>
-          </div>
 
           <div className="ui-card ui-card-body relative">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-800">Éditeur de Critères</h2>
+                <h3 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">4</span> Critères</h3>
                 <div className="flex items-center gap-4">
                     <span className="text-sm font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Total : {totalPoints} pts</span>
                     <button type="button" onClick={addCriterion} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-2 text-sm">

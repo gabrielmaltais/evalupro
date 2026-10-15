@@ -15,7 +15,7 @@ function SessionSwitcher() {
       <select
         value={active?._id || ""}
         onChange={(e) => switchTo(e.target.value || null)}
-        className="max-w-[6.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 sm:max-w-[14rem]"
+        className="max-w-[5.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 sm:max-w-[14rem]"
         title="Session de travail"
       >
         {open.map((s) => (
@@ -43,6 +43,16 @@ function HeaderActions() {
       .join("") || "?";
   return (
     <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+      {/* Raccourci vers l'action principale du site. */}
+      <Link
+        to="/ressources/grilles?new=1"
+        title="Nouvelle évaluation"
+        aria-label="Nouvelle évaluation"
+        className="flex h-8 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 text-xs font-semibold text-white shadow-sm shadow-emerald-600/20 transition hover:bg-emerald-700 sm:h-9 sm:px-3"
+      >
+        <i className="fa-solid fa-plus" aria-hidden />
+        <span className="hidden sm:inline">Évaluation</span>
+      </Link>
       <SessionSwitcher />
       <div className="flex items-center gap-0.5 rounded-2xl bg-gray-100/90 p-1 ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60">
         {user?.role === "admin" && (

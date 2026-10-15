@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { parseCompetencyLines } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
 import { Card, FormCard } from "../components/ui";
+import { useSession } from "../lib/sessionState";
 
 const EMPTY_COURSE = { _id: null, title: "", code: "", competencies: [] };
 
@@ -23,6 +24,16 @@ export default function AdminCourses() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rubrics, setRubrics] = useState([]);
+  const { active } = useSession();
+  // Évaluations importées dans la session en cours (badge « Cette session »).
+  const [sessionRubricIds, setSessionRubricIds] = useState(new Set());
+  useEffect(() => {
+    if (!active?._id) return;
+    api.listSessionCourses(active._id).then(
+      (entries) => setSessionRubricIds(new Set(entries.flatMap((e) => e.rubrics.filter((r) => r.imported).map((r) => String(r._id))))),
+      () => setSessionRubricIds(new Set())
+    );
+  }, [active?._id]);
 
   async function refresh(selectId) {
     try {
@@ -257,7 +268,14 @@ export default function AdminCourses() {
                         <Link to={`/ressources/grilles?course=${course._id}&rubric=${r._id}`} className="ui-item">
                           <span className="min-w-0">
                             <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{r.taskTitle || r.title}</span>
-                            <span className="text-xs text-gray-500">v{r.version} · {r.isActive ? "Active" : "Inactive"}{(r.groups || []).length ? ` · ${r.groups.join(", ")}` : ""}</span>
+                            <span className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                              v{r.version} · {r.isActive ? "Active" : "Inactive"}
+                              {sessionRubricIds.has(String(r._id)) && (
+                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                                  Cette session{(r.groups || []).length ? ` · ${r.groups.join(", ")}` : ""}
+                                </span>
+                              )}
+                            </span>
                           </span>
                         </Link>
                       </li>
