@@ -93,7 +93,7 @@ function AppNav() {
 function ShellBody() {
   const { active } = useSession();
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 text-gray-800 font-sans dark:bg-gray-950 dark:text-gray-100 dm-bg">
+    <div className="min-h-screen flex flex-col bg-slate-200 text-gray-800 font-sans dark:bg-gray-950 dark:text-gray-100 dm-bg">
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/85 shadow-sm backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/85">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:px-6 sm:py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8">
           <div className="flex items-center justify-between gap-3 lg:min-w-[10rem] lg:justify-start lg:shrink-0">

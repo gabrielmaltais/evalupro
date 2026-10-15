@@ -627,3 +627,87 @@ input[type=range]::-webkit-slider-runnable-track {
 .dark .placeholder-gray-400::placeholder, .dark ::placeholder { color: #64748b; }
 .dark select option { background-color: #0d162d; color: #e2e8f0; }
 .dark input[type="date"] { color-scheme: dark; }
+
+/* ────────────────────────────────────────────────
+   CHARTE GRAPHIQUE
+   - Fond de page gris-bleu, cartes blanches à bordure nette.
+   - Zone cliquable = carte avec bordure, survol bleu et chevron (.ui-item).
+   - Information = bloc teinté, sans bordure ni survol (.ui-info).
+   - Création / modification = carte à bandeau coloré et pastille de mode (.ui-form).
+──────────────────────────────────────────────── */
+:root {
+  --ui-page: #e2e8f0;
+  --ui-border: #c3cedc;
+  --ui-head: #eef2f7;
+  --ui-info: #f1f5f9;
+  --ui-accent: #2563eb;
+}
+html:not(.dark) .border-gray-100 { border-color: var(--ui-border); }
+html:not(.dark) .bg-white.rounded-xl,
+html:not(.dark) .bg-white.rounded-2xl { box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06); }
+
+.ui-card {
+  background: #fff;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+.ui-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: var(--ui-head);
+  border-bottom: 1px solid var(--ui-border);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #475569;
+}
+.ui-card-body { padding: 1rem; }
+.ui-form { border-top: 5px solid var(--ui-accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08), 0 4px 14px rgba(15, 23, 42, 0.12); }
+.ui-form .ui-card-head { background: #fff; text-transform: none; letter-spacing: 0; font-size: 1.05rem; color: #0f172a; }
+.ui-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--ui-accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ui-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  background: #fff;
+  border: 1px solid var(--ui-border);
+  border-left: 4px solid transparent;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.ui-item:hover { border-color: var(--ui-accent); background: #eff6ff; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15); }
+.ui-item.is-active { border-color: var(--ui-accent); border-left-color: var(--ui-accent); background: #dbeafe; }
+.ui-item::after { content: "\203A"; margin-left: auto; font-size: 1.3rem; line-height: 1; color: #94a3b8; }
+.ui-item.no-chevron::after { content: none; }
+.ui-info { background: var(--ui-info); border-radius: 0.6rem; padding: 0.55rem 0.75rem; }
+.ui-label { display: block; margin-bottom: 0.25rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #64748b; }
+
+.dark .ui-card, .dark .ui-item { background: rgba(13, 22, 45, 0.75); border-color: rgba(99, 130, 255, 0.25); }
+.dark .ui-card-head, .dark .ui-form .ui-card-head { background: rgba(20, 32, 70, 0.8); color: #cbd5e1; }
+.dark .ui-item:hover { background: rgba(99, 130, 255, 0.14); border-color: #818cf8; }
+.dark .ui-item.is-active { background: rgba(99, 130, 255, 0.22); border-color: #818cf8; }
+.dark .ui-info { background: rgba(10, 18, 40, 0.7); }
+.dark .ui-label { color: #94a3b8; }
