@@ -14,8 +14,13 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  /* Derrière toute l'application: à z-index 0 le fond opaque se peignait PAR-DESSUS le contenu qui n'a pas de flou
+     (cartes .ui-card, titres), qui disparaissait en mode sombre. */
+  z-index: -1;
 }
+
+/* Contexte d'empilement de l'application: le fond étoilé (z-index -1) reste toujours derrière elle. */
+#root { position: relative; z-index: 0; }
 
 .dark body::before {
   background:
@@ -65,7 +70,7 @@ body { font-family: 'Inter', sans-serif; transition: background-color 0.4s ease,
 /* ────────────────────────────────────────────────
    DARK MODE OVERRIDES (applied with .dark class on <html>)
 ──────────────────────────────────────────────── */
-.dark .dm-bg       { background: transparent !important; }
+html.dark .dm-bg[class] { background: transparent !important; } /* plus spécifique que les teintes bg-* du mode sombre */
 .dark .dm-surface  { background: rgba(13, 22, 45, 0.75) !important; backdrop-filter: blur(12px); border-color: rgba(99,130,255,0.18) !important; }
 .dark .dm-surface2 { background: rgba(10, 18, 40, 0.85) !important; backdrop-filter: blur(8px); border-color: rgba(80,110,255,0.15) !important; }
 .dark .dm-header   { background: rgba(8, 14, 35, 0.92) !important; backdrop-filter: blur(20px); border-color: rgba(99,130,255,0.15) !important; }
