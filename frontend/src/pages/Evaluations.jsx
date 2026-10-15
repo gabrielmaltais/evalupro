@@ -630,11 +630,19 @@ export default function Evaluations() {
 
   useEffect(() => {
     setEmailBatchConfig((prev) => {
-      if (!prev.rubricId) return prev;
-      const ok = examsForSend.some((e) => String(e.rubricId) === String(prev.rubricId));
-      if (ok) return prev;
-      setHasManualSuiviExamSelection(false);
-      return { ...prev, rubricId: "" };
+      const has = (id) => id && examsForSend.some((e) => String(e.rubricId) === String(id));
+      if (has(prev.rubricId)) return prev;
+      // Pendant le chargement la liste est vide: on reprend l'évaluation retenue dès qu'elle y apparaît.
+      let remembered = "";
+      try {
+        remembered = localStorage.getItem(HUB_LAST_EXAM_STORAGE_KEY) || "";
+      } catch {
+        // no-op
+      }
+      const next = has(remembered) ? remembered : "";
+      if (next === prev.rubricId) return prev;
+      if (!next) setHasManualSuiviExamSelection(false);
+      return { ...prev, rubricId: next };
     });
   }, [examsForSend]);
 
@@ -647,11 +655,8 @@ export default function Evaluations() {
 
   useEffect(() => {
     try {
-      if (selectedHubExamId) {
-        localStorage.setItem(HUB_LAST_EXAM_STORAGE_KEY, String(selectedHubExamId));
-      } else {
-        localStorage.removeItem(HUB_LAST_EXAM_STORAGE_KEY);
-      }
+      // Seulement l'ajout: une liste vide le temps d'un chargement ne doit pas effacer le choix retenu.
+      if (selectedHubExamId) localStorage.setItem(HUB_LAST_EXAM_STORAGE_KEY, String(selectedHubExamId));
     } catch {
       // no-op
     }
@@ -676,16 +681,19 @@ export default function Evaluations() {
     setDatePrefsMap(map);
   }, [hubSelectedGroup, form.rubric, form.date, showDatePdf]);
   const hubExamOptions = useMemo(() => {
+    // Le cours de chaque évaluation sert au parcours Groupe > Cours > Évaluations de la barre de filtres.
+    const courseOf = new Map(rubrics.map((r) => [String(r._id), String(r.course || "")]));
     if (evalPageTab === "corriger") {
       return activeRubricsForCorrection.map((r) => ({
         rubricId: String(r._id),
         title: r.title,
         taskTitle: r.taskTitle,
         version: r.version,
+        courseId: String(r.course || ""),
       }));
     }
-    return examsForSend;
-  }, [evalPageTab, activeRubricsForCorrection, examsForSend]);
+    return examsForSend.map((ex) => ({ ...ex, courseId: courseOf.get(String(ex.rubricId)) || "" }));
+  }, [evalPageTab, activeRubricsForCorrection, examsForSend, rubrics]);
   const hubBarStats = useMemo(() => {
     const totalStudents = hubFilteredStudents.length;
     const selectedRubricId = String(selectedHubExamId || "");
@@ -1558,6 +1566,11 @@ export default function Evaluations() {
             selectedExamId={selectedHubExamId}
             setSelectedExamId={(rubricId) => {
               const nextRubricId = String(rubricId || "");
+              try {
+                if (!nextRubricId) localStorage.removeItem(HUB_LAST_EXAM_STORAGE_KEY);
+              } catch {
+                // no-op
+              }
               setEmailBatchConfig((prev) => ({ ...prev, rubricId: nextRubricId }));
               setForm((prev) => ({ ...prev, rubric: nextRubricId }));
               if (evalPageTab === "corriger") {

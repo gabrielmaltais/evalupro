@@ -711,3 +711,10 @@ html:not(.dark) .bg-white.rounded-2xl { box-shadow: 0 1px 3px rgba(15, 23, 42, 0
 .dark .ui-item.is-active { background: rgba(99, 130, 255, 0.22); border-color: #818cf8; }
 .dark .ui-info { background: rgba(10, 18, 40, 0.7); }
 .dark .ui-label { color: #94a3b8; }
+
+/* Barre de filtres Corriger/Suivi/Envois: glissement court à chaque étape (Groupe > Cours > Évaluation). */
+@keyframes hub-in-next { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes hub-in-back { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.hub-step-next { animation: hub-in-next 180ms ease-out; }
+.hub-step-back { animation: hub-in-back 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .hub-step-next, .hub-step-back { animation: none; } }
