@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { parseCompetencyLines } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
+import { Card, FormCard } from "../components/ui";
 
 const EMPTY_COURSE = { _id: null, title: "", code: "", competencies: [] };
 
@@ -43,6 +44,7 @@ export default function AdminCourses() {
   }, []);
 
   function selectCourse(c) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setCourse({ ...c, competencies: c.competencies || [] });
     setError("");
     setSuccess("");
@@ -50,7 +52,14 @@ export default function AdminCourses() {
     setShowBulk(false);
   }
 
+  function closeEditor() {
+    setCourse(EMPTY_COURSE);
+    setError("");
+    setConfirmDelete(false);
+  }
+
   function newCourse() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setCourse({ ...EMPTY_COURSE, competencies: [newCompetency()] });
     setError("");
     setSuccess("");
@@ -152,6 +161,8 @@ export default function AdminCourses() {
     }
   }
 
+  const editorOpen = Boolean(course._id || course.title || course.competencies.length > 0);
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageSectionTitle
@@ -165,46 +176,52 @@ export default function AdminCourses() {
       {success && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{success}</div>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <aside className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm lg:col-span-1 dark:border-gray-700/60 dark:bg-gray-900/40">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-gray-800 dark:text-gray-100">Mes cours</h2>
-            <button type="button" onClick={newCourse} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
-              <i className="fa-solid fa-plus mr-1" /> Nouveau cours
-            </button>
-          </div>
-          {loading ? (
-            <p className="text-sm text-gray-500">Chargement…</p>
-          ) : courses.length === 0 ? (
-            <p className="text-sm text-gray-500">Aucun cours pour le moment. Créez-en un pour y entrer ses compétences.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {courses.map((c) => (
-                <li key={c._id}>
-                  <button
-                    type="button"
-                    onClick={() => selectCourse(c)}
-                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                      course._id === c._id
-                        ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
-                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40 dark:text-gray-200"
-                    }`}
-                  >
-                    <span className="block font-semibold">{c.code ? `${c.code} · ` : ""}{c.title}</span>
-                    <span className="text-xs text-gray-500">
-                      {(c.competencies || []).length} compétence(s) · {rubrics.filter((r) => r.course === c._id).length} grille(s)
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* Liste: cachée sur petit écran pendant la création/modification, pour que le formulaire soit en haut. */}
+        <aside className={`lg:col-span-1 ${editorOpen ? "hidden lg:block" : ""}`}>
+          <Card
+            title={<><i className="fa-solid fa-book-open text-emerald-600" aria-hidden /> Mes cours</>}
+            actions={
+              <button type="button" onClick={newCourse} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                <i className="fa-solid fa-plus mr-1" /> Nouveau cours
+              </button>
+            }
+          >
+            {loading ? (
+              <p className="text-sm text-gray-500">Chargement…</p>
+            ) : courses.length === 0 ? (
+              <p className="ui-info text-sm text-gray-600">Aucun cours pour le moment. Crée-en un pour y entrer ses compétences.</p>
+            ) : (
+              <ul className="space-y-2">
+                {courses.map((c) => (
+                  <li key={c._id}>
+                    <button type="button" onClick={() => selectCourse(c)} className={`ui-item ${course._id === c._id ? "is-active" : ""}`}>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{c.code ? `${c.code} · ` : ""}{c.title}</span>
+                        <span className="text-xs text-gray-500">
+                          {(c.competencies || []).length} compétence(s) · {rubrics.filter((r) => r.course === c._id).length} grille(s)
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
         </aside>
 
-        <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm lg:col-span-2 dark:border-gray-700/60 dark:bg-gray-900/40">
-          {!course._id && course.competencies.length === 0 && !course.title ? (
-            <p className="text-sm text-gray-500">Choisis un cours dans la liste, ou crée-en un nouveau.</p>
+        <div className="lg:col-span-2">
+          {!editorOpen ? (
+            <div className="ui-card ui-card-body hidden text-sm text-gray-600 lg:block">
+              <p className="ui-info">Choisis un cours dans la liste pour le modifier, ou clique sur « Nouveau cours ».</p>
+            </div>
           ) : (
-            <div className="space-y-5">
+            <FormCard
+              mode={course._id ? "Modification" : "Nouveau cours"}
+              title={course._id ? course.title || "Cours sans titre" : "Entre le nom et les compétences du cours"}
+              accent="#059669"
+              onBack={closeEditor}
+              backLabel="Mes cours"
+            >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Nom du cours</label>
@@ -305,9 +322,9 @@ export default function AdminCourses() {
                   {saving ? "Enregistrement…" : "Enregistrer le cours"}
                 </button>
               </div>
-            </div>
+            </FormCard>
           )}
-        </section>
+        </div>
       </div>
     </main>
   );

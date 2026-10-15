@@ -30,6 +30,7 @@ export default function AdminRubric() {
   const [importing, setImporting] = useState(null);
   const [groupOptions, setGroupOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [rubricSearch, setRubricSearch] = useState("");
   const [rubricFilterGroup, setRubricFilterGroup] = useState("");
   const [rubricFilterStatus, setRubricFilterStatus] = useState("all");
@@ -129,6 +130,8 @@ export default function AdminRubric() {
   }, [savedSnapshot]);
 
   function selectRubric(r) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setEditorOpen(true);
     setSelectedId(r._id);
     setTitle(r.title || "");
     setTaskTitle(r.taskTitle || "");
@@ -159,6 +162,8 @@ export default function AdminRubric() {
   }
 
   function startNew() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setEditorOpen(true);
     setSelectedId(null);
     setTitle("Nouvelle Grille");
     setTaskTitle("Tâche");
@@ -211,11 +216,18 @@ export default function AdminRubric() {
     }
   }
 
+  function closeEditor() {
+    if (hasUnsavedChanges && !window.confirm("Quitter sans enregistrer les modifications ?")) return;
+    startNew();
+    setEditorOpen(false);
+  }
+
   async function archiveRubric() {
     if (!selectedId) return;
     try {
       await api.archiveRubric(selectedId);
       startNew();
+      setEditorOpen(false);
       await refresh();
       setSuccess("Grille archivée. Tu peux la restaurer dans Sessions > Archives.");
     } catch (e) {
@@ -228,6 +240,7 @@ export default function AdminRubric() {
     try {
       await api.deleteRubric(selectedId);
       startNew();
+      setEditorOpen(false);
       await refresh();
       setSuccess("Grille supprimée avec succès !");
     } catch (e) {
@@ -440,6 +453,8 @@ export default function AdminRubric() {
     return out;
   }, [courses, rubrics, rubricSearch, rubricFilterGroup, rubricFilterCourse, rubricFilterStatus, rubricSortBy]);
 
+  const showEditor = editorOpen || Boolean(selectedId) || hasUnsavedChanges;
+
   return (
     <div className="flex w-full flex-1 flex-col">
       <main className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-4 lg:px-8">
@@ -452,8 +467,8 @@ export default function AdminRubric() {
           />
         </div>
         
-        {/* LEFT COLUMN: List */}
-        <div className="lg:col-span-1 space-y-4">
+        {/* LEFT COLUMN: List (cachée sur petit écran pendant l'édition, pour que le formulaire soit en haut) */}
+        <div className={`lg:col-span-1 space-y-4 ${showEditor ? "hidden lg:block" : ""}`}>
           <div className="flex gap-2">
             <button type="button" onClick={startNew} className="flex-1 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 font-medium py-2 px-2 rounded-lg transition-all flex items-center justify-center gap-2 text-sm">
                 <i className="fa-solid fa-plus"></i> <span className="hidden xl:inline">Nouvelle</span>
@@ -573,6 +588,24 @@ export default function AdminRubric() {
           {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-circle-exclamation mr-2"></i>{error}</div>}
           {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm whitespace-pre-line text-emerald-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-check mr-2"></i>{success}</div>}
 
+          {!showEditor && (
+            <div className="ui-card ui-card-body hidden lg:block">
+              <p className="ui-info text-sm text-gray-600">Choisis une grille dans la liste pour la modifier, ou clique sur « Nouvelle » pour en créer une.</p>
+            </div>
+          )}
+          {showEditor && (
+            <>
+              <div className="ui-card ui-form" style={{ "--ui-accent": selectedId ? "#2563eb" : "#059669" }}>
+                <div className="ui-card-head">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="ui-mode">{selectedId ? "Modification" : "Nouvelle grille"}</span>
+                    <h2 className="min-w-0 truncate">{selectedId ? taskTitle || title : "Choisis le cours, puis remplis la grille"}</h2>
+                  </div>
+                  <button type="button" onClick={closeEditor} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                    <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes grilles
+                  </button>
+                </div>
+              </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
               <h2 className="text-xl font-bold text-gray-800">Paramètres Généraux</h2>
@@ -888,6 +921,8 @@ export default function AdminRubric() {
             </div>
             
           </div>
+            </>
+          )}
         </div>
       </main>
 

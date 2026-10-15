@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { studentDisplayName, splitFullName } from "../lib/studentDisplay";
 import PageSectionTitle from "../components/PageSectionTitle";
 import GroupResourcesPanel from "../components/GroupResourcesPanel";
+import { FormCard } from "../components/ui";
 import { useSession } from "../lib/sessionState";
 
 /** Une ligne d’import : nom seul, ou nom + courriel (tab, point-virgule, ou virgule si la partie droite ressemble à un mail). */
@@ -51,6 +52,7 @@ export default function AdminStudents() {
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const [renameGroupTo, setRenameGroupTo] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -210,6 +212,7 @@ export default function AdminStudents() {
     try {
       await api.createGroup({ name: groupName });
       setNewGroupName("");
+      setCreatingGroup(false);
       setSelectedGroup(groupName);
       startNew();
       setGroup(groupName);
@@ -312,25 +315,54 @@ export default function AdminStudents() {
             Aucune session en cours. <Link to="/sessions" className="font-semibold underline">Crée une session</Link> pour y ajouter des groupes et des élèves.
           </div>
         )}
-        {selectedGroupId && <GroupResourcesPanel key={selectedGroupId} groupId={selectedGroupId} onChanged={refresh} />}
+        {creatingGroup && (
+          <FormCard
+            mode="Nouveau groupe"
+            title={active ? `Dans la session « ${active.name} »` : "Aucune session en cours"}
+            accent="#059669"
+            onBack={() => {
+              setCreatingGroup(false);
+              setNewGroupName("");
+              setError("");
+            }}
+            backLabel="Annuler"
+          >
+            <form
+              className="flex flex-col gap-3 sm:flex-row sm:items-end"
+              onSubmit={(e) => {
+                e.preventDefault();
+                prepareNewGroup();
+              }}
+            >
+              <label className="min-w-0 flex-1">
+                <span className="ui-label">Nom du groupe</span>
+                <input autoFocus className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" placeholder="Ex : 420-AB1" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
+              </label>
+              <button type="submit" className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Créer le groupe</button>
+            </form>
+            <p className="ui-info text-xs text-gray-600">Ensuite, tu pourras lui lier des cours, importer ses grilles et y inscrire des élèves.</p>
+          </FormCard>
+        )}
+        {!creatingGroup && selectedGroupId && <GroupResourcesPanel key={selectedGroupId} groupId={selectedGroupId} onChanged={refresh} />}
 
         <>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
             <div className="xl:col-span-3 space-y-4">
-              <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <h2 className="text-base font-bold mb-1">Groupes</h2>
-                <p className="text-xs text-gray-500 mb-3">Cliquez un groupe pour afficher uniquement les étudiants de ce groupe.</p>
+              <div className="ui-card ui-card-body">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <h2 className="text-base font-bold">Groupes</h2>
+                  <button type="button" onClick={() => { setCreatingGroup(true); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                    <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouveau groupe
+                  </button>
+                </div>
+                <p className="mb-3 text-xs text-gray-500">Clique un groupe pour voir ses élèves, ses cours et ses grilles.</p>
                 <div className="space-y-2 max-h-[44vh] overflow-y-auto pr-1">
                   {displayedGroupDashboard.map((g) => {
                     const isActive = selectedGroup === g.group;
                     return (
                       <div
                         key={g.group}
-                        className={`flex gap-2 rounded-xl border p-0.5 transition ${
-                          isActive
-                            ? "border-blue-400 bg-blue-50 ring-1 ring-blue-200/80 dark:bg-blue-950/30 dark:ring-blue-500/40"
-                            : "border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40"
-                        }`}
+                        className={`ui-item no-chevron !gap-2 !p-0.5 ${isActive ? "is-active" : ""}`}
                       >
                         <button
                           type="button"
@@ -391,13 +423,7 @@ export default function AdminStudents() {
                   {displayedGroupDashboard.length === 0 && <p className="text-sm text-gray-500">Aucun groupe.</p>}
                 </div>
               </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 text-sm">Créer un groupe</h3>
-                  <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Nom du nouveau groupe" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
-                  <button onClick={prepareNewGroup} className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm">Créer</button>
-                  <p className="text-xs text-gray-500 mt-2">Le groupe est créé dans la session en cours.</p>
-                </div>
+              <div className="ui-card ui-card-body space-y-4">
                 <div>
                   <h3 className="font-semibold mb-2 text-sm">Modifier le groupe actif</h3>
                   <div className="text-xs text-gray-500 mb-2">Groupe sélectionné: <span className="font-semibold text-gray-700">{selectedGroup || "Aucun"}</span></div>
@@ -407,7 +433,7 @@ export default function AdminStudents() {
               </div>
             </div>
 
-            <div className="xl:col-span-3 bg-white rounded-2xl border border-gray-100 p-4">
+            <div className="xl:col-span-3 ui-card ui-card-body">
               <div className="flex gap-2 mb-3">
                 <button type="button" onClick={startNew} className="flex-1 text-sm rounded-lg border border-gray-300 bg-white py-2 font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-100 dark:hover:bg-gray-700/60">
                   Ajouter
@@ -435,9 +461,9 @@ export default function AdminStudents() {
                   </button>
                 ) : null}
               </div>
-              <div className="space-y-1 max-h-[68vh] overflow-y-auto">
+              <div className="space-y-1.5 max-h-[68vh] overflow-y-auto">
                 {filteredStudents.map((s) => (
-                  <button key={s._id} onClick={() => selectStudent(s)} className={`w-full text-left p-2 rounded-lg ${selectedId === s._id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50 border border-transparent"}`}>
+                  <button key={s._id} onClick={() => selectStudent(s)} className={`ui-item !py-1.5 ${selectedId === s._id ? "is-active" : ""}`}>
                     <div className="min-w-0">
                       <div className="font-medium text-sm">{studentDisplayName(s)}</div>
                       <div className="text-xs text-gray-500">{s.email || "Sans email"}</div>
@@ -448,10 +474,18 @@ export default function AdminStudents() {
               </div>
             </div>
 
-            <div className="xl:col-span-6 bg-white rounded-2xl border border-gray-100 p-5">
+            <div className="xl:col-span-6 ui-card ui-form" style={{ "--ui-accent": bulkMode ? "#7c3aed" : selectedId ? "#2563eb" : "#059669" }}>
+              <div className="ui-card-head">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="ui-mode">{bulkMode ? "Import en lot" : selectedId ? "Modification" : "Nouvel élève"}</span>
+                  <h2 className="min-w-0 truncate">
+                    {bulkMode ? `Plusieurs élèves à la fois${group ? ` dans « ${group} »` : ""}` : selectedId ? studentDisplayName({ firstName, lastName, name: `${firstName} ${lastName}` }) : group ? `Sera inscrit dans « ${group} »` : "Choisis un groupe ou entres-en un"}
+                  </h2>
+                </div>
+              </div>
+              <div className="ui-card-body">
               {bulkMode ? (
                 <div>
-                  <h2 className="text-lg font-bold mb-3">Import en lot</h2>
                   <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Groupe cible" value={group} onChange={(e) => setGroup(e.target.value)} />
                   <p className="text-xs text-gray-600 mb-2 leading-relaxed">
                     Une ligne par étudiant : <strong>prénom et nom</strong> (ex. <code className="bg-gray-100 px-0.5 rounded text-[11px]">Jean Tremblay</code> — le premier mot = prénom, le reste = nom), ou la même chose suivie d’une tabulation, d’un point-virgule ou d’une virgule (si le courriel contient <code className="bg-gray-100 px-0.5 rounded">@</code>) puis le <strong>courriel</strong>.
@@ -473,7 +507,6 @@ export default function AdminStudents() {
                 </div>
               ) : (
                 <div>
-                  <h2 className="text-lg font-bold mb-3">{selectedId ? "Modifier l'étudiant" : "Nouvel étudiant"}</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       className="border rounded-lg px-3 py-2"
@@ -524,6 +557,7 @@ export default function AdminStudents() {
                   )}
                 </div>
               )}
+              </div>
             </div>
           </div>
         </>

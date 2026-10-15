@@ -172,7 +172,7 @@ export default function AdminSessions({ view = "sessions" }) {
   const toggleGroup = (id) =>
     setCopying((c) => ({ ...c, groupIds: c.groupIds.includes(id) ? c.groupIds.filter((x) => x !== id) : [...c.groupIds, id] }));
 
-  const row = "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700";
+  const row = "ui-info flex flex-wrap items-center justify-between gap-2 !px-3 !py-2.5";
 
   if (loading) return <main className="mx-auto max-w-7xl px-4 py-8 text-sm text-gray-500">Chargement…</main>;
 
@@ -213,7 +213,7 @@ export default function AdminSessions({ view = "sessions" }) {
         {activeSessions.map((s) => {
           const st = sessionStatusInfo(s.status);
           return (
-            <div key={s._id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900/40">
+            <div key={s._id} className={`ui-card ui-card-body ${active?._id === s._id ? "ring-2 ring-blue-500" : ""}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
