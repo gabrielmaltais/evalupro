@@ -129,6 +129,12 @@ export const api = {
   archiveGroup: (group) => request("/api/students/groups/archive", { method: "POST", body: JSON.stringify({ group }) }),
   restoreGroup: (group) => request("/api/students/groups/restore", { method: "POST", body: JSON.stringify({ group }) }),
   setGroupSession: (group, sessionId) => request("/api/students/groups/session", { method: "POST", body: JSON.stringify({ group, sessionId: sessionId || null }) }),
+  listSessionCourses: (sessionId) => request(`/api/sessions/${sessionId}/courses`),
+  addSessionCourse: (sessionId, courseId, rubricIds) =>
+    request(`/api/sessions/${sessionId}/courses`, { method: "POST", body: JSON.stringify({ courseId, rubricIds }) }),
+  setSessionCourseRubrics: (sessionId, courseId, rubricIds) =>
+    request(`/api/sessions/${sessionId}/courses/${courseId}`, { method: "PUT", body: JSON.stringify({ rubricIds }) }),
+  removeSessionCourse: (sessionId, courseId) => request(`/api/sessions/${sessionId}/courses/${courseId}`, { method: "DELETE" }),
   listGroups: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/api/groups${qs ? `?${qs}` : ""}`);

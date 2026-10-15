@@ -93,7 +93,7 @@ export default function AdminSessions({ view = "sessions" }) {
   }
 
   async function archive(s) {
-    if (!window.confirm(`Archiver « ${s.name} » avec ses groupes et ses évaluations ? Tes cours, grilles et fiches d'élèves ne bougent pas. Tu pourras la restaurer.`)) return;
+    if (!window.confirm(`Archiver « ${s.name} » avec ses groupes et ses corrections ? Tes cours, évaluations et fiches d'élèves ne bougent pas. Tu pourras la restaurer.`)) return;
     await run(
       () => api.archiveSession(s._id),
       (o) => `Session archivée : ${o.archived.groups} groupe(s) et ${o.archived.students} inscription(s) rangés.`
@@ -118,7 +118,7 @@ export default function AdminSessions({ view = "sessions" }) {
     setError("");
     setSuccess("");
     try {
-      if (!window.confirm(`Supprimer la session « ${s.name} » ? Ses groupes et inscriptions seront supprimés. Tes cours, grilles et fiches d'élèves sont conservés.`)) return;
+      if (!window.confirm(`Supprimer la session « ${s.name} » ? Ses groupes et inscriptions seront supprimés. Tes cours, évaluations et fiches d'élèves sont conservés.`)) return;
       try {
         await api.deleteSession(s._id);
       } catch (e) {
@@ -182,7 +182,7 @@ export default function AdminSessions({ view = "sessions" }) {
         icon="fa-box-archive"
         iconBgClass="bg-indigo-600"
         title={tab === "archives" ? "Archives" : "Sessions"}
-        subtitle={tab === "archives" ? "Tout ce que tu as rangé, restaurable en un clic." : "Une session contient tes groupes, leurs élèves et leurs évaluations. Tes cours et grilles (Ressources) restent disponibles d'une session à l'autre."}
+        subtitle={tab === "archives" ? "Tout ce que tu as rangé, restaurable en un clic." : "Une session contient tes groupes, leurs élèves et leurs corrections. Tes cours et évaluations (Ressources) restent disponibles d'une session à l'autre."}
       />
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -265,14 +265,14 @@ export default function AdminSessions({ view = "sessions" }) {
         ))}
         {archived.courses.map((c) => (
           <div key={c._id} className={row}>
-            <span className="text-sm">Cours : <b>{c.title}</b>{archived.rubrics.filter((r) => r.course === c._id).length ? ` · ${archived.rubrics.filter((r) => r.course === c._id).length} grille(s) avec lui` : ""}</span>
+            <span className="text-sm">Cours : <b>{c.title}</b>{archived.rubrics.filter((r) => r.course === c._id).length ? ` · ${archived.rubrics.filter((r) => r.course === c._id).length} évaluation(s) avec lui` : ""}</span>
             <button type="button" onClick={() => run(() => api.restoreCourse(c._id), "Cours restauré avec ses grilles.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
           </div>
         ))}
         {archived.rubrics.filter((r) => !rubricWithCourse(r)).map((r) => (
           <div key={r._id} className={row}>
-            <span className="text-sm">Grille : <b>{r.title}</b></span>
-            <button type="button" onClick={() => run(() => api.restoreRubric(r._id), "Grille restaurée.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
+            <span className="text-sm">Évaluation : <b>{r.title}</b></span>
+            <button type="button" onClick={() => run(() => api.restoreRubric(r._id), "Évaluation restaurée.")} className={`${btn} border-emerald-300 text-emerald-700 hover:bg-emerald-50`}>Restaurer</button>
           </div>
         ))}
         {archived.groups.filter((g) => !withSession(g.session, g.archivedAt)).map((g) => (
@@ -313,7 +313,7 @@ export default function AdminSessions({ view = "sessions" }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
             <h3 className="text-lg font-bold">Nouvelle session à partir de « {copying.source.name} »</h3>
-            <p className="text-xs text-gray-500">Les groupes choisis sont recréés avec les mêmes cours. Les grilles ne suivent pas par défaut : tu réimportes les versions à jour dans chaque groupe. Les évaluations ne sont jamais copiées.</p>
+            <p className="text-xs text-gray-500">Les groupes choisis sont recréés avec les mêmes cours. Les évaluations ne suivent pas par défaut : tu réimportes les versions à jour dans chaque groupe. Les évaluations ne sont jamais copiées.</p>
             <input className={inputCls} value={copying.name} onChange={(e) => setCopying({ ...copying, name: e.target.value })} placeholder="Nom de la nouvelle session" />
             <div className="grid grid-cols-2 gap-2">
               <input type="date" className={inputCls} value={copying.startDate} onChange={(e) => setCopying({ ...copying, startDate: e.target.value })} />
@@ -328,7 +328,7 @@ export default function AdminSessions({ view = "sessions" }) {
               {copying.groupIds !== null && copying.groups.length === 0 && <p className="text-sm text-gray-400">Cette session n'a pas de groupe.</p>}
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copying.carryStudents} onChange={(e) => setCopying({ ...copying, carryStudents: e.target.checked })} /> Réinscrire les mêmes élèves (leurs fiches sont réutilisées)</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copying.carryRubrics} onChange={(e) => setCopying({ ...copying, carryRubrics: e.target.checked })} /> Reprendre aussi les grilles importées (risque de vieilles versions)</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copying.carryRubrics} onChange={(e) => setCopying({ ...copying, carryRubrics: e.target.checked })} /> Reprendre aussi les évaluations importées (risque de vieilles versions)</label>
             {!copying.source.archivedAt && (
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={copying.archiveSource} onChange={(e) => setCopying({ ...copying, archiveSource: e.target.checked })} /> Archiver « {copying.source.name} » ensuite</label>
             )}

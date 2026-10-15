@@ -134,8 +134,8 @@ export default function AdminCourses() {
       setEditing(false);
       const sync = saved.sync || {};
       const parts = ["Cours enregistré."];
-      if (sync.updated) parts.push(`${sync.updated} grille(s) mise(s) à jour avec les compétences modifiées.`);
-      if (sync.skipped) parts.push(`${sync.skipped} grille(s) déjà utilisée(s) en correction ont été laissées telles quelles.`);
+      if (sync.updated) parts.push(`${sync.updated} évaluation(s) mise(s) à jour avec les compétences modifiées.`);
+      if (sync.skipped) parts.push(`${sync.skipped} évaluation(s) déjà utilisée(s) en correction ont été laissées telles quelles.`);
       setSuccess(parts.join(" "));
     } catch (e) {
       setError(String(e.message || e));
@@ -181,8 +181,8 @@ export default function AdminCourses() {
       <PageSectionTitle
         icon="fa-book-open"
         iconBgClass="bg-emerald-600"
-        title="Cours et grilles"
-        subtitle="Un cours regroupe ses compétences (critères de performance) et ses grilles, comme un dossier. Modifier une compétence met à jour les grilles pas encore utilisées."
+        title="Mes cours"
+        subtitle="Un cours regroupe ses compétences (critères de performance) et ses évaluations, comme un dossier. Modifier une compétence met à jour les évaluations pas encore utilisées."
       />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 whitespace-pre-line">{error}</div>}
@@ -211,7 +211,7 @@ export default function AdminCourses() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{c.code ? `${c.code} · ` : ""}{c.title}</span>
                         <span className="text-xs text-gray-500">
-                          {(c.competencies || []).length} compétence(s) · {rubrics.filter((r) => r.course === c._id).length} grille(s)
+                          {(c.competencies || []).length} compétence(s) · {rubrics.filter((r) => r.course === c._id).length} évaluation(s)
                         </span>
                       </span>
                     </button>
@@ -243,13 +243,13 @@ export default function AdminCourses() {
             >
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-800">Grilles de ce cours ({courseRubrics.length})</p>
+                  <p className="text-sm font-semibold text-gray-800">Évaluations de ce cours ({courseRubrics.length})</p>
                   <Link to={`/ressources/grilles?course=${course._id}`} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
-                    <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouvelle grille dans ce cours
+                    <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouvelle évaluation dans ce cours
                   </Link>
                 </div>
                 {courseRubrics.length === 0 ? (
-                  <p className="ui-info text-sm text-gray-600">Aucune grille dans ce cours pour l&apos;instant.</p>
+                  <p className="ui-info text-sm text-gray-600">Aucune évaluation dans ce cours pour l&apos;instant.</p>
                 ) : (
                   <ul className="space-y-2">
                     {courseRubrics.map((r) => (
@@ -346,14 +346,14 @@ export default function AdminCourses() {
                 <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-600">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <label className="text-xs font-bold uppercase text-gray-500">
-                      Grilles de ce cours ({rubrics.filter((r) => r.course === course._id).length})
+                      Évaluations de ce cours ({rubrics.filter((r) => r.course === course._id).length})
                     </label>
                     <Link to={`/ressources/grilles?course=${course._id}`} className="rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
-                      <i className="fa-solid fa-folder-open mr-1" /> Gérer les grilles de ce cours
+                      <i className="fa-solid fa-folder-open mr-1" /> Gérer les évaluations de ce cours
                     </Link>
                   </div>
                   {rubrics.filter((r) => r.course === course._id).length === 0 ? (
-                    <p className="text-sm text-gray-500">Aucune grille dans ce cours pour l&apos;instant.</p>
+                    <p className="text-sm text-gray-500">Aucune évaluation dans ce cours pour l&apos;instant.</p>
                   ) : (
                     <ul className="space-y-1 text-sm">
                       {rubrics

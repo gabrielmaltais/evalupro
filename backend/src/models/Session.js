@@ -11,6 +11,19 @@ const sessionSchema = new mongoose.Schema(
     autoArchive: { type: Boolean, default: true },
     archivedAt: { type: Date, default: null },
     archivedBy: { type: String, enum: ["", "manual", "auto"], default: "" },
+    /** Cours de la session et, pour chacun, les évaluations (grilles) importées: détermine ce qu'on peut corriger. */
+    courses: {
+      type: [
+        new mongoose.Schema(
+          {
+            course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true },
+            rubrics: [{ type: mongoose.Schema.Types.ObjectId, ref: "Rubric" }],
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

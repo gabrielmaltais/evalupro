@@ -3,7 +3,7 @@ import TabStrip from "./TabStrip";
 
 const TABS = [
   { id: "cours", label: "Cours", icon: "fa-book-open", to: "/ressources/cours" },
-  { id: "grilles", label: "Grilles", icon: "fa-sliders", to: "/ressources/grilles" },
+  { id: "grilles", label: "Évaluations", icon: "fa-sliders", to: "/ressources/grilles" },
 ];
 
 /** Section « Ressources » : cours et grilles, communs à toutes les sessions. */

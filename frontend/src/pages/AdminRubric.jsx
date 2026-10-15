@@ -39,7 +39,7 @@ export default function AdminRubric() {
   const [rubricSortBy, setRubricSortBy] = useState("updatedAt_desc");
   
   // Form State
-  const [title, setTitle] = useState("Nouvelle Grille");
+  const [title, setTitle] = useState("Nouvelle Évaluation");
   const [taskTitle, setTaskTitle] = useState("Tâche Finale");
   const [version, setVersion] = useState(1);
   const [groups, setGroups] = useState([]);
@@ -172,7 +172,7 @@ export default function AdminRubric() {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setEditorOpen(true);
     setSelectedId(null);
-    setTitle("Nouvelle Grille");
+    setTitle("Nouvelle Évaluation");
     setTaskTitle("Tâche");
     setVersion(1);
     setGroups([]);
@@ -187,7 +187,7 @@ export default function AdminRubric() {
     setSavedSnapshot(
       buildSnapshot({
         selectedId: null,
-        title: "Nouvelle Grille",
+        title: "Nouvelle Évaluation",
         taskTitle: "Tâche",
         version: 1,
         groups: [],
@@ -210,11 +210,11 @@ export default function AdminRubric() {
     try {
       if (selectedId) {
         await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
-        setSuccess("Grille modifiée avec succès !");
+        setSuccess("Évaluation modifiée avec succès !");
       } else {
         const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
         setSelectedId(newRubric._id);
-        setSuccess("Nouvelle grille créée avec succès !");
+        setSuccess("Nouvelle évaluation créée avec succès !");
       }
       setSavedSnapshot(buildSnapshot());
       await refresh();
@@ -236,7 +236,7 @@ export default function AdminRubric() {
       startNew();
       setEditorOpen(false);
       await refresh();
-      setSuccess("Grille archivée. Tu peux la restaurer dans Sessions > Archives.");
+      setSuccess("Évaluation archivée. Tu peux la restaurer dans Sessions > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -249,7 +249,7 @@ export default function AdminRubric() {
       startNew();
       setEditorOpen(false);
       await refresh();
-      setSuccess("Grille supprimée avec succès !");
+      setSuccess("Évaluation supprimée avec succès !");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -385,7 +385,7 @@ export default function AdminRubric() {
         ...result.aValider.map((item) => `À valider : ${item}`),
       ];
       setSuccess(
-        `Grille importée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts.` +
+        `Évaluation importée : ${imported.criteria.length} critère(s), ${imported.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)} pts.` +
           (notes.length ? `\n\nÀ vérifier avant d'enregistrer :\n- ${notes.join("\n- ")}` : "")
       );
       setError("");
@@ -469,7 +469,7 @@ export default function AdminRubric() {
           <PageSectionTitle
             icon="fa-sliders"
             iconBgClass="bg-slate-700"
-            title="Administration des Grilles"
+            title="Administration des Évaluations"
             subtitle="Configuration"
           />
         </div>
@@ -487,7 +487,7 @@ export default function AdminRubric() {
             <button type="button" onClick={() => setShowPasteJsonModal(true)} className="bg-white text-teal-600 border border-teal-200 hover:bg-teal-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Coller un JSON">
                 <i className="fa-solid fa-paste"></i>
             </button>
-            <button type="button" onClick={() => setImporting({ target: rubricFilterCourse || courseId || "", source: "" })} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Importer une grille d'un autre cours">
+            <button type="button" onClick={() => setImporting({ target: rubricFilterCourse || courseId || "", source: "" })} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Importer une évaluation d'un autre cours">
                 <i className="fa-solid fa-file-import"></i>
             </button>
             <button onClick={exportJSON} className="bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Exporter en JSON">
@@ -499,13 +499,13 @@ export default function AdminRubric() {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <h3 className="bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 border-b border-gray-100">Grilles Enregistrées</h3>
+            <h3 className="bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 border-b border-gray-100">Évaluations Enregistrées</h3>
             <div className="space-y-2 border-b border-gray-100 bg-white px-3 py-3">
               <input
                 type="text"
                 value={rubricSearch}
                 onChange={(e) => setRubricSearch(e.target.value)}
-                placeholder="Rechercher une grille, un cours, un groupe..."
+                placeholder="Rechercher une évaluation, un cours, un groupe..."
                 className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div>
@@ -552,7 +552,7 @@ export default function AdminRubric() {
                 </select>
               </div>
               <p className="text-[11px] text-gray-500">
-                {filteredRubrics.length} / {rubrics.length} grille(s) affichée(s)
+                {filteredRubrics.length} / {rubrics.length} évaluation(s) affichée(s)
               </p>
             </div>
             <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
@@ -565,7 +565,7 @@ export default function AdminRubric() {
                     </div>
                   )}
                   <button type="button" onClick={() => selectRubric(r)} className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selectedId === r._id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}>
-                    <div className="font-semibold text-sm text-gray-800 line-clamp-2">{r.taskTitle || r.title || 'Nouvelle Grille'}</div>
+                    <div className="font-semibold text-sm text-gray-800 line-clamp-2">{r.taskTitle || r.title || 'Nouvelle Évaluation'}</div>
                     <div className="text-xs text-gray-500 flex justify-between mt-1 items-center">
                       <span className="truncate pr-2" title={r.title}>{r.title} (v{r.version})</span>
                       <div className="flex items-center gap-2">
@@ -584,7 +584,7 @@ export default function AdminRubric() {
                   </button>
                 </li>
               ))}
-              {filteredRubrics.length === 0 && <li className="p-4 text-sm text-gray-500 text-center">Aucune grille pour ce filtre.</li>}
+              {filteredRubrics.length === 0 && <li className="p-4 text-sm text-gray-500 text-center">Aucune évaluation pour ce filtre.</li>}
             </ul>
           </div>
         </div>
@@ -596,7 +596,7 @@ export default function AdminRubric() {
 
           {!showEditor && (
             <div className="ui-card ui-card-body hidden lg:block">
-              <p className="ui-info text-sm text-gray-600">Choisis une grille dans la liste pour la modifier, ou clique sur « Nouvelle » pour en créer une.</p>
+              <p className="ui-info text-sm text-gray-600">Choisis une évaluation dans la liste pour la modifier, ou clique sur « Nouvelle » pour en créer une.</p>
             </div>
           )}
           {showEditor && (
@@ -604,11 +604,11 @@ export default function AdminRubric() {
               <div className="ui-card ui-form" style={{ "--ui-accent": selectedId ? "#2563eb" : "#059669" }}>
                 <div className="ui-card-head">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="ui-mode">{selectedId ? "Modification" : "Nouvelle grille"}</span>
-                    <h2 className="min-w-0 truncate">{selectedId ? taskTitle || title : "Choisis le cours, puis remplis la grille"}</h2>
+                    <span className="ui-mode">{selectedId ? "Modification" : "Nouvelle évaluation"}</span>
+                    <h2 className="min-w-0 truncate">{selectedId ? taskTitle || title : "Choisis le cours, puis remplis l'évaluation"}</h2>
                   </div>
                   <button type="button" onClick={closeEditor} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes grilles
+                    <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes évaluations
                   </button>
                 </div>
               </div>
@@ -676,7 +676,7 @@ export default function AdminRubric() {
                     checked={isActive}
                     onChange={(e) => setIsActive(e.target.checked)}
                   />
-                  Grille active (visible dans Corriger)
+                  Évaluation active (visible dans Corriger)
                 </label>
               </div>
               <div className="flex items-end">
@@ -690,7 +690,7 @@ export default function AdminRubric() {
                 </label>
               </div>
               <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
-                <label className="mb-1 block text-sm font-medium text-gray-700">Cours (le dossier où la grille est classée)</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Cours (le dossier où l'évaluation est classée)</label>
                 <div className="flex flex-wrap gap-2">
                   {courses.map((c) => (
                     <Chip key={c._id} active={courseId === c._id} icon="fa-folder-open" onClick={() => setCourseId(c._id)}>
@@ -700,7 +700,7 @@ export default function AdminRubric() {
                   {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours: crée-en un d&apos;abord.</p>}
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  Modifier une compétence du cours met à jour les grilles pas encore utilisées. Pas de cours ? <Link to="/ressources/cours" className="font-semibold text-blue-600 hover:underline">Crée-le dans Ressources</Link>.
+                  Modifier une compétence du cours met à jour les évaluations pas encore utilisées. Pas de cours ? <Link to="/ressources/cours" className="font-semibold text-blue-600 hover:underline">Crée-le dans Ressources</Link>.
                 </p>
               </div>
             </div>
@@ -892,7 +892,7 @@ export default function AdminRubric() {
                             <i className="fa-solid fa-box-archive"></i> Archiver
                         </button>
                         <button type="button" onClick={() => setConfirmDelete(true)} className="text-red-500 hover:text-red-700 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
-                            <i className="fa-solid fa-trash"></i> Supprimer cette Grille
+                            <i className="fa-solid fa-trash"></i> Supprimer cette Évaluation
                         </button>
                       </div>
                     )
@@ -900,7 +900,7 @@ export default function AdminRubric() {
                     <div></div>
                 )}
                 <button type="button" onClick={save} className="bg-gray-900 hover:bg-black dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-slate-950 font-semibold py-3 px-8 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-300 dark:focus:ring-emerald-500/60">
-                    <i className="fa-solid fa-save"></i> Enregistrer cette Grille
+                    <i className="fa-solid fa-save"></i> Enregistrer cette Évaluation
                 </button>
             </div>
             
@@ -913,9 +913,9 @@ export default function AdminRubric() {
       {duplicating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-bold">Dupliquer la grille</h3>
+            <h3 className="text-lg font-bold">Dupliquer l'évaluation</h3>
             <p className="text-xs text-gray-500">
-              Pour modifier une grille sans toucher à l&apos;originale. La copie repart en version 1, sans évaluations.
+              Pour modifier une évaluation sans toucher à l&apos;originale. La copie repart en version 1, sans corrections.
             </p>
             <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={duplicating.title} onChange={(e) => setDuplicating({ ...duplicating, title: e.target.value })} />
             <label className="block text-xs font-medium text-gray-600">
@@ -950,7 +950,7 @@ export default function AdminRubric() {
                     setDuplicating(null);
                     await refresh();
                     selectRubric(copy);
-                    setSuccess("Grille dupliquée (version 1, sans évaluations). L'originale est inchangée.");
+                    setSuccess("Évaluation dupliquée (version 1, sans corrections). L'originale est inchangée.");
                   } catch (e) {
                     setError(String(e.message || e));
                   }
@@ -967,10 +967,10 @@ export default function AdminRubric() {
       {importing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-bold">Importer une grille d&apos;un autre cours</h3>
-            <p className="text-xs text-gray-500">La grille est copiée dans le cours choisi (version 1, sans évaluations). L&apos;originale reste inchangée.</p>
+            <h3 className="text-lg font-bold">Importer une évaluation d&apos;un autre cours</h3>
+            <p className="text-xs text-gray-500">L'évaluation est copiée dans le cours choisi (version 1, sans corrections). L&apos;originale reste inchangée.</p>
             <label className="block text-xs font-medium text-gray-600">
-              Grille à importer
+              Évaluation à importer
               <select
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 value={importing.source}
@@ -1010,7 +1010,7 @@ export default function AdminRubric() {
                     setImporting(null);
                     await refresh();
                     selectRubric(copy);
-                    setSuccess("Grille importée dans le cours.");
+                    setSuccess("Évaluation importée dans le cours.");
                   } catch (e) {
                     setError(String(e.message || e));
                   }
@@ -1031,7 +1031,7 @@ export default function AdminRubric() {
             <div className="ai-modal-header flex flex-shrink-0 items-start justify-between gap-2 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/80 px-4 py-3">
               <div className="min-w-0 pr-1">
                 <h2 className="text-base font-bold text-gray-800 flex items-center gap-2"><i className="fa-solid fa-robot text-indigo-600"></i> Configurateur de gabarit IA</h2>
-                <p className="text-xs text-gray-500 mt-0.5 leading-snug">Votre IA construit la grille ; vous lui fournissez le contenu de votre cours.</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-snug">Votre IA construit l'évaluation ; vous lui fournissez le contenu de votre cours.</p>
               </div>
               <button type="button" onClick={() => setShowAIModal(false)} className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-white/80 hover:text-gray-700" aria-label="Fermer"><i className="fa-solid fa-xmark text-base"></i></button>
             </div>

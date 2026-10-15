@@ -50,6 +50,7 @@ export default function AdminStudents() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [studentEvals, setStudentEvals] = useState([]);
   const [bulkMode, setBulkMode] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -104,8 +105,14 @@ export default function AdminStudents() {
     startNew();
     setBulkMode(true);
   }
+  function closeForm() {
+    startNew();
+    setFormOpen(false);
+  }
   async function selectStudent(s) {
     setSelectedId(s._id);
+    setFormOpen(true);
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
     if (s.firstName || s.lastName) {
       setFirstName(s.firstName || "");
       setLastName(s.lastName || "");
@@ -216,7 +223,7 @@ export default function AdminStudents() {
       setSelectedGroup(groupName);
       startNew();
       setGroup(groupName);
-      setSuccess(`Groupe « ${groupName} » créé. Lie-lui des cours, importe ses grilles, puis ajoute des élèves.`);
+      setSuccess(`Groupe « ${groupName} » créé. Lie-lui des cours, puis ajoute des élèves.`);
       await refresh();
     } catch (e) {
       setError(String(e.message || e));
@@ -306,13 +313,103 @@ export default function AdminStudents() {
           icon="fa-users-between-lines"
           iconBgClass="bg-blue-600"
           title="Groupes et élèves"
-          subtitle={active ? `Session : ${active.name}. Chaque groupe a ses cours, ses grilles importées et ses élèves.` : "Crée d'abord une session pour y ajouter des groupes."}
+          subtitle={active ? `Session : ${active.name}. Chaque groupe a ses cours et ses élèves.` : "Crée d'abord une session pour y ajouter des groupes."}
         />
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{error}</div>}
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm border border-green-100">{success}</div>}
         {!active && (
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             Aucune session en cours. <Link to="/sessions" className="font-semibold underline">Crée une session</Link> pour y ajouter des groupes et des élèves.
+          </div>
+        )}
+        {formOpen && (
+          <div className="ui-card ui-form" style={{ "--ui-accent": bulkMode ? "#7c3aed" : selectedId ? "#2563eb" : "#059669" }}>
+            <div className="ui-card-head">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="ui-mode">{bulkMode ? "Import en lot" : selectedId ? "Modification" : "Nouvel élève"}</span>
+                <h2 className="min-w-0 truncate">
+                  {bulkMode ? `Plusieurs élèves à la fois${group ? ` dans « ${group} »` : ""}` : selectedId ? studentDisplayName({ firstName, lastName, name: `${firstName} ${lastName}` }) : group ? `Sera inscrit dans « ${group} »` : "Choisis un groupe ou entres-en un"}
+                </h2>
+              </div>
+              <button type="button" onClick={closeForm} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                  <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Retour à la liste
+                </button>
+            </div>
+            <div className="ui-card-body">
+            {bulkMode ? (
+              <div>
+                <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Groupe cible" value={group} onChange={(e) => setGroup(e.target.value)} />
+                <p className="text-xs text-gray-600 mb-2 leading-relaxed">
+                  Une ligne par étudiant : <strong>prénom et nom</strong> (ex. <code className="bg-gray-100 px-0.5 rounded text-[11px]">Jean Tremblay</code> — le premier mot = prénom, le reste = nom), ou la même chose suivie d’une tabulation, d’un point-virgule ou d’une virgule (si le courriel contient <code className="bg-gray-100 px-0.5 rounded">@</code>) puis le <strong>courriel</strong>.
+                  Ex. <code className="bg-gray-100 px-1 rounded text-[11px]">Marie Curie	marie@ecole.ca</code> ou{" "}
+                  <code className="bg-gray-100 px-1 rounded text-[11px]">Paul Martin;paul@ecole.ca</code>
+                </p>
+                <div className="mb-2">
+                  <a
+                    href={`${import.meta.env.BASE_URL}exemple-import-etudiants.txt`}
+                    download="exemple-import-etudiants.txt"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-50 transition-colors"
+                  >
+                    <i className="fa-solid fa-file-arrow-down" aria-hidden />
+                    Télécharger un fichier d’exemple (.txt)
+                  </a>
+                </div>
+                <textarea rows={10} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Jean Dupont\nClaire Boisclair\tclaire@ecole.ca\nLuc;luc@ecole.ca"} />
+                <div className="mt-3 flex justify-end"><button onClick={saveBulk} className="bg-emerald-600 text-white rounded-lg px-4 py-2">Importer</button></div>
+              </div>
+            ) : (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    className="border rounded-lg px-3 py-2"
+                    placeholder="Prénom"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    autoComplete="given-name"
+                  />
+                  <input
+                    className="border rounded-lg px-3 py-2"
+                    placeholder="Nom"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    autoComplete="family-name"
+                  />
+                  <input className="border rounded-lg px-3 py-2 md:col-span-2" placeholder="Courriel" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input className="border rounded-lg px-3 py-2 md:col-span-2" placeholder="Groupe" value={group} onChange={(e) => setGroup(e.target.value)} />
+                </div>
+                <div className="mt-4 flex justify-between items-center">
+                  {selectedId ? (
+                    confirmDelete ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-red-600 font-semibold">Confirmer la suppression ?</span>
+                        <button onClick={removeStudent} className="bg-red-600 text-white rounded-lg px-3 py-2">Oui</button>
+                        <button onClick={() => setConfirmDelete(false)} className="border rounded-lg px-3 py-2">Non</button>
+                      </div>
+                    ) : <button onClick={() => setConfirmDelete(true)} className="text-red-600 text-sm">Supprimer</button>
+                  ) : <span></span>}
+                  <button onClick={save} className="bg-gray-900 text-white rounded-lg px-4 py-2">Enregistrer</button>
+                </div>
+                {selectedId && (
+                  <div className="mt-6 border-t pt-4">
+                    <h3 className="font-semibold mb-2">Dossier d'évaluations</h3>
+                    <ul className="divide-y">
+                      {studentEvals.map((ev) => (
+                        <li key={ev._id} className="py-2 flex justify-between items-center text-sm">
+                          <div>{ev.date} • {ev.rubric?.taskTitle || ev.rubric?.title}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{ev.totalScore}/{ev.totalMax}</span>
+                            <Link to={`/session?load=${ev._id}&tab=corriger`} className="text-blue-600 hover:underline">Voir</Link>
+                            <button onClick={() => removeEval(ev._id)} className="text-red-600 hover:underline">Suppr.</button>
+                          </div>
+                        </li>
+                      ))}
+                      {studentEvals.length === 0 && <li className="py-2 text-sm text-gray-500">Aucune évaluation.</li>}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
           </div>
         )}
         {creatingGroup && (
@@ -340,7 +437,7 @@ export default function AdminStudents() {
               </label>
               <button type="submit" className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Créer le groupe</button>
             </form>
-            <p className="ui-info text-xs text-gray-600">Ensuite, tu pourras lui lier des cours, importer ses grilles et y inscrire des élèves.</p>
+            <p className="ui-info text-xs text-gray-600">Ensuite, tu pourras lui lier des cours et y inscrire des élèves.</p>
           </FormCard>
         )}
         {!creatingGroup && selectedGroupId && <GroupResourcesPanel key={selectedGroupId} groupId={selectedGroupId} onChanged={refresh} />}
@@ -355,7 +452,7 @@ export default function AdminStudents() {
                     <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouveau groupe
                   </button>
                 </div>
-                <p className="mb-3 text-xs text-gray-500">Clique un groupe pour voir ses élèves, ses cours et ses grilles.</p>
+                <p className="mb-3 text-xs text-gray-500">Clique un groupe pour voir ses élèves et ses cours.</p>
                 <div className="space-y-2 max-h-[44vh] overflow-y-auto pr-1">
                   {displayedGroupDashboard.map((g) => {
                     const isActive = selectedGroup === g.group;
@@ -433,12 +530,12 @@ export default function AdminStudents() {
               </div>
             </div>
 
-            <div className="xl:col-span-3 ui-card ui-card-body">
+            <div className="xl:col-span-9 ui-card ui-card-body">
               <div className="flex gap-2 mb-3">
-                <button type="button" onClick={startNew} className="flex-1 text-sm rounded-lg border border-gray-300 bg-white py-2 font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-100 dark:hover:bg-gray-700/60">
+                <button type="button" onClick={() => { startNew(); setFormOpen(true); }} className="flex-1 text-sm rounded-lg border border-gray-300 bg-white py-2 font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-100 dark:hover:bg-gray-700/60">
                   Ajouter
                 </button>
-                <button type="button" onClick={startBulk} className="flex-1 text-sm rounded-lg border border-gray-300 bg-white py-2 font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-100 dark:hover:bg-gray-700/60">
+                <button type="button" onClick={() => { startBulk(); setFormOpen(true); }} className="flex-1 text-sm rounded-lg border border-gray-300 bg-white py-2 font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-100 dark:hover:bg-gray-700/60">
                   Importer
                 </button>
               </div>
@@ -471,92 +568,6 @@ export default function AdminStudents() {
                   </button>
                 ))}
                 {filteredStudents.length === 0 && <p className="text-sm text-gray-500 p-2">Aucun étudiant pour ce filtre.</p>}
-              </div>
-            </div>
-
-            <div className="xl:col-span-6 ui-card ui-form" style={{ "--ui-accent": bulkMode ? "#7c3aed" : selectedId ? "#2563eb" : "#059669" }}>
-              <div className="ui-card-head">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="ui-mode">{bulkMode ? "Import en lot" : selectedId ? "Modification" : "Nouvel élève"}</span>
-                  <h2 className="min-w-0 truncate">
-                    {bulkMode ? `Plusieurs élèves à la fois${group ? ` dans « ${group} »` : ""}` : selectedId ? studentDisplayName({ firstName, lastName, name: `${firstName} ${lastName}` }) : group ? `Sera inscrit dans « ${group} »` : "Choisis un groupe ou entres-en un"}
-                  </h2>
-                </div>
-              </div>
-              <div className="ui-card-body">
-              {bulkMode ? (
-                <div>
-                  <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Groupe cible" value={group} onChange={(e) => setGroup(e.target.value)} />
-                  <p className="text-xs text-gray-600 mb-2 leading-relaxed">
-                    Une ligne par étudiant : <strong>prénom et nom</strong> (ex. <code className="bg-gray-100 px-0.5 rounded text-[11px]">Jean Tremblay</code> — le premier mot = prénom, le reste = nom), ou la même chose suivie d’une tabulation, d’un point-virgule ou d’une virgule (si le courriel contient <code className="bg-gray-100 px-0.5 rounded">@</code>) puis le <strong>courriel</strong>.
-                    Ex. <code className="bg-gray-100 px-1 rounded text-[11px]">Marie Curie	marie@ecole.ca</code> ou{" "}
-                    <code className="bg-gray-100 px-1 rounded text-[11px]">Paul Martin;paul@ecole.ca</code>
-                  </p>
-                  <div className="mb-2">
-                    <a
-                      href={`${import.meta.env.BASE_URL}exemple-import-etudiants.txt`}
-                      download="exemple-import-etudiants.txt"
-                      className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-50 transition-colors"
-                    >
-                      <i className="fa-solid fa-file-arrow-down" aria-hidden />
-                      Télécharger un fichier d’exemple (.txt)
-                    </a>
-                  </div>
-                  <textarea rows={10} className="w-full border rounded-lg px-3 py-2 font-mono text-sm" value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder={"Jean Dupont\nClaire Boisclair\tclaire@ecole.ca\nLuc;luc@ecole.ca"} />
-                  <div className="mt-3 flex justify-end"><button onClick={saveBulk} className="bg-emerald-600 text-white rounded-lg px-4 py-2">Importer</button></div>
-                </div>
-              ) : (
-                <div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      className="border rounded-lg px-3 py-2"
-                      placeholder="Prénom"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      autoComplete="given-name"
-                    />
-                    <input
-                      className="border rounded-lg px-3 py-2"
-                      placeholder="Nom"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      autoComplete="family-name"
-                    />
-                    <input className="border rounded-lg px-3 py-2 md:col-span-2" placeholder="Courriel" value={email} onChange={(e) => setEmail(e.target.value)} />
-                    <input className="border rounded-lg px-3 py-2 md:col-span-2" placeholder="Groupe" value={group} onChange={(e) => setGroup(e.target.value)} />
-                  </div>
-                  <div className="mt-4 flex justify-between items-center">
-                    {selectedId ? (
-                      confirmDelete ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-red-600 font-semibold">Confirmer la suppression ?</span>
-                          <button onClick={removeStudent} className="bg-red-600 text-white rounded-lg px-3 py-2">Oui</button>
-                          <button onClick={() => setConfirmDelete(false)} className="border rounded-lg px-3 py-2">Non</button>
-                        </div>
-                      ) : <button onClick={() => setConfirmDelete(true)} className="text-red-600 text-sm">Supprimer</button>
-                    ) : <span></span>}
-                    <button onClick={save} className="bg-gray-900 text-white rounded-lg px-4 py-2">Enregistrer</button>
-                  </div>
-                  {selectedId && (
-                    <div className="mt-6 border-t pt-4">
-                      <h3 className="font-semibold mb-2">Dossier d'évaluations</h3>
-                      <ul className="divide-y">
-                        {studentEvals.map((ev) => (
-                          <li key={ev._id} className="py-2 flex justify-between items-center text-sm">
-                            <div>{ev.date} • {ev.rubric?.taskTitle || ev.rubric?.title}</div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold">{ev.totalScore}/{ev.totalMax}</span>
-                              <Link to={`/session?load=${ev._id}&tab=corriger`} className="text-blue-600 hover:underline">Voir</Link>
-                              <button onClick={() => removeEval(ev._id)} className="text-red-600 hover:underline">Suppr.</button>
-                            </div>
-                          </li>
-                        ))}
-                        {studentEvals.length === 0 && <li className="py-2 text-sm text-gray-500">Aucune évaluation.</li>}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
               </div>
             </div>
           </div>
