@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { normalizeImportedRubric, parseAiJson, tasksTotal } from "../lib/rubricTemplate";
 import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES } from "../lib/aiTemplate";
 import { competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
+import { Chip } from "../components/ui";
 
 /** Si le JSON vient du gabarit IA enveloppé, extraire la grille importable. */
 function unwrapAiTemplateEnvelope(raw) {
@@ -31,6 +32,7 @@ export default function AdminRubric() {
   const [groupOptions, setGroupOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const presetRubricDone = useRef(false);
   const [rubricSearch, setRubricSearch] = useState("");
   const [rubricFilterGroup, setRubricFilterGroup] = useState("");
   const [rubricFilterStatus, setRubricFilterStatus] = useState("all");
@@ -41,7 +43,6 @@ export default function AdminRubric() {
   const [taskTitle, setTaskTitle] = useState("Tâche Finale");
   const [version, setVersion] = useState(1);
   const [groups, setGroups] = useState([]);
-  const [showGroupsDropdown, setShowGroupsDropdown] = useState(false);
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
   const [linkCompetencies, setLinkCompetencies] = useState(false);
@@ -85,6 +86,12 @@ export default function AdminRubric() {
         api.getStudentGroupDashboard(),
       ]);
       setRubrics(data);
+      const wanted = searchParams.get("rubric");
+      if (wanted && !presetRubricDone.current) {
+        presetRubricDone.current = true;
+        const found = data.find((x) => x._id === wanted);
+        if (found) selectRubric(found);
+      }
       setGroupOptions((dashboard || []).filter((x) => x.groupId).map((x) => x.group));
     } catch (e) {
       setError(String(e.message || e));
@@ -501,38 +508,37 @@ export default function AdminRubric() {
                 placeholder="Rechercher une grille, un cours, un groupe..."
                 className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <select
-                value={rubricFilterCourse}
-                onChange={(e) => setRubricFilterCourse(e.target.value)}
-                className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs"
-              >
-                <option value="">Tous les cours</option>
-                {courses.map((c) => (
-                  <option key={`fc-${c._id}`} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
-                ))}
-              </select>
-              <div className="grid grid-cols-3 gap-2">
-                <select
-                  value={rubricFilterStatus}
-                  onChange={(e) => setRubricFilterStatus(e.target.value)}
-                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
-                >
-                  <option value="all">Tous statuts</option>
-                  <option value="active">Actives</option>
-                  <option value="inactive">Inactives</option>
-                </select>
-                <select
-                  value={rubricFilterGroup}
-                  onChange={(e) => setRubricFilterGroup(e.target.value)}
-                  className="rounded-md border border-gray-200 px-2 py-1.5 text-xs"
-                >
-                  <option value="">Tous groupes</option>
-                  {groupOptions.map((g) => (
-                    <option key={`flt-${g}`} value={g}>
-                      {g}
-                    </option>
+              <div>
+                <span className="ui-label">Cours</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip active={!rubricFilterCourse} onClick={() => setRubricFilterCourse("")} className="!min-h-0 !px-2.5 !py-1 !text-xs">Tous</Chip>
+                  {courses.map((c) => (
+                    <Chip key={`fc-${c._id}`} active={rubricFilterCourse === c._id} onClick={() => setRubricFilterCourse(rubricFilterCourse === c._id ? "" : c._id)} icon="fa-folder-open" className="!min-h-0 !px-2.5 !py-1 !text-xs">
+                      {c.code ? `${c.code} · ` : ""}{c.title}
+                    </Chip>
                   ))}
-                </select>
+                </div>
+              </div>
+              <div>
+                <span className="ui-label">Statut</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[["all", "Toutes"], ["active", "Actives"], ["inactive", "Inactives"]].map(([v, label]) => (
+                    <Chip key={v} active={rubricFilterStatus === v} onClick={() => setRubricFilterStatus(v)} className="!min-h-0 !px-2.5 !py-1 !text-xs">{label}</Chip>
+                  ))}
+                </div>
+              </div>
+              {groupOptions.length > 0 && (
+                <div>
+                  <span className="ui-label">Groupe</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip active={!rubricFilterGroup} onClick={() => setRubricFilterGroup("")} className="!min-h-0 !px-2.5 !py-1 !text-xs">Tous</Chip>
+                    {groupOptions.map((g) => (
+                      <Chip key={`flt-${g}`} active={rubricFilterGroup === g} onClick={() => setRubricFilterGroup(rubricFilterGroup === g ? "" : g)} icon="fa-users" className="!min-h-0 !px-2.5 !py-1 !text-xs">{g}</Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2">
                 <select
                   value={rubricSortBy}
                   onChange={(e) => setRubricSortBy(e.target.value)}
@@ -646,40 +652,20 @@ export default function AdminRubric() {
               </div>
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Importée dans ces groupes (session en cours)</label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowGroupsDropdown((v) => !v)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between"
-                    >
-                      <span className="truncate text-sm text-gray-800">
-                        {groups.length ? groups.join(", ") : "Choisir un ou plusieurs groupes"}
-                      </span>
-                      <i className={`fa-solid ${showGroupsDropdown ? "fa-chevron-up" : "fa-chevron-down"} text-xs text-gray-500`} />
-                    </button>
-                    {showGroupsDropdown && (
-                      <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg p-1">
-                        {groupOptions.length === 0 && (
-                          <div className="px-2 py-1.5 text-xs text-gray-500">Aucun groupe dans la session en cours</div>
-                        )}
-                        {groupOptions.map((g) => {
-                          const checked = groups.includes(g);
-                          return (
-                            <button
-                              key={g}
-                              type="button"
-                              onClick={() => {
-                                setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
-                              }}
-                              className="w-full px-2 py-1.5 text-left text-sm hover:bg-gray-50 rounded flex items-center gap-2"
-                            >
-                              <i className={`fa-solid ${checked ? "fa-check-square text-blue-600" : "fa-square text-gray-300"}`} />
-                              <span>{g}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div className="flex flex-wrap gap-2">
+                    {groupOptions.length === 0 && (
+                      <p className="ui-info text-xs text-gray-600">Aucun groupe dans la session en cours.</p>
                     )}
+                    {groupOptions.map((g) => (
+                      <Chip
+                        key={g}
+                        active={groups.includes(g)}
+                        icon={groups.includes(g) ? "fa-check" : "fa-users"}
+                        onClick={() => setGroups((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]))}
+                      >
+                        {g}
+                      </Chip>
+                    ))}
                   </div>
                   <p className="mt-1 text-xs text-gray-500">Seuls les groupes cochés pourront corriger avec cette grille. Tu peux en ajouter à tout moment.</p>
               </div>
@@ -705,16 +691,14 @@ export default function AdminRubric() {
               </div>
               <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
                 <label className="mb-1 block text-sm font-medium text-gray-700">Cours (le dossier où la grille est classée)</label>
-                <select
-                  value={courseId}
-                  onChange={(e) => setCourseId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-                >
-                  <option value="">Choisir un cours…</option>
+                <div className="flex flex-wrap gap-2">
                   {courses.map((c) => (
-                    <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
+                    <Chip key={c._id} active={courseId === c._id} icon="fa-folder-open" onClick={() => setCourseId(c._id)}>
+                      {c.code ? `${c.code} · ` : ""}{c.title}
+                    </Chip>
                   ))}
-                </select>
+                  {courses.length === 0 && <p className="ui-info text-xs text-gray-600">Aucun cours: crée-en un d&apos;abord.</p>}
+                </div>
                 <p className="mt-1 text-xs text-gray-500">
                   Modifier une compétence du cours met à jour les grilles pas encore utilisées. Pas de cours ? <Link to="/ressources/cours" className="font-semibold text-blue-600 hover:underline">Crée-le dans Ressources</Link>.
                 </p>

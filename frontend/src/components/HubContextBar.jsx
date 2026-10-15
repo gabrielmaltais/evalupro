@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Chip } from "./ui";
 
 export default function HubContextBar({
   selectedGroup,
@@ -20,47 +21,39 @@ export default function HubContextBar({
   return (
     <div className="rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 dark:border-indigo-500/25 dark:from-slate-900/90 dark:to-indigo-950/70">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Groupe actif</span>
-            <select
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-              className="eval-form-control w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-indigo-500/35"
-            >
-              <option value="">Tous les groupes</option>
+        <div className="space-y-3">
+          <div>
+            <span className="ui-label">1. Groupe</span>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Groupe">
+              <Chip active={!selectedGroup} onClick={() => setSelectedGroup("")}>Tous les groupes</Chip>
               {groupKeys.map((g) => (
-                <option key={g} value={g}>
+                <Chip key={g} active={selectedGroup === g} onClick={() => setSelectedGroup(g)} icon="fa-users">
                   {g}
-                </option>
+                </Chip>
               ))}
-            </select>
-          </label>
-          <label className="min-w-0">
-            <span className="mb-1 block text-xs font-bold uppercase text-slate-600 dark:text-slate-300">Examen</span>
-            <div className="relative">
-              <select
-                value={selectedExamId || ""}
-                onChange={(e) => setSelectedExamId(e.target.value)}
-                className="eval-form-control w-full appearance-none rounded-xl border border-blue-200 bg-white py-2 pl-3 pr-9 text-sm font-medium text-slate-900 shadow-sm dark:border-indigo-500/35"
-              >
-                <option value="">— Choisir un examen —</option>
-                {(examOptions || []).map((ex) => (
-                  <option key={`hub-exam-${ex.rubricId}-${ex.version ?? 1}`} value={String(ex.rubricId)}>
-                    {examOptionLabel(ex)}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                <i className="fa-solid fa-chevron-down text-[10px]" aria-hidden />
-              </span>
             </div>
-            {(examOptions || []).length === 0 && (
-              <Link to="/session/groupes" className="mt-1 block text-xs font-medium text-blue-700 underline dark:text-blue-300">
+          </div>
+          <div>
+            <span className="ui-label">2. Examen à évaluer</span>
+            {(examOptions || []).length === 0 ? (
+              <Link to="/session/groupes" className="text-xs font-medium text-blue-700 underline dark:text-blue-300">
                 Aucune grille disponible : importe-en dans un groupe (Groupes et élèves).
               </Link>
+            ) : (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Examen">
+                {(examOptions || []).map((ex) => (
+                  <Chip
+                    key={`hub-exam-${ex.rubricId}-${ex.version ?? 1}`}
+                    active={String(selectedExamId || "") === String(ex.rubricId)}
+                    onClick={() => setSelectedExamId(String(selectedExamId || "") === String(ex.rubricId) ? "" : String(ex.rubricId))}
+                    icon="fa-file-pen"
+                  >
+                    {examOptionLabel(ex)}
+                  </Chip>
+                ))}
+              </div>
             )}
-          </label>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:w-[420px]">
           {[
