@@ -134,11 +134,12 @@ export const api = {
   updateCommonGroup: (id, payload) => request(`/api/common-groups/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCommonGroup: (id) => request(`/api/common-groups/${id}`, { method: "DELETE" }),
   listSessionCourses: (sessionId) => request(`/api/sessions/${sessionId}/courses`),
-  addSessionCourse: (sessionId, courseId, rubricIds) =>
-    request(`/api/sessions/${sessionId}/courses`, { method: "POST", body: JSON.stringify({ courseId, rubricIds }) }),
-  setSessionCourseRubrics: (sessionId, courseId, rubricIds) =>
-    request(`/api/sessions/${sessionId}/courses/${courseId}`, { method: "PUT", body: JSON.stringify({ rubricIds }) }),
-  removeSessionCourse: (sessionId, courseId) => request(`/api/sessions/${sessionId}/courses/${courseId}`, { method: "DELETE" }),
+  addSessionCourse: (sessionId, courseId, rubricIds, groupIds = []) =>
+    request(`/api/sessions/${sessionId}/courses`, { method: "POST", body: JSON.stringify({ courseId, rubricIds, groupIds }) }),
+  // Une ligne de cours de la session (`entryId`): ses évaluations cochées et/ou ses groupes.
+  updateSessionCourse: (sessionId, entryId, payload) =>
+    request(`/api/sessions/${sessionId}/courses/${entryId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  removeSessionCourse: (sessionId, entryId) => request(`/api/sessions/${sessionId}/courses/${entryId}`, { method: "DELETE" }),
   listGroups: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/api/groups${qs ? `?${qs}` : ""}`);

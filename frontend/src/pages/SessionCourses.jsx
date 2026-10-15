@@ -7,13 +7,21 @@ import { Card, Chip, FormCard, btnDanger, btnPrimary, btnSecondary } from "../co
 
 const input = "w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:border-gray-600 dark:bg-gray-800";
 
+/** Un cours est normalement donné à un seul groupe: en lier deux d'un coup est l'exception (groupe jumelé). */
+const confirmTwinned = (n) =>
+  window.confirm(
+    `Tu associes ce cours à ${n} groupes à la fois. En général un cours est donné à un seul groupe : pour deux groupes différents, ajoute le cours une fois pour chacun. À faire seulement pour un groupe jumelé. Continuer ?`
+  );
+
 /**
- * Ma session: les groupes de la session, ses cours, les évaluations cochées de chaque cours et les groupes qui
- * suivent chaque cours. C'est la seule source de ce qu'on peut corriger (onglet Corriger), suivre et envoyer.
+ * Ma session: les groupes de la session, ses cours (chaque cours peut y figurer plusieurs fois, pour d'autres
+ * groupes), les évaluations cochées de chaque ligne et ses groupes. C'est la seule source de ce qu'on peut
+ * corriger (onglet Corriger), suivre et envoyer.
  */
 export default function SessionCourses() {
   const { active } = useSession();
   const sessionId = active?._id;
+  const readOnly = Boolean(active?.archivedAt);
   const [entries, setEntries] = useState([]);
   const [library, setLibrary] = useState([]);
   const [rubrics, setRubrics] = useState([]);
@@ -22,6 +30,7 @@ export default function SessionCourses() {
   const [adding, setAdding] = useState(false);
   const [pick, setPick] = useState(null); // cours choisi dans la bibliothèque
   const [checked, setChecked] = useState(new Set());
+  const [pickedGroups, setPickedGroups] = useState([]);
   const [draft, setDraft] = useState({ title: "", code: "" });
 
   const load = useCallback(async () => {
@@ -46,56 +55,21 @@ export default function SessionCourses() {
   async function act(fn) {
     setError("");
     try {
-      const out = await fn();
-      if (Array.isArray(out)) setEntries(out);
+      await fn();
       await load();
+      return true;
     } catch (err) {
       setError(String(err.message || err));
+      return false;
     }
   }
 
-  const inSession = new Set(entries.map((e) => String(e.course._id)));
-  const freeCourses = library.filter((c) => !inSession.has(String(c._id)) && !c.archivedAt);
-  const rubricsOf = (courseId) => rubrics.filter((r) => String(r.course) === String(courseId));
-
-  function choose(course) {
-    setPick(course);
-    setChecked(new Set(rubricsOf(course._id).filter((r) => r.isActive).map((r) => String(r._id))));
-  }
-
-  function closeAdd() {
-    setAdding(false);
-    setPick(null);
-    setDraft({ title: "", code: "" });
-  }
-
-  async function addPicked() {
-    await act(() => api.addSessionCourse(sessionId, pick._id, [...checked]));
-    closeAdd();
-  }
-
-  // Le cours créé ici va aussi dans Ressources > Cours (c'est le même cours).
-  async function createAndAdd() {
-    if (!draft.title.trim()) return setError("Le nom du cours est requis.");
-    await act(async () => {
-      const course = await api.createCourse({ title: draft.title.trim(), code: draft.code.trim() });
-      return api.addSessionCourse(sessionId, course._id, []);
-    });
-    closeAdd();
-  }
-
-  function toggleRubric(entry, rubric) {
-    const rubricId = String(rubric._id);
-    const ids = new Set(entry.rubrics.filter((r) => r.imported).map((r) => String(r._id)));
-    if (ids.has(rubricId)) {
-      if (rubric.correctedCount > 0 && !window.confirm(`« ${rubric.title} » a déjà ${rubric.correctedCount} copie(s) corrigée(s). La décocher la retire de Corriger ; les copies sont conservées et reviennent si tu la recoches. Continuer ?`)) return;
-      ids.delete(rubricId);
-    } else ids.add(rubricId);
-    act(() => api.setSessionCourseRubrics(sessionId, entry.course._id, [...ids]));
-  }
-
   const groups = allGroups.filter((x) => x.activeGroup);
-  const readOnly = Boolean(active?.archivedAt);
+  const rubricsOf = (courseId) => rubrics.filter((r) => String(r.course) === String(courseId) && !r.archivedAt);
+  const timesGiven = (courseId) => entries.filter((e) => String(e.course._id) === String(courseId)).length;
+  // Un groupe qui suit déjà ce cours dans une autre ligne ne peut pas le suivre une seconde fois.
+  const takenBy = (courseId, groupId, exceptEntryId) =>
+    entries.some((e) => String(e.course._id) === String(courseId) && String(e._id) !== String(exceptEntryId) && e.groups.some((g) => String(g._id) === String(groupId)));
 
   // Ajouter un groupe à la session, ou le retirer (archivé: ses élèves et ses corrections restent, on peut le remettre).
   function toggleSessionGroup(g) {
@@ -105,11 +79,48 @@ export default function SessionCourses() {
     }
   }
 
-  const linked = (g, courseId) => (g.activeGroup?.courses || []).some((c) => String(c) === String(courseId));
-  function toggleGroup(g, courseId) {
-    const cur = g.activeGroup.courses || [];
-    const courses = linked(g, courseId) ? cur.filter((c) => String(c) !== String(courseId)) : [...cur, courseId];
-    act(() => api.updateGroup(g.activeGroup._id, { courses }));
+  function choose(course) {
+    setPick(course);
+    setChecked(new Set(rubricsOf(course._id).filter((r) => r.isActive).map((r) => String(r._id))));
+    setPickedGroups(groups.length === 1 && !takenBy(course._id, groups[0].activeGroup._id) ? [groups[0].activeGroup._id] : []);
+  }
+
+  function closeAdd() {
+    setAdding(false);
+    setPick(null);
+    setPickedGroups([]);
+    setDraft({ title: "", code: "" });
+  }
+
+  const togglePicked = (id) => setPickedGroups((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+
+  async function submit(createFirst) {
+    if (createFirst && !draft.title.trim()) return setError("Le nom du cours est requis.");
+    if (pickedGroups.length > 1 && !confirmTwinned(pickedGroups.length)) return;
+    // Le cours créé ici va aussi dans Ressources > Cours (c'est le même cours).
+    const ok = await act(async () => {
+      const course = createFirst ? await api.createCourse({ title: draft.title.trim(), code: draft.code.trim() }) : pick;
+      await api.addSessionCourse(sessionId, course._id, createFirst ? [] : [...checked], pickedGroups);
+    });
+    if (ok) closeAdd();
+  }
+
+  function toggleRubric(entry, rubric) {
+    const rubricId = String(rubric._id);
+    const ids = new Set(entry.rubrics.filter((r) => r.imported).map((r) => String(r._id)));
+    if (ids.has(rubricId)) {
+      if (rubric.correctedCount > 0 && !window.confirm(`« ${rubric.title} » a déjà ${rubric.correctedCount} copie(s) corrigée(s) pour ce cours. La décocher la retire de Corriger ; les copies sont conservées et reviennent si tu la recoches. Continuer ?`)) return;
+      ids.delete(rubricId);
+    } else ids.add(rubricId);
+    act(() => api.updateSessionCourse(sessionId, entry._id, { rubricIds: [...ids] }));
+  }
+
+  function toggleEntryGroup(entry, groupId) {
+    const cur = entry.groups.map((g) => String(g._id));
+    const adding = !cur.includes(String(groupId));
+    const next = adding ? [...cur, String(groupId)] : cur.filter((x) => x !== String(groupId));
+    if (adding && next.length > 1 && !confirmTwinned(next.length)) return;
+    act(() => api.updateSessionCourse(sessionId, entry._id, { groupIds: next }));
   }
 
   if (!active) {
@@ -120,13 +131,32 @@ export default function SessionCourses() {
     );
   }
 
+  const groupChips = (selected, onToggle, isTaken) =>
+    groups.length ? (
+      <div className="flex flex-wrap gap-2">
+        {groups.map((g) => {
+          const id = g.activeGroup._id;
+          const taken = isTaken(id);
+          return (
+            <span key={g._id} title={taken ? "Ce groupe suit déjà ce cours dans une autre ligne" : undefined} className={taken ? "opacity-40" : ""}>
+              <Chip icon={selected.includes(String(id)) ? "fa-check" : "fa-plus"} active={selected.includes(String(id))} onClick={() => !readOnly && !taken && onToggle(id)}>
+                {g.name}
+              </Chip>
+            </span>
+          );
+        })}
+      </div>
+    ) : (
+      <p className="text-xs text-gray-400">Aucun groupe dans la session. Ajoute-en dans « Groupes de la session ».</p>
+    );
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <PageSectionTitle
         icon="fa-book-open"
         iconBgClass="bg-emerald-600"
         title="Ma session"
-        subtitle={`Session : ${active.name}. 1) Choisis tes groupes. 2) Ajoute tes cours et coche leurs évaluations. 3) Indique quels groupes suivent chaque cours. Les groupes et leurs élèves se gèrent dans Ressources.`}
+        subtitle={`Session : ${active.name}. 1) Choisis tes groupes. 2) Ajoute chaque cours avec le groupe à qui tu le donnes et coche ses évaluations. Un même cours donné à deux groupes s'ajoute deux fois.`}
         className="!mb-0"
       />
 
@@ -144,11 +174,11 @@ export default function SessionCourses() {
         ) : (
           <Link to="/ressources/groupes" className={`${btnSecondary} inline-block`}>Créer un groupe dans Ressources</Link>
         )}
-        <p className="mt-2 text-xs text-gray-500">Un groupe ajouté amène ses élèves ; un groupe retiré garde ses élèves et ses corrections.</p>
+        <p className="mt-2 text-xs text-gray-500">Un groupe ajouté amène ses élèves ; un groupe retiré garde ses élèves et ses corrections. Les groupes et leurs élèves se gèrent dans Ressources.</p>
       </Card>
 
       {adding ? (
-        <FormCard mode="Ajout" title={pick ? `Évaluations de « ${pick.title} »` : "Ajouter un cours à la session"} accent="#059669" onBack={pick ? () => setPick(null) : closeAdd} backLabel={pick ? "Autre cours" : "Annuler"}>
+        <FormCard mode="Ajout" title={pick ? `Évaluations et groupe de « ${pick.title} »` : "Ajouter un cours à la session"} accent="#059669" onBack={pick ? () => setPick(null) : closeAdd} backLabel={pick ? "Autre cours" : "Annuler"}>
           {pick ? (
             <>
               {rubricsOf(pick._id).length === 0 ? (
@@ -174,34 +204,42 @@ export default function SessionCourses() {
                   ))}
                 </div>
               )}
-              <button type="button" className={btnPrimary} onClick={addPicked}>
-                Ajouter le cours ({checked.size} évaluation{checked.size > 1 ? "s" : ""})
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupe à qui tu donnes ce cours</p>
+                {groupChips(pickedGroups.map(String), togglePicked, (id) => takenBy(pick._id, id))}
+                {pickedGroups.length === 0 && <p className="mt-1 text-xs text-amber-700">Sans groupe, le cours n'apparaîtra pas dans Corriger. Tu pourras en choisir un plus tard.</p>}
+              </div>
+              <button type="button" className={btnPrimary} onClick={() => submit(false)}>
+                Ajouter le cours ({checked.size} évaluation{checked.size > 1 ? "s" : ""}, {pickedGroups.length} groupe{pickedGroups.length > 1 ? "s" : ""})
               </button>
             </>
           ) : (
             <>
               <div>
                 <p className="mb-2 text-xs font-bold uppercase text-gray-500">Depuis mes cours</p>
-                {freeCourses.length ? (
+                {library.filter((c) => !c.archivedAt).length ? (
                   <div className="flex flex-wrap gap-2">
-                    {freeCourses.map((c) => (
+                    {library.filter((c) => !c.archivedAt).map((c) => (
                       <Chip key={c._id} icon="fa-plus" onClick={() => choose(c)}>
                         {c.title}
                         {c.code && <span className="ml-1 opacity-60">{c.code}</span>}
+                        {timesGiven(c._id) > 0 && <span className="ml-1 opacity-60">(déjà {timesGiven(c._id)} fois)</span>}
                       </Chip>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Tous tes cours sont déjà dans la session.</p>
+                  <p className="text-xs text-gray-400">Aucun cours dans tes ressources : crée-en un ci-dessous.</p>
                 )}
               </div>
               <div>
                 <p className="mb-2 text-xs font-bold uppercase text-gray-500">Ou un nouveau cours</p>
-                <div className="grid gap-2 sm:grid-cols-[2fr_1fr_auto]">
+                <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
                   <input className={input} placeholder="Nom du cours" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
                   <input className={input} placeholder="Code (facultatif)" value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} />
-                  <button type="button" className={btnPrimary} onClick={createAndAdd}>Créer et ajouter</button>
                 </div>
+                <p className="mb-2 mt-3 text-xs font-bold uppercase text-gray-500">Groupe à qui tu donnes ce cours</p>
+                {groupChips(pickedGroups.map(String), togglePicked, () => false)}
+                <button type="button" className={`${btnPrimary} mt-3`} onClick={() => submit(true)}>Créer et ajouter</button>
                 <p className="mt-1 text-xs text-gray-500">Le cours est aussi rangé dans Ressources › Cours.</p>
               </div>
             </>
@@ -218,15 +256,28 @@ export default function SessionCourses() {
       <div className="grid gap-4 lg:grid-cols-2">
         {entries.map((entry) => (
           <Card
-            key={entry.course._id}
-            title={<><i className="fa-solid fa-book text-emerald-600" aria-hidden /> {entry.course.title}{entry.course.code && <span className="font-normal normal-case text-gray-400"> · {entry.course.code}</span>}</>}
+            key={entry._id}
+            title={
+              <>
+                <i className="fa-solid fa-book text-emerald-600" aria-hidden /> {entry.course.title}
+                {entry.course.code && <span className="font-normal normal-case text-gray-400"> · {entry.course.code}</span>}
+                {entry.groups.length === 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-amber-800">aucun groupe</span>
+                ) : (
+                  entry.groups.map((g) => (
+                    <span key={g._id} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-blue-700">{g.name}</span>
+                  ))
+                )}
+              </>
+            }
             actions={
               <button
                 type="button"
                 className={`${btnDanger} !px-2 !py-1 text-xs`}
+                disabled={readOnly}
                 onClick={() => {
-                  if (window.confirm(`Retirer « ${entry.course.title} » de la session ? Ses groupes ne pourront plus corriger ses évaluations (les corrections déjà faites sont conservées).`))
-                    act(() => api.removeSessionCourse(sessionId, entry.course._id));
+                  if (window.confirm(`Retirer « ${entry.course.title} »${entry.groups.length ? ` (${entry.groups.map((g) => g.name).join(", ")})` : ""} de la session ? Ces groupes ne pourront plus corriger ses évaluations (les corrections déjà faites sont conservées).`))
+                    act(() => api.removeSessionCourse(sessionId, entry._id));
                 }}
               >
                 Retirer
@@ -235,11 +286,25 @@ export default function SessionCourses() {
           >
             <div className="space-y-4">
               <div>
-                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Évaluations importées</p>
+                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupe{entry.groups.length > 1 ? "s" : ""} qui suivent ce cours</p>
+                {groupChips(
+                  entry.groups.map((g) => String(g._id)),
+                  (id) => toggleEntryGroup(entry, id),
+                  (id) => takenBy(entry.course._id, id, entry._id)
+                )}
+                {entry.groups.length > 1 && (
+                  <p className="mt-1.5 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    <i className="fa-solid fa-triangle-exclamation mr-1" aria-hidden />
+                    Ce cours est lié à {entry.groups.length} groupes (groupe jumelé). Si ce sont deux classes distinctes, ajoute plutôt le cours une fois par groupe.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Évaluations à corriger</p>
                 {entry.rubrics.length ? (
                   <div className="space-y-1.5">
                     {entry.rubrics.map((r) => (
-                      <label key={r._id} className="flex items-center gap-2 text-sm">
+                      <label key={r._id} className="flex flex-wrap items-center gap-2 text-sm">
                         <input type="checkbox" checked={r.imported} disabled={readOnly} onChange={() => toggleRubric(entry, r)} />
                         {r.title}
                         {!r.isActive && <span className="text-xs text-gray-400">(inactive)</span>}
@@ -249,20 +314,6 @@ export default function SessionCourses() {
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">Aucune évaluation dans ce cours. <Link to="/ressources/grilles" className="text-blue-600 underline">En créer une</Link></p>
-                )}
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupes qui suivent ce cours</p>
-                {groups.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {groups.map((g) => (
-                      <Chip key={g._id} icon={linked(g, entry.course._id) ? "fa-check" : "fa-plus"} active={linked(g, entry.course._id)} onClick={() => !readOnly && toggleGroup(g, entry.course._id)}>
-                        {g.name}
-                      </Chip>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">Aucun groupe dans la session. Ajoute-en un plus haut.</p>
                 )}
               </div>
             </div>

@@ -11,15 +11,20 @@ const sessionSchema = new mongoose.Schema(
     autoArchive: { type: Boolean, default: true },
     archivedAt: { type: Date, default: null },
     archivedBy: { type: String, enum: ["", "manual", "auto"], default: "" },
-    /** Cours de la session et, pour chacun, les évaluations (grilles) importées: détermine ce qu'on peut corriger. */
+    /**
+     * Cours donnés cette session. Une ligne = un cours donné à un ou plusieurs groupes (en général un seul): le même
+     * cours peut figurer plusieurs fois, chaque fois pour d'autres groupes. `rubrics` = évaluations cochées, ce qui
+     * détermine ce que ces groupes peuvent corriger.
+     */
     courses: {
       type: [
         new mongoose.Schema(
           {
             course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true },
             rubrics: [{ type: mongoose.Schema.Types.ObjectId, ref: "Rubric" }],
+            groups: [{ type: mongoose.Schema.Types.ObjectId, ref: "Group" }],
           },
-          { _id: false }
+          {}
         ),
       ],
       default: [],

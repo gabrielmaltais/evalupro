@@ -48,7 +48,7 @@ test("archive puis restaure une session: groupes et inscriptions seulement, les 
   const c = await post(h, "/api/courses", { title: "Réseaux" });
   const r = await post(h, "/api/rubrics", rubricBody("Examen 1", c.body._id));
   assert.equal(r.statusCode, 201);
-  const g = await post(h, "/api/groups", { name: "G1", courses: [c.body._id], rubrics: [r.body._id] });
+  const g = await post(h, "/api/groups", { name: "G1" });
   assert.equal(g.statusCode, 201);
   await post(h, `/api/groups/${g.body._id}/students`, { firstName: "Ana", lastName: "Roy" });
 
@@ -109,19 +109,16 @@ test("une grille doit être classée dans un cours", async () => {
 test("un groupe suit des cours de la session; les évaluations cochées de ces cours sont corrigeables", async () => {
   const h = await login("e1@example.com");
   const sess = await newSession(h);
-  const sid = sess._id || sess.body?._id;
+  const sid = sess._id;
   const c1 = await post(h, "/api/courses", { title: "Réseaux" });
   const c2 = await post(h, "/api/courses", { title: "Sécurité" });
   const r1 = await post(h, "/api/rubrics", rubricBody("Examen 1", c1.body._id));
   const r2 = await post(h, "/api/rubrics", rubricBody("Examen 2", c1.body._id));
   const r3 = await post(h, "/api/rubrics", rubricBody("TP sécurité", c2.body._id));
-  await post(h, `/api/sessions/${sid}/courses`, { courseId: c1.body._id, rubricIds: [r1.body._id] });
-  await post(h, `/api/sessions/${sid}/courses`, { courseId: c2.body._id, rubricIds: [r3.body._id] });
+  const g = await post(h, "/api/groups", { name: "G1" });
+  const e1 = (await post(h, `/api/sessions/${sid}/courses`, { courseId: c1.body._id, rubricIds: [r1.body._id], groupIds: [g.body._id] })).body[0];
+  await post(h, `/api/sessions/${sid}/courses`, { courseId: c2.body._id, rubricIds: [r3.body._id], groupIds: [g.body._id] });
 
-  const g = await post(h, "/api/groups", { name: "G1", courses: [c1.body._id] });
-  assert.deepEqual((await get(h, `/api/groups/${g.body._id}/rubrics`)).body.map((x) => x.title), ["Examen 1"]);
-
-  await request(app).put(`/api/groups/${g.body._id}`).set(h).send({ courses: [c1.body._id, c2.body._id] });
   const detail = (await get(h, `/api/groups/${g.body._id}`)).body;
   assert.deepEqual(detail.courseList.map((c) => c.title).sort(), ["Réseaux", "Sécurité"]);
   assert.deepEqual(detail.rubrics.map((x) => x.title).sort(), ["Examen 1", "TP sécurité"]);
@@ -130,10 +127,10 @@ test("un groupe suit des cours de la session; les évaluations cochées de ces c
   assert.deepEqual(rubrics.find((x) => x.title === "TP sécurité").groups, ["G1"]);
   assert.deepEqual(rubrics.find((x) => x.title === "Examen 2").groups, []);
 
-  // Décocher une évaluation ne la supprime pas; ne plus suivre un cours retire ses évaluations du groupe.
-  await request(app).put(`/api/sessions/${sid}/courses/${c1.body._id}`).set(h).send({ rubricIds: [r1.body._id, r2.body._id] });
+  // Cocher une évaluation de plus; ne plus donner un cours au groupe retire ses évaluations sans rien supprimer.
+  await request(app).put(`/api/sessions/${sid}/courses/${e1._id}`).set(h).send({ rubricIds: [r1.body._id, r2.body._id] });
   assert.deepEqual((await get(h, `/api/groups/${g.body._id}/rubrics`)).body.map((x) => x.title).sort(), ["Examen 1", "Examen 2", "TP sécurité"]);
-  await request(app).put(`/api/groups/${g.body._id}`).set(h).send({ courses: [c2.body._id] });
+  await request(app).put(`/api/sessions/${sid}/courses/${e1._id}`).set(h).send({ groupIds: [] });
   assert.deepEqual((await get(h, `/api/groups/${g.body._id}/rubrics`)).body.map((x) => x.title), ["TP sécurité"]);
   assert.equal((await get(h, "/api/rubrics")).body.length, 3);
 });
@@ -141,12 +138,12 @@ test("un groupe suit des cours de la session; les évaluations cochées de ces c
 test("dupliquer une grille: la copie est indépendante, importable dans un autre cours ou à la place de l'originale", async () => {
   const h = await login("e1b@example.com");
   const sess = await newSession(h);
-  const sid = sess._id || sess.body?._id;
+  const sid = sess._id;
   const c1 = await post(h, "/api/courses", { title: "Réseaux" });
   const c2 = await post(h, "/api/courses", { title: "Sécurité" });
   const r = await post(h, "/api/rubrics", rubricBody("Examen", c1.body._id));
-  await post(h, `/api/sessions/${sid}/courses`, { courseId: c1.body._id, rubricIds: [r.body._id] });
-  const g = await post(h, "/api/groups", { name: "G1", courses: [c1.body._id] });
+  const g = await post(h, "/api/groups", { name: "G1" });
+  await post(h, `/api/sessions/${sid}/courses`, { courseId: c1.body._id, rubricIds: [r.body._id], groupIds: [g.body._id] });
 
   const dup = await post(h, `/api/rubrics/${r.body._id}/copy`, { replaceInGroups: true });
   assert.equal(dup.statusCode, 201);
@@ -197,7 +194,8 @@ test("la correction hérite du groupe et de la session; l'élève garde sa fiche
   const s1 = await newSession(h, "A26");
   const c = await post(h, "/api/courses", { title: "Réseaux" });
   const r = await post(h, "/api/rubrics", rubricBody("Examen", c.body._id));
-  const g = await post(h, "/api/groups", { name: "G1", courses: [c.body._id], rubrics: [r.body._id] });
+  const g = await post(h, "/api/groups", { name: "G1" });
+  await post(h, `/api/sessions/${s1._id}/courses`, { courseId: c.body._id, groupIds: [g.body._id] });
   const st = (await post(h, `/api/groups/${g.body._id}/students`, { firstName: "Ana", lastName: "Roy" })).body.student;
   const ev = await post(h, "/api/evaluations", { studentName: "x", studentId: st._id, date: "2026-10-01", rubric: r.body._id, scores: {} });
   assert.equal(ev.body.group, g.body._id);

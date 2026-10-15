@@ -34,7 +34,8 @@ test("un groupe commun se retrouve d'une session à l'autre, avec des cours prop
   const c2 = (await post(h, "/api/courses", { title: "Sécurité" })).body;
 
   // Créé dans la session: apparaît dans Ressources, utilisé en A26.
-  await post(h, "/api/groups", { name: "TI-1", session: a._id, courses: [c1._id], color: "#ff0000" });
+  const ga1 = (await post(h, "/api/groups", { name: "TI-1", session: a._id, color: "#ff0000" })).body;
+  await post(h, `/api/sessions/${a._id}/courses`, { courseId: c1._id, groupIds: [ga1._id] });
   let list = (await get(h, "/api/common-groups")).body;
   assert.equal(list.length, 1);
   assert.equal(list[0].color, "#ff0000");
@@ -42,7 +43,9 @@ test("un groupe commun se retrouve d'une session à l'autre, avec des cours prop
 
   // Nouvelle session: le groupe commun y est ajouté avec d'autres cours; A26 garde les siens.
   const b = (await post(h, "/api/sessions", { name: "H27", startDate: "2027-01-10", endDate: "2099-12-30" })).body;
-  const gb = (await post(h, "/api/groups", { name: "TI-1", session: b._id, courses: [c2._id] })).body;
+  let gb = (await post(h, "/api/groups", { name: "TI-1", session: b._id })).body;
+  await post(h, `/api/sessions/${b._id}/courses`, { courseId: c2._id, groupIds: [gb._id] });
+  gb = (await get(h, `/api/groups?session=${b._id}`)).body[0];
   assert.equal(gb.color, "#ff0000");
   const groupsA = (await get(h, `/api/groups?session=${a._id}`)).body;
   assert.deepEqual(groupsA[0].courseList.map((c) => c.title), ["Réseaux"]);

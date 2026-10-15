@@ -8,6 +8,7 @@ const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 const { resolveActiveSession } = require("../services/sessionService");
 const { syncCommonGroups } = require("../services/commonGroupService");
+const sessionCourses = require("../services/sessionCourseService");
 
 const router = express.Router();
 router.use(auth);
@@ -26,7 +27,7 @@ router.get("/", async (req, res) => {
     await syncCommonGroups(req.user._id);
     const [items, groups, active] = await Promise.all([
       CommonGroup.find({ createdBy: req.user._id }).sort({ name: 1 }).lean(),
-      Group.find({ createdBy: req.user._id }).select("name session courses archivedAt").lean(),
+      Group.find({ createdBy: req.user._id }).select("name session archivedAt").lean(),
       resolveActiveSession(req.user),
     ]);
     const sessions = await Session.find({ _id: { $in: groups.map((g) => g.session) } }).select("name").lean();
@@ -38,7 +39,7 @@ router.get("/", async (req, res) => {
         return {
           ...c,
           sessions: mine.map((g) => ({ _id: g.session, name: sessionName.get(String(g.session)) || "", groupId: g._id })),
-          activeGroup: current ? { _id: current._id, courses: current.courses } : null,
+          activeGroup: current ? { _id: current._id, courses: sessionCourses.courseIdsOf(active, current) } : null,
         };
       })
     );

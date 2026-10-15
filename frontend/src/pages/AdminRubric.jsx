@@ -119,6 +119,10 @@ export default function AdminRubric() {
   }, [searchParams]);
 
   const sessionEntry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
+  const correctedHere = sessionEntries
+    .filter((e) => String(e.course._id) === String(courseId))
+    .flatMap((e) => e.rubrics.filter((r) => String(r._id) === String(selectedId)))
+    .reduce((n, r) => n + (r.correctedCount || 0), 0);
   const importedHere = (rid) => sessionEntries.some((e) => e.rubrics.some((r) => String(r._id) === String(rid) && r.imported));
   // Valeurs par défaut de la section session, recalculées quand on change d'évaluation ou de cours.
   const wantedKey = `${selectedId || "new"}|${courseId}|${sessionEntries.length}`;
@@ -128,16 +132,17 @@ export default function AdminRubric() {
     setSessionDirty(false);
   }
 
-  /** Après l'enregistrement: l'évaluation est cochée (ou décochée) dans la session. */
+  /** Après l'enregistrement: l'évaluation est cochée (ou décochée) dans les lignes de ce cours de la session. */
   async function applySessionLinks(rid) {
     if (!active?._id || active.archivedAt || !courseId) return;
-    const entry = sessionEntries.find((e) => String(e.course._id) === String(courseId));
-    const imported = entry ? entry.rubrics.filter((r) => r.imported).map((r) => String(r._id)) : [];
+    const here = sessionEntries.filter((e) => String(e.course._id) === String(courseId));
+    const has = (e) => e.rubrics.some((r) => r.imported && String(r._id) === String(rid));
+    const ids = (e) => e.rubrics.filter((r) => r.imported).map((r) => String(r._id));
     if (useInSession) {
-      if (!entry) await api.addSessionCourse(active._id, courseId, [rid]);
-      else if (!imported.includes(String(rid))) await api.setSessionCourseRubrics(active._id, courseId, [...imported, String(rid)]);
-    } else if (imported.includes(String(rid))) {
-      await api.setSessionCourseRubrics(active._id, courseId, imported.filter((id) => id !== String(rid)));
+      if (!here.length) await api.addSessionCourse(active._id, courseId, [rid]);
+      else if (!here.some(has)) await api.updateSessionCourse(active._id, here[0]._id, { rubricIds: [...ids(here[0]), String(rid)] });
+    } else {
+      for (const e of here.filter(has)) await api.updateSessionCourse(active._id, e._id, { rubricIds: ids(e).filter((id) => id !== String(rid)) });
     }
     await loadSessionLinks();
     setSessionDirty(false);
@@ -773,7 +778,7 @@ export default function AdminRubric() {
                         <p className="text-xs text-gray-500">
                           <i className="fa-solid fa-link mr-1" aria-hidden />
                           {useInSession ? `${courseLabel(courseId)} · ${sessionEntry ? "cochée dans la session" : "le cours sera ajouté à la session"}. Les groupes qui suivent le cours se choisissent dans « Ma session ».` : "Non cochée : elle n'apparaît pas dans Corriger."}
-                          {!useInSession && sessionEntry?.rubrics.find((r) => String(r._id) === String(selectedId))?.correctedCount > 0 && ` Attention : ${sessionEntry.rubrics.find((r) => String(r._id) === String(selectedId)).correctedCount} copie(s) déjà corrigée(s) (conservées).`}
+                          {!useInSession && correctedHere > 0 && ` Attention : ${correctedHere} copie(s) déjà corrigée(s) (conservées).`}
                         </p>
                       </div>
                     )}

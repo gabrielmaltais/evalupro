@@ -138,37 +138,39 @@ function courseError(res, error, fallback) {
   res.status(code).json(code === 400 ? { message: fallback, details: error.message } : { message: error.message });
 }
 
-/** Ajoute un cours de la bibliothèque à la session; `rubricIds` omis: ses évaluations actives sont importées. */
+/** Ajoute un cours de la bibliothèque à la session (autant de fois qu'il est donné); `rubricIds` omis: ses évaluations actives. */
 router.post("/:id/courses", roles("admin", "teacher"), async (req, res) => {
   try {
-    const { courseId, rubricIds } = z.object({ courseId: z.string(), rubricIds: z.array(z.string()).optional() }).parse(req.body);
+    const { courseId, rubricIds, groupIds } = z
+      .object({ courseId: z.string(), rubricIds: z.array(z.string()).optional(), groupIds: z.array(z.string()).optional() })
+      .parse(req.body);
     const session = await editableSession(req, res);
     if (!session) return;
-    await sessionCourses.addCourse(req.user._id, session, courseId, rubricIds);
+    await sessionCourses.addCourse(req.user._id, session, courseId, rubricIds, groupIds);
     res.status(201).json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
   } catch (error) {
     courseError(res, error, "Ajout du cours impossible");
   }
 });
 
-/** Remplace les évaluations importées pour ce cours. */
-router.put("/:id/courses/:courseId", roles("admin", "teacher"), async (req, res) => {
+/** Modifie une ligne de cours: ses évaluations cochées et/ou ses groupes. */
+router.put("/:id/courses/:entryId", roles("admin", "teacher"), async (req, res) => {
   try {
-    const { rubricIds } = z.object({ rubricIds: z.array(z.string()) }).parse(req.body);
+    const payload = z.object({ rubricIds: z.array(z.string()).optional(), groupIds: z.array(z.string()).optional() }).parse(req.body);
     const session = await editableSession(req, res);
     if (!session) return;
-    await sessionCourses.setCourseRubrics(req.user._id, session, req.params.courseId, rubricIds);
+    await sessionCourses.updateEntry(req.user._id, session, req.params.entryId, payload);
     res.json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
   } catch (error) {
     courseError(res, error, "Mise à jour impossible");
   }
 });
 
-router.delete("/:id/courses/:courseId", roles("admin", "teacher"), async (req, res) => {
+router.delete("/:id/courses/:entryId", roles("admin", "teacher"), async (req, res) => {
   try {
     const session = await editableSession(req, res);
     if (!session) return;
-    await sessionCourses.removeCourse(req.user._id, session, req.params.courseId);
+    await sessionCourses.removeEntry(session, req.params.entryId);
     res.json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
   } catch (error) {
     courseError(res, error, "Retrait impossible");
@@ -290,20 +292,22 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
       sourceGroups.map((g) => ({
         name: g.name,
         session: created._id,
-        courses: g.courses,
         color: g.color,
         icon: g.icon,
         createdBy: req.user._id,
       }))
     );
 
-    // Les cours des groupes repris suivent; leurs évaluations seulement si demandé.
-    const carriedCourses = [...new Set(sourceGroups.flatMap((g) => g.courses.map(String)))];
-    if (carriedCourses.length) {
-      const kept = new Map(source.courses.map((c) => [String(c.course), c.rubrics]));
-      created.courses = carriedCourses.map((cid) => ({ course: cid, rubrics: payload.carryRubrics ? kept.get(cid) || [] : [] }));
-      await created.save();
-    }
+    // Les cours des groupes repris suivent, pour les nouveaux groupes; leurs évaluations seulement si demandé.
+    const newIdOf = new Map(sourceGroups.map((g, i) => [String(g._id), newGroups[i]._id]));
+    created.courses = source.courses
+      .filter((e) => e.groups.some((g) => newIdOf.has(String(g))))
+      .map((e) => ({
+        course: e.course,
+        rubrics: payload.carryRubrics ? e.rubrics : [],
+        groups: e.groups.filter((g) => newIdOf.has(String(g))).map((g) => newIdOf.get(String(g))),
+      }));
+    if (created.courses.length) await created.save();
 
     let carried = 0;
     if (payload.carryStudents && newGroups.length) {

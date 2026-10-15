@@ -13,7 +13,7 @@ const roles = require("../middleware/roles");
 const { normalizeStudentPayload } = require("../utils/studentName");
 const { resolveActiveSession } = require("../services/sessionService");
 const sessionCourses = require("../services/sessionCourseService");
-const { ensureCommonGroup } = require("../services/commonGroupService");
+const { ensureCommonGroup, forgetGroup } = require("../services/commonGroupService");
 const { enrollStudent, unenrollStudent, availableRubrics, httpError, isId } = require("../services/groupService");
 
 const router = express.Router();
@@ -24,7 +24,6 @@ const hex = z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "Coule
 const groupSchema = z.object({
   name: z.string().trim().min(1, "Le nom du groupe est requis").max(120),
   session: z.string().optional(),
-  courses: z.array(z.string()).optional(),
   color: z.union([hex, z.literal("")]).optional(),
   icon: z.string().trim().max(80).optional(),
 });
@@ -51,17 +50,13 @@ async function targetSession(req, value) {
   return active;
 }
 
-/** Garde seulement les ids de ressources qui appartiennent à l'utilisateur. */
-async function ownedIds(Model, req, ids) {
-  const valid = (ids || []).filter(isId);
-  if (!valid.length) return [];
-  return Model.find(mine(req, { _id: { $in: valid } })).distinct("_id");
-}
-
 async function present(req, groups) {
   const list = groups.map((g) => (g.toObject ? g.toObject() : g));
   const ids = list.map((g) => g._id);
   const rubricIdsOf = await sessionCourses.rubricIdsByGroup(req.user._id, list);
+  const sessionDocs = await Session.find(mine(req, { _id: { $in: list.map((g) => g.session) } })).select("courses");
+  const sessionById = new Map(sessionDocs.map((x) => [String(x._id), x]));
+  for (const g of list) g.courses = sessionCourses.courseIdsOf(sessionById.get(String(g.session)), g);
   const [students, evaluations, courses, rubrics] = await Promise.all([
     Enrollment.aggregate([{ $match: { group: { $in: ids }, archivedAt: null } }, { $group: { _id: "$group", n: { $sum: 1 } } }]),
     Evaluation.aggregate([{ $match: { owner: req.user._id, group: { $in: ids } } }, { $group: { _id: "$group", n: { $sum: 1 } } }]),
@@ -125,7 +120,6 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
     const item = await Group.create({
       name: payload.name,
       session: session._id,
-      courses: await ownedIds(Course, req, payload.courses),
       color: payload.color || common.color || "",
       icon: payload.icon || common.icon || "",
       createdBy: req.user._id,
@@ -144,7 +138,6 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
         await Enrollment.insertMany(members.map((student) => ({ student, group: item._id, session: session._id, createdBy: req.user._id })));
       }
     }
-    await sessionCourses.ensureCoursesInSession(req.user._id, await Session.findById(session._id), item.courses);
     res.status(201).json((await present(req, [await Group.findById(item._id)]))[0]);
   } catch (error) {
     sendError(res, error, "Groupe invalide");
@@ -159,14 +152,6 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
     if (payload.name !== undefined) group.name = payload.name;
     if (payload.color !== undefined) group.color = payload.color;
     if (payload.icon !== undefined) group.icon = payload.icon;
-    if (payload.courses !== undefined) {
-      // Un groupe ne suit que des cours de sa session: on les ajoute d'abord à la session (page Ma session).
-      const session = await Session.findOne(mine(req, { _id: group.session }));
-      const inSession = new Set((session?.courses || []).map((c) => String(c.course)));
-      const wanted = await ownedIds(Course, req, payload.courses);
-      if (wanted.some((id) => !inSession.has(String(id)))) throw httpError(409, "Ajoute d'abord ce cours à la session.");
-      group.courses = wanted;
-    }
     await group.save();
     res.json((await present(req, [await Group.findById(group._id)]))[0]);
   } catch (error) {
@@ -273,6 +258,7 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
     await Enrollment.deleteMany({ group: group._id });
     await Evaluation.updateMany({ owner: req.user._id, group: group._id }, { $set: { group: null } });
     await group.deleteOne();
+    await forgetGroup(req.user._id, group);
     res.status(204).send();
   } catch (error) {
     sendError(res, error, "Suppression impossible");

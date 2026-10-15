@@ -3,6 +3,7 @@ const { z } = require("zod");
 const Course = require("../models/Course");
 const Rubric = require("../models/Rubric");
 const Group = require("../models/Group");
+const Session = require("../models/Session");
 const { syncCourseRubrics } = require("../services/courseSync");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
@@ -119,7 +120,7 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
       });
     }
     await course.deleteOne();
-    await Group.updateMany({ createdBy: req.user._id, courses: course._id }, { $pull: { courses: course._id } });
+    await Session.updateMany({ createdBy: req.user._id, "courses.course": course._id }, { $pull: { courses: { course: course._id } } });
     res.status(204).send();
   } catch (error) {
     res.status(400).json({ message: "Suppression invalide", details: error.message });

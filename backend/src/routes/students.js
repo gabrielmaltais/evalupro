@@ -9,6 +9,8 @@ const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const { auth } = require("../middleware/auth");
 const { normalizeStudentPayload } = require("../utils/studentName");
 const { resolveActiveSession } = require("../services/sessionService");
+const { forgetGroup } = require("../services/commonGroupService");
+const { courseIdsOf } = require("../services/sessionCourseService");
 const { findOrCreateGroup, enrollStudent, unenrollStudent, attachGroups, isId, httpError } = require("../services/groupService");
 
 const router = express.Router();
@@ -87,7 +89,7 @@ router.get("/group-dashboard", async (req, res) => {
       }
       return byGroup.get(name);
     };
-    groups.forEach((g) => row(g.name, { groupId: g._id, courses: g.courses }));
+    groups.forEach((g) => row(g.name, { groupId: g._id, courses: courseIdsOf(session, g) }));
     withGroup.forEach((s) => {
       row(s.group || "Sans groupe").students += 1;
     });
@@ -340,10 +342,10 @@ router.post("/groups/merge", async (req, res) => {
           moved += 1;
         }
       }
-      await Group.updateOne({ _id: dest._id }, { $addToSet: { courses: { $each: src.courses }, rubrics: { $each: src.rubrics } } });
       await Evaluation.updateMany({ owner: req.user._id, group: src._id }, { $set: { group: dest._id } });
       await EvaluationEmailDelivery.updateMany({ owner: req.user._id, group: src.name }, { $set: { group: dest.name } });
       await src.deleteOne();
+      await forgetGroup(req.user._id, src, dest._id);
     }
     res.json({ modified: moved });
   } catch (error) {
@@ -380,6 +382,7 @@ router.post("/groups/delete-with-students", async (req, res) => {
     const delRes = await EvaluationEmailDelivery.deleteMany({ owner: req.user._id, studentId: { $in: ids }, group: gn });
     await Enrollment.deleteMany({ group: group._id });
     await group.deleteOne();
+    await forgetGroup(req.user._id, group);
     // Les fiches encore inscrites ailleurs sont conservées.
     const stillEnrolled = new Set((await Enrollment.find({ student: { $in: ids } }).distinct("student")).map(String));
     const toDelete = ids.filter((id) => !stillEnrolled.has(String(id)));
@@ -405,6 +408,7 @@ router.delete("/groups/:groupName", async (req, res) => {
     await Evaluation.updateMany({ owner: req.user._id, group: group._id }, { $set: { group: null } });
     await EvaluationEmailDelivery.updateMany({ owner: req.user._id, group: name }, { $set: { group: "" } });
     await group.deleteOne();
+    await forgetGroup(req.user._id, group);
     res.json({ modified: result.deletedCount });
   } catch (error) {
     sendError(res, error, "Dissolution du groupe impossible");

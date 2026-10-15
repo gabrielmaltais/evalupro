@@ -8,7 +8,8 @@ const port = process.env.PORT || 4000;
 const User = require("./models/User");
 const { autoArchiveExpiredSessions } = require("./services/sessionService");
 const { migrateGroupsForPending } = require("./services/groupMigration");
-const { backfillSessionCourses } = require("./services/sessionCourseService");
+const { backfillSessionCourses, migrateEntryGroups } = require("./services/sessionCourseService");
+const { purgeOrphanCommonGroups } = require("./services/commonGroupService");
 
 async function start() {
   await connectDb(process.env.MONGODB_URI);
@@ -48,6 +49,10 @@ async function start() {
   try {
     const n = await backfillSessionCourses();
     if (n) console.log("🔁 Cours déduits pour %d session(s).", n);
+    const m = await migrateEntryGroups();
+    if (m) console.log("🔁 Groupes des cours reportés dans %d session(s).", m);
+    const o = await purgeOrphanCommonGroups();
+    if (o) console.log("🧹 %d groupe(s) supprimé(s) retiré(s) des propositions.", o);
   } catch (error) {
     console.error("Cours de session impossibles à déduire:", error);
   }
