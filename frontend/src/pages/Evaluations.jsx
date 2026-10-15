@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import PageSectionTitle from "../components/PageSectionTitle";
 import HubContextBar from "../components/HubContextBar";
 import { Chip } from "../components/ui";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
@@ -1535,22 +1534,9 @@ export default function Evaluations() {
     setScores(s => ({ ...s, [cid]: Math.min(Math.max(0, Number(total.toFixed(2))), criterion.weight) }));
   }
 
-  const pageSubtitle = useMemo(() => {
-    if (evalPageTab === "suivi") return "Suivi d'évaluation par examen";
-    if (evalPageTab === "envois") return "Envois de copies par courriel";
-    return "Plateforme d'évaluation";
-  }, [evalPageTab]);
-
   return (
     <>
       <main className="flex w-full flex-1 flex-col max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-4 space-y-6">
-        <PageSectionTitle
-          icon="fa-graduation-cap"
-          iconBgClass="bg-blue-600"
-          title="ÉvaluPro"
-          subtitle={pageSubtitle}
-        />
-
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200">{error}</div>
         )}

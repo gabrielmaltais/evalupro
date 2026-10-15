@@ -104,11 +104,8 @@ function AppNav() {
   ];
 
   return (
-    <nav
-      className="flex min-w-0 flex-1 justify-center lg:justify-center px-0 sm:px-2"
-      aria-label="Navigation principale"
-    >
-      <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-2xl bg-gray-100/90 p-1 py-0.5 shadow-inner [scrollbar-width:none] sm:flex-wrap sm:justify-center sm:overflow-visible sm:gap-1 dark:bg-gray-800/80 dark:ring-gray-700/60 [&::-webkit-scrollbar]:hidden sm:[scrollbar-width:auto] ring-1 ring-gray-200/60">
+    <nav className="flex min-w-0 justify-center" aria-label="Navigation principale">
+      <div className="grid w-full grid-cols-3 gap-0.5 rounded-2xl bg-gray-100/90 p-1 shadow-inner ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60 sm:gap-1 lg:flex lg:w-auto lg:items-center">
         {links.map((l) => (
           <NavLink
             key={l.to}
@@ -116,7 +113,7 @@ function AppNav() {
             end={l.end !== false}
             className={({ isActive }) =>
               [
-                "flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-medium transition-all duration-200 sm:px-3.5 sm:py-2 sm:text-sm",
+                "flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium transition-all duration-200 sm:px-3.5 sm:text-sm lg:shrink-0",
                 isActive
                   ? "bg-white text-blue-600 shadow-sm ring-1 ring-gray-200/80 dark:bg-gray-700 dark:text-blue-300 dark:ring-gray-600"
                   : "text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-gray-100",
@@ -124,7 +121,7 @@ function AppNav() {
             }
           >
             <i className={`fa-solid ${l.icon} text-[0.85em] opacity-90`} aria-hidden />
-            <span className="whitespace-nowrap">{l.label}</span>
+            <span className="truncate">{l.label}</span>
           </NavLink>
         ))}
       </div>
@@ -137,26 +134,24 @@ function ShellBody() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-200 text-gray-800 font-sans dark:bg-gray-950 dark:text-gray-100 dm-bg">
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/85 shadow-sm backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/85">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:px-6 sm:py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8">
-          <div className="flex min-w-0 items-center justify-between gap-2 lg:min-w-[10rem] lg:justify-start lg:shrink-0">
-            <Link
-              to="/session"
-              className="group flex items-center gap-2.5 rounded-xl outline-none ring-blue-500/0 transition focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br sm:h-10 sm:w-10 from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/20 transition group-hover:shadow-lg group-hover:shadow-blue-600/25">
-                <i className="fa-solid fa-graduation-cap text-lg" aria-hidden />
-              </span>
-              <span className="hidden text-lg font-bold tracking-tight text-gray-900 min-[420px]:inline dark:text-white">ÉvaluPro</span>
-            </Link>
-            <div className="flex min-w-0 items-center lg:hidden">
-              <HeaderActions />
-            </div>
+        {/* Une seule rangée sur grand écran (logo | menu | actions); sur petit écran le menu passe dessous, sur toute la largeur. */}
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 px-4 py-2 sm:px-6 sm:py-3 lg:grid-cols-[auto_1fr_auto] lg:gap-x-6 lg:px-8">
+          <Link
+            to="/session"
+            className="group flex min-w-0 items-center gap-2.5 rounded-xl outline-none ring-blue-500/0 transition focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/20 transition group-hover:shadow-lg group-hover:shadow-blue-600/25 sm:h-10 sm:w-10">
+              <i className="fa-solid fa-graduation-cap text-lg" aria-hidden />
+            </span>
+            <span className="hidden text-lg font-bold tracking-tight text-gray-900 min-[420px]:inline dark:text-white">ÉvaluPro</span>
+          </Link>
+
+          <div className="flex min-w-0 justify-end lg:order-3">
+            <HeaderActions />
           </div>
 
-          <AppNav />
-
-          <div className="hidden items-center justify-end lg:flex lg:min-w-[10rem] lg:shrink-0">
-            <HeaderActions />
+          <div className="col-span-2 min-w-0 lg:order-2 lg:col-span-1">
+            <AppNav />
           </div>
         </div>
       </header>
