@@ -477,7 +477,7 @@ export default function AdminStudents() {
                     return (
                       <div
                         key={g.group}
-                        className={`ui-item no-chevron !gap-2 !p-0.5 ${isActive ? "is-active" : ""}`}
+                        className={`ui-item no-chevron !gap-1 !p-1 ${isActive ? "is-active" : ""}`}
                       >
                         <button
                           type="button"
@@ -493,43 +493,37 @@ export default function AdminStudents() {
                             {g.students} étu. • {g.evaluations} évals.
                           </span>
                         </button>
-                        <div className="flex shrink-0 flex-row flex-wrap gap-0.5 self-start sm:flex-col">
+                        <div className="flex shrink-0 items-center gap-1 pr-1.5">
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              clearGroup(g.group);
-                            }}
-                            className="rounded-lg px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 hover:underline dark:hover:bg-red-950/50"
-                            title={`Retirer le nom de groupe des étudiants (sans les supprimer)`}
+                            onClick={(e) => { e.stopPropagation(); clearGroup(g.group); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
+                            title={`Vider le groupe ${g.group} (retire le nom de groupe, garde les étudiants)`}
+                            aria-label={`Vider le groupe ${g.group} (retire le nom de groupe, garde les étudiants)`}
                           >
-                            Vider
+                            <i className="fa-solid fa-eraser" aria-hidden />
                           </button>
                           {g.group !== "Sans groupe" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                archiveGroup(g.group);
-                              }}
-                              className="rounded-lg px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-50 hover:underline"
-                              title="Archiver le groupe (conserve étudiants et évaluations)"
-                            >
-                              Archiver
-                            </button>
-                          )}
-                          {g.group !== "Sans groupe" && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPurgeGroupModal(g.group);
-                              }}
-                              className="rounded-lg px-2 py-1.5 text-[11px] font-semibold text-white bg-red-700 hover:bg-red-800 dark:bg-red-900 dark:hover:bg-red-950"
-                              title="Supprimer définitivement le groupe et tous les étudiants"
-                            >
-                              Tout suppr.
-                            </button>
+                            <>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); archiveGroup(g.group); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/50"
+                            title={`Archiver le groupe ${g.group} (conserve étudiants et évaluations)`}
+                            aria-label={`Archiver le groupe ${g.group} (conserve étudiants et évaluations)`}
+                          >
+                            <i className="fa-solid fa-box-archive" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openPurgeGroupModal(g.group); }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-600 hover:text-white"
+                            title={`Supprimer définitivement le groupe ${g.group} et tous ses étudiants`}
+                            aria-label={`Supprimer définitivement le groupe ${g.group} et tous ses étudiants`}
+                          >
+                            <i className="fa-solid fa-trash" aria-hidden />
+                          </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -580,8 +574,8 @@ export default function AdminStudents() {
                 {filteredStudents.map((s) => (
                   <button key={s._id} onClick={() => selectStudent(s)} className={`ui-item !py-1.5 ${selectedId === s._id ? "is-active" : ""}`}>
                     <div className="min-w-0">
-                      <div className="font-medium text-sm">{studentDisplayName(s)}</div>
-                      <div className="text-xs text-gray-500">{s.email || "Sans email"}</div>
+                      <div className="truncate font-medium text-sm">{studentDisplayName(s)}</div>
+                      <div className="truncate text-xs text-gray-500">{s.email || "Sans email"}</div>
                     </div>
                   </button>
                 ))}

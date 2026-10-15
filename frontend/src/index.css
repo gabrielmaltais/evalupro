@@ -698,13 +698,15 @@ html:not(.dark) .bg-white.rounded-2xl { box-shadow: 0 1px 3px rgba(15, 23, 42, 0
   padding: 0.6rem 0.8rem;
   background: #fff;
   border: 1px solid var(--ui-border);
-  border-left: 4px solid transparent;
   border-radius: 0.75rem;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
+/* Barre d'accent en ombre intérieure : pas de bordure gauche transparente qui « coupe » la carte, pas de décalage au clic. */
 .ui-item:hover { border-color: var(--ui-accent); background: #eff6ff; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15); }
-.ui-item.is-active { border-color: var(--ui-accent); border-left-color: var(--ui-accent); background: #dbeafe; }
+.ui-item.is-active { border-color: var(--ui-accent); background: #dbeafe; box-shadow: inset 4px 0 0 var(--ui-accent); }
+.ui-item > :first-child { min-width: 0; flex: 1 1 auto; }
+.ui-item:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 .ui-item::after { content: "\203A"; margin-left: auto; font-size: 1.3rem; line-height: 1; color: #94a3b8; }
 .ui-item.no-chevron::after { content: none; }
 .ui-info { background: var(--ui-info); border-radius: 0.6rem; padding: 0.55rem 0.75rem; }
@@ -713,7 +715,7 @@ html:not(.dark) .bg-white.rounded-2xl { box-shadow: 0 1px 3px rgba(15, 23, 42, 0
 .dark .ui-card, .dark .ui-item { background: rgba(13, 22, 45, 0.75); border-color: rgba(99, 130, 255, 0.25); }
 .dark .ui-card-head, .dark .ui-form .ui-card-head { background: rgba(20, 32, 70, 0.8); color: #cbd5e1; }
 .dark .ui-item:hover { background: rgba(99, 130, 255, 0.14); border-color: #818cf8; }
-.dark .ui-item.is-active { background: rgba(99, 130, 255, 0.22); border-color: #818cf8; }
+.dark .ui-item.is-active { background: rgba(99, 130, 255, 0.22); border-color: #818cf8; box-shadow: inset 4px 0 0 #818cf8; }
 .dark .ui-info { background: rgba(10, 18, 40, 0.7); }
 .dark .ui-label { color: #94a3b8; }
 
