@@ -10,12 +10,12 @@ function SessionSwitcher() {
   if (open.length === 0) return null;
   return (
     <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-      <i className="fa-solid fa-calendar-check" aria-hidden />
+      <i className="fa-solid fa-calendar-check hidden sm:inline" aria-hidden />
       <span className="sr-only">Session de travail</span>
       <select
         value={active?._id || ""}
         onChange={(e) => switchTo(e.target.value || null)}
-        className="max-w-[10rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 sm:max-w-[14rem]"
+        className="max-w-[6.5rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 sm:max-w-[14rem]"
         title="Session de travail"
       >
         {open.map((s) => (
@@ -29,7 +29,7 @@ function SessionSwitcher() {
 }
 
 const iconBtn =
-  "flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-white hover:text-gray-900 hover:shadow-sm dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100";
+  "flex h-8 w-8 items-center justify-center rounded-xl sm:h-9 sm:w-9 text-gray-500 transition-colors hover:bg-white hover:text-gray-900 hover:shadow-sm dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100";
 
 /** Raccourcis en icônes (Administration, thème, déconnexion) et avatar pour « Mon compte », en haut à droite. */
 function HeaderActions() {
@@ -42,7 +42,7 @@ function HeaderActions() {
       .map((w) => w[0].toUpperCase())
       .join("") || "?";
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
       <SessionSwitcher />
       <div className="flex items-center gap-0.5 rounded-2xl bg-gray-100/90 p-1 ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60">
         {user?.role === "admin" && (
@@ -55,7 +55,7 @@ function HeaderActions() {
             <i className="fa-solid fa-screwdriver-wrench text-sm" aria-hidden />
           </NavLink>
         )}
-        <DarkToggle className="!h-9 !w-9 !bg-transparent hover:!bg-white hover:shadow-sm dark:hover:!bg-gray-700" />
+        <DarkToggle className="!h-8 !w-8 sm:!h-9 sm:!w-9 !bg-transparent hover:!bg-white hover:shadow-sm dark:hover:!bg-gray-700" />
         <button
           type="button"
           onClick={() => {
@@ -75,7 +75,7 @@ function HeaderActions() {
         title={user?.name ? `Mon compte — ${user.name}` : "Mon compte"}
         aria-label="Mon compte"
         className={({ isActive }) =>
-          `flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition hover:scale-105 hover:shadow-lg ${
+          `flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-bold sm:h-9 sm:w-9 sm:text-sm text-white shadow-md shadow-blue-600/20 transition hover:shadow-lg ${
             isActive ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-950" : ""
           }`
         }
@@ -128,17 +128,17 @@ function ShellBody() {
     <div className="min-h-screen flex flex-col bg-slate-200 text-gray-800 font-sans dark:bg-gray-950 dark:text-gray-100 dm-bg">
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/85 shadow-sm backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/85">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:px-6 sm:py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8">
-          <div className="flex items-center justify-between gap-3 lg:min-w-[10rem] lg:justify-start lg:shrink-0">
+          <div className="flex min-w-0 items-center justify-between gap-2 lg:min-w-[10rem] lg:justify-start lg:shrink-0">
             <Link
               to="/session"
               className="group flex items-center gap-2.5 rounded-xl outline-none ring-blue-500/0 transition focus-visible:ring-2 focus-visible:ring-blue-500"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/20 transition group-hover:shadow-lg group-hover:shadow-blue-600/25">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br sm:h-10 sm:w-10 from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/20 transition group-hover:shadow-lg group-hover:shadow-blue-600/25">
                 <i className="fa-solid fa-graduation-cap text-lg" aria-hidden />
               </span>
-              <span className="text-lg font-bold tracking-tight text-gray-900 dark:text-white">ÉvaluPro</span>
+              <span className="hidden text-lg font-bold tracking-tight text-gray-900 min-[420px]:inline dark:text-white">ÉvaluPro</span>
             </Link>
-            <div className="flex items-center lg:hidden">
+            <div className="flex min-w-0 items-center lg:hidden">
               <HeaderActions />
             </div>
           </div>
