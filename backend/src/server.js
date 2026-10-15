@@ -8,6 +8,7 @@ const port = process.env.PORT || 4000;
 const User = require("./models/User");
 const { autoArchiveExpiredSessions } = require("./services/sessionService");
 const { migrateGroupsForPending } = require("./services/groupMigration");
+const { backfillSessionCourses } = require("./services/sessionCourseService");
 
 async function start() {
   await connectDb(process.env.MONGODB_URI);
@@ -41,6 +42,14 @@ async function start() {
     if (n) console.log("🔁 Données converties pour %d utilisateur(s).", n);
   } catch (error) {
     console.error("Conversion des groupes impossible:", error);
+  }
+
+  // Les sessions existantes reçoivent la liste de cours déduite de leurs groupes (une seule fois).
+  try {
+    const n = await backfillSessionCourses();
+    if (n) console.log("🔁 Cours déduits pour %d session(s).", n);
+  } catch (error) {
+    console.error("Cours de session impossibles à déduire:", error);
   }
 
   // Archive les sessions échues sans attendre qu'un utilisateur ouvre la page (au démarrage, puis toutes les heures).

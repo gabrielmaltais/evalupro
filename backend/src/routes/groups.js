@@ -12,6 +12,7 @@ const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
 const { normalizeStudentPayload } = require("../utils/studentName");
 const { resolveActiveSession } = require("../services/sessionService");
+const sessionCourses = require("../services/sessionCourseService");
 const { enrollStudent, unenrollStudent, availableRubrics, importRubrics, httpError, isId } = require("../services/groupService");
 
 const router = express.Router();
@@ -117,6 +118,7 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
       createdBy: req.user._id,
     });
     if (payload.rubrics?.length) await importRubrics(req.user._id, item, payload.rubrics);
+    await sessionCourses.ensureCoursesInSession(req.user._id, await Session.findById(session._id), item.courses);
     res.status(201).json((await present(req, [await Group.findById(item._id)]))[0]);
   } catch (error) {
     sendError(res, error, "Groupe invalide");
@@ -140,6 +142,10 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
       group.rubrics = group.rubrics.filter((id) => !drop.has(String(id)));
     }
     await group.save();
+    if (payload.courses !== undefined) {
+      const session = await Session.findOne(mine(req, { _id: group.session }));
+      if (session && !session.archivedAt) await sessionCourses.ensureCoursesInSession(req.user._id, session, group.courses);
+    }
     if (payload.rubrics !== undefined) {
       // Remplace la sélection de grilles: on retire d'abord ce qui n'est plus voulu, puis on importe.
       const wanted = new Set(payload.rubrics.map(String));

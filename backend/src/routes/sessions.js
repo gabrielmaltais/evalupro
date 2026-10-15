@@ -18,6 +18,7 @@ const {
 } = require("../services/sessionService");
 const { validateSessionDates, sessionStatus, archiveAfterDate } = require("../utils/sessionDates");
 const { toCsv } = require("../utils/csv");
+const sessionCourses = require("../services/sessionCourseService");
 
 const router = express.Router();
 router.use(auth);
@@ -109,6 +110,68 @@ router.put("/active", roles("admin", "teacher"), async (req, res) => {
     res.json({ session: active ? present(active) : null });
   } catch (error) {
     res.status(400).json({ message: "Changement de session impossible", details: error.message });
+  }
+});
+
+/** Cours de la session (avec leurs évaluations et leurs groupes), pour la page « Cours et évaluations ». */
+router.get("/:id/courses", async (req, res) => {
+  try {
+    if (!isId(req.params.id)) return res.status(400).json({ message: "Session invalide" });
+    const session = await Session.findOne(mine(req, { _id: req.params.id }));
+    if (!session) return res.status(404).json({ message: "Session introuvable" });
+    res.json(await sessionCourses.describe(req.user._id, session));
+  } catch (error) {
+    res.status(500).json({ message: "Chargement des cours impossible", details: error.message });
+  }
+});
+
+async function editableSession(req, res) {
+  if (!isId(req.params.id)) return res.status(400).json({ message: "Session invalide" }) && null;
+  const session = await Session.findOne(mine(req, { _id: req.params.id }));
+  if (!session) return res.status(404).json({ message: "Session introuvable" }) && null;
+  if (session.archivedAt) return res.status(409).json({ message: "Cette session est archivée." }) && null;
+  return session;
+}
+
+function courseError(res, error, fallback) {
+  const code = Number.isInteger(error.statusCode) ? error.statusCode : 400;
+  res.status(code).json(code === 400 ? { message: fallback, details: error.message } : { message: error.message });
+}
+
+/** Ajoute un cours de la bibliothèque à la session; `rubricIds` omis: ses évaluations actives sont importées. */
+router.post("/:id/courses", roles("admin", "teacher"), async (req, res) => {
+  try {
+    const { courseId, rubricIds } = z.object({ courseId: z.string(), rubricIds: z.array(z.string()).optional() }).parse(req.body);
+    const session = await editableSession(req, res);
+    if (!session) return;
+    await sessionCourses.addCourse(req.user._id, session, courseId, rubricIds);
+    res.status(201).json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
+  } catch (error) {
+    courseError(res, error, "Ajout du cours impossible");
+  }
+});
+
+/** Remplace les évaluations importées pour ce cours. */
+router.put("/:id/courses/:courseId", roles("admin", "teacher"), async (req, res) => {
+  try {
+    const { rubricIds } = z.object({ rubricIds: z.array(z.string()) }).parse(req.body);
+    const session = await editableSession(req, res);
+    if (!session) return;
+    await sessionCourses.setCourseRubrics(req.user._id, session, req.params.courseId, rubricIds);
+    res.json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
+  } catch (error) {
+    courseError(res, error, "Mise à jour impossible");
+  }
+});
+
+router.delete("/:id/courses/:courseId", roles("admin", "teacher"), async (req, res) => {
+  try {
+    const session = await editableSession(req, res);
+    if (!session) return;
+    await sessionCourses.removeCourse(req.user._id, session, req.params.courseId);
+    res.json(await sessionCourses.describe(req.user._id, await Session.findById(session._id)));
+  } catch (error) {
+    courseError(res, error, "Retrait impossible");
   }
 });
 
@@ -234,6 +297,14 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
         createdBy: req.user._id,
       }))
     );
+
+    // Les cours des groupes repris suivent; leurs évaluations seulement si demandé.
+    const carriedCourses = [...new Set(sourceGroups.flatMap((g) => g.courses.map(String)))];
+    if (carriedCourses.length) {
+      const kept = new Map(source.courses.map((c) => [String(c.course), c.rubrics]));
+      created.courses = carriedCourses.map((cid) => ({ course: cid, rubrics: payload.carryRubrics ? kept.get(cid) || [] : [] }));
+      await created.save();
+    }
 
     let carried = 0;
     if (payload.carryStudents && newGroups.length) {
