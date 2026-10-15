@@ -107,7 +107,7 @@ export default function AccountSettings() {
             {success}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="bg-white dm-surface rounded-xl shadow-sm border border-gray-100 dm-border p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="ui-card ui-card-body space-y-4">
           <p className="text-sm text-gray-500">
             Pour des raisons de sécurité, votre <strong>mot de passe actuel</strong> est demandé à chaque enregistrement.
           </p>

@@ -1717,7 +1717,7 @@ export default function Evaluations() {
             })}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="ui-card ui-card-body">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-800">Synthèse & Commentaires Généraux</h3>
             </div>
@@ -1759,7 +1759,7 @@ export default function Evaluations() {
             </div>
           </div>
 
-          <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mt-6">
+          <section className="ui-card ui-card-body mt-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
               {teamCorrectionMode
                 ? "Historique des étudiants sélectionnés"
@@ -1803,7 +1803,7 @@ export default function Evaluations() {
         <div className="order-1 h-fit space-y-6 lg:order-2 lg:col-span-4 lg:col-start-9 lg:row-start-1 lg:sticky lg:top-24 lg:self-start">
           <div className="space-y-6">
 
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 text-center relative overflow-visible isolate">
+            <div className="ui-card ui-card-body text-center relative overflow-visible isolate">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-teal-400"></div>
               <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left relative z-20">
                 <div className="mb-2 flex items-center justify-between gap-3">
@@ -1892,7 +1892,7 @@ export default function Evaluations() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 grid gap-3">
+            <div className="ui-card ui-card-body grid gap-3">
               <button disabled={!canEditEvaluation} onClick={handleCreate} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg shadow transition-all flex items-center justify-center gap-3 disabled:opacity-45 disabled:cursor-not-allowed">
                 <i className="fa-solid fa-save"></i> {teamCorrectionMode ? "Enregistrer pour la sélection" : "Enregistrer l'évaluation"}
               </button>
@@ -1946,7 +1946,7 @@ export default function Evaluations() {
         )}
 
         {evalPageTab === "suivi" && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/10">
+          <div className="ui-card ui-card-body">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 Suivi d&apos;évaluation {hubSelectedGroup ? `• ${hubSelectedGroup}` : ""}
@@ -2177,7 +2177,7 @@ export default function Evaluations() {
         )}
 
         {evalPageTab === "envois" && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/10">
+          <div className="ui-card ui-card-body">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Envois de copies</h2>

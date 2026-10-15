@@ -235,7 +235,7 @@ export default function AdminUsers() {
       )}
 
       {activeTab === "smtp" && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
+        <div className="ui-card ui-card-body space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="text-sm">Host
               <input className="mt-1 w-full border rounded-lg px-3 py-2" value={smtpForm.host} onChange={(e) => setSmtpForm({ ...smtpForm, host: e.target.value })} />
