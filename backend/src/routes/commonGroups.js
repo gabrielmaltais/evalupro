@@ -72,6 +72,11 @@ router.put("/:id", roles("admin", "teacher"), async (req, res) => {
       if (await CommonGroup.exists({ createdBy: req.user._id, name: payload.name })) {
         return res.status(409).json({ message: `Le groupe « ${payload.name} » existe déjà.` });
       }
+      // Une session qui a déjà un groupe de ce nom (ancien renommage local) bloquerait le renommage à mi-chemin.
+      const sessionsOld = await Group.find({ createdBy: req.user._id, name: oldName }).distinct("session");
+      if (await Group.exists({ createdBy: req.user._id, name: payload.name, session: { $in: sessionsOld } })) {
+        return res.status(409).json({ message: `Une session contient déjà un groupe « ${payload.name} ».` });
+      }
       item.name = payload.name;
     }
     if (payload.color !== undefined) item.color = payload.color;

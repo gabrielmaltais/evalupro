@@ -110,6 +110,16 @@ router.post("/", roles("admin", "teacher"), async (req, res) => {
     const payload = groupSchema.parse(req.body);
     const session = await targetSession(req, payload.session);
     if (session.archivedAt) throw httpError(409, "Cette session est archivée.");
+    // Un groupe retiré de la session (archivé) y revient tel quel, avec ses élèves.
+    const existing = await Group.findOne(mine(req, { session: session._id, name: payload.name }));
+    if (existing && !existing.archivedAt) throw httpError(409, `« ${payload.name} » est déjà dans cette session.`);
+    if (existing) {
+      const when = existing.archivedAt;
+      existing.archivedAt = null;
+      await existing.save();
+      await Enrollment.updateMany({ group: existing._id, archivedAt: when }, { $set: { archivedAt: null } });
+      return res.status(201).json((await present(req, [existing]))[0]);
+    }
     // Le groupe commun du même nom donne son style (et apparaît dans Ressources s'il est nouveau).
     const common = await ensureCommonGroup(req.user._id, payload.name, payload);
     const item = await Group.create({

@@ -31,7 +31,7 @@ export default function SessionCourses() {
       setEntries(e);
       setLibrary(c);
       setRubrics(r);
-      setGroups(g);
+      setGroups(g.filter((x) => x.activeGroup));
       setError("");
     } catch (err) {
       setError(String(err.message || err));
@@ -91,10 +91,9 @@ export default function SessionCourses() {
     act(() => api.setSessionCourseRubrics(sessionId, entry.course._id, [...ids]));
   }
 
-  // Les groupes sont communs: un groupe pas encore dans la session y est ajouté avec ce cours.
+  // Seulement les groupes choisis pour la session (Session en cours > Groupes).
   const linked = (g, courseId) => (g.activeGroup?.courses || []).some((c) => String(c) === String(courseId));
   function toggleGroup(g, courseId) {
-    if (!g.activeGroup) return act(() => api.createGroup({ name: g.name, courses: [courseId] }));
     const cur = g.activeGroup.courses || [];
     const courses = linked(g, courseId) ? cur.filter((c) => String(c) !== String(courseId)) : [...cur, courseId];
     act(() => api.updateGroup(g.activeGroup._id, { courses }));
@@ -234,7 +233,7 @@ export default function SessionCourses() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Aucun groupe. <Link to="/ressources/groupes" className="text-blue-600 underline">Créer un groupe</Link></p>
+                  <p className="text-xs text-gray-400">Aucun groupe dans la session. <Link to="/session/groupes" className="text-blue-600 underline">Choisir les groupes</Link></p>
                 )}
               </div>
             </div>

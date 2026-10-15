@@ -57,6 +57,11 @@ test("un groupe commun se retrouve d'une session à l'autre, avec des cours prop
   const gc = (await post(h, "/api/groups", { name: "TI-1", session: (await post(h, "/api/sessions", { name: "E27", startDate: "2027-05-10", endDate: "2099-12-31" })).body._id })).body;
   assert.equal(gc.studentCount, 1);
 
+  // Retirer le groupe de la session (archive) puis le remettre: il revient avec ses élèves.
+  await post(h, `/api/groups/${gc._id}/archive`, {});
+  assert.equal((await post(h, "/api/groups", { name: "TI-1", session: gc.session })).body.studentCount, 1);
+  assert.equal((await post(h, "/api/groups", { name: "TI-1", session: gc.session })).status, 409);
+
   // Renommer le groupe commun renomme le groupe dans chaque session.
   await put(h, `/api/common-groups/${list[0]._id}`, { name: "TI-A", color: "#00ff00" });
   const groupsB = (await get(h, `/api/groups?session=${b._id}`)).body;

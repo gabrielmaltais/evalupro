@@ -48,6 +48,14 @@ export default function SessionGroups() {
     act(() => api.updateGroup(g.activeGroup._id, { courses: next }));
   }
 
+  // Retirer = archiver le groupe de la session: ses élèves et ses corrections restent, on peut le remettre.
+  function toggleGroup(g) {
+    if (!g.activeGroup) return act(() => api.createGroup({ name: g.name }));
+    if (window.confirm(`Retirer « ${g.name} » de la session ? Ses élèves et ses corrections sont conservés ; tu pourras le remettre.`)) {
+      act(() => api.archiveGroupById(g.activeGroup._id));
+    }
+  }
+
   if (!active) {
     return (
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -57,7 +65,6 @@ export default function SessionGroups() {
   }
 
   const inSession = groups.filter((g) => g.activeGroup);
-  const others = groups.filter((g) => !g.activeGroup);
   const readOnly = Boolean(active.archivedAt);
 
   return (
@@ -66,13 +73,28 @@ export default function SessionGroups() {
         icon="fa-users-between-lines"
         iconBgClass="bg-blue-600"
         title="Groupes"
-        subtitle={`Session : ${active.name}. Associe à chaque groupe ses cours de la session. Les groupes et leurs élèves se gèrent dans Ressources.`}
+        subtitle={`Session : ${active.name}. Choisis tes groupes de la session, puis associe-leur leurs cours. Les groupes et leurs élèves se gèrent dans Ressources.`}
         className="!mb-0"
       />
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      {inSession.length === 0 && <p className="ui-info text-sm">Aucun groupe dans cette session pour l'instant.</p>}
+      <Card title="Groupes de la session">
+        {groups.length ? (
+          <div className="flex flex-wrap gap-2">
+            {groups.map((g) => (
+              <Chip key={g._id} icon={g.activeGroup ? "fa-check" : "fa-plus"} active={Boolean(g.activeGroup)} onClick={() => !readOnly && toggleGroup(g)}>
+                {g.name}
+              </Chip>
+            ))}
+          </div>
+        ) : (
+          <Link to="/ressources/groupes" className={`${btnSecondary} inline-block`}>Créer un groupe dans Ressources</Link>
+        )}
+        <p className="mt-2 text-xs text-gray-500">
+          Sélectionne les groupes que tu as cette session. Un groupe ajouté amène ses élèves ; un groupe retiré garde ses élèves et ses corrections, et tu peux le remettre.
+        </p>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
         {inSession.map((g) => (
@@ -92,20 +114,6 @@ export default function SessionGroups() {
           </Card>
         ))}
       </div>
-
-      {others.length > 0 && !readOnly && (
-        <Card title="Ajouter un groupe à la session">
-          <div className="flex flex-wrap gap-2">
-            {others.map((g) => (
-              <Chip key={g._id} icon="fa-plus" onClick={() => act(() => api.createGroup({ name: g.name }))}>{g.name}</Chip>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-gray-500">Ses élèves le suivent. Pour créer ou modifier un groupe : <Link to="/ressources/groupes" className="text-blue-600 underline">Ressources › Groupes et élèves</Link>.</p>
-        </Card>
-      )}
-      {groups.length === 0 && (
-        <Link to="/ressources/groupes" className={`${btnSecondary} inline-block`}>Créer un groupe dans Ressources</Link>
-      )}
     </main>
   );
 }
