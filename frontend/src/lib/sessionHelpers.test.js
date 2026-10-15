@@ -13,8 +13,8 @@ describe("sessionHelpers", () => {
     expect(shiftDateOneYear("n'importe quoi")).toBe("");
   });
   it("résume le contenu", () => {
-    expect(sessionCountsLabel({ courses: 1, rubrics: 3, groups: 2, students: 40 })).toBe("1 cours · 3 grilles · 2 groupes (40 étudiants)");
-    expect(sessionCountsLabel({})).toBe("0 cours · 0 grille · 0 groupe");
+    expect(sessionCountsLabel({ groups: 2, students: 40, evaluations: 1 })).toBe("2 groupes · 40 élèves · 1 évaluation");
+    expect(sessionCountsLabel({})).toBe("0 groupe · 0 élève · 0 évaluation");
   });
   it("retombe sur un état connu", () => {
     expect(sessionStatusInfo("archived").label).toBe("Archivée");

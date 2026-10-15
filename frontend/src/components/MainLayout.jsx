@@ -1,10 +1,37 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
+import SessionProvider from "./SessionProvider";
+import { useSession } from "../lib/sessionState";
 import DarkToggle from "./DarkToggle";
 import { getUserFromToken } from "../lib/api";
+
+function SessionSwitcher() {
+  const { sessions, active, switchTo } = useSession();
+  const open = sessions.filter((s) => !s.archivedAt);
+  if (open.length === 0) return null;
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+      <i className="fa-solid fa-calendar-check" aria-hidden />
+      <span className="sr-only">Session de travail</span>
+      <select
+        value={active?._id || ""}
+        onChange={(e) => switchTo(e.target.value || null)}
+        className="max-w-[10rem] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 sm:max-w-[14rem]"
+        title="Session de travail"
+      >
+        {open.map((s) => (
+          <option key={s._id} value={s._id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function HeaderActions() {
   return (
     <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+      <SessionSwitcher />
       <DarkToggle />
       <button
         type="button"
@@ -25,8 +52,9 @@ function HeaderActions() {
 function AppNav() {
   const role = getUserFromToken()?.role;
   const links = [
-    { to: "/evaluations", label: "Évaluations", icon: "fa-graduation-cap", end: false },
-    { to: "/classes", label: "Cours et groupes", icon: "fa-chalkboard-user", end: false },
+    { to: "/session", label: "Session en cours", icon: "fa-graduation-cap", end: false },
+    { to: "/ressources", label: "Ressources", icon: "fa-book-open", end: false },
+    { to: "/sessions", label: "Sessions", icon: "fa-calendar-days", end: false },
     { to: "/account", label: "Mon compte", icon: "fa-user-gear", end: true },
   ];
   if (role === "admin") {
@@ -62,14 +90,15 @@ function AppNav() {
   );
 }
 
-export default function MainLayout() {
+function ShellBody() {
+  const { active } = useSession();
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 text-gray-800 font-sans dark:bg-gray-950 dark:text-gray-100 dm-bg">
       <header className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/85 shadow-sm backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/85">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-2 sm:px-6 sm:py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8">
           <div className="flex items-center justify-between gap-3 lg:min-w-[10rem] lg:justify-start lg:shrink-0">
             <Link
-              to="/evaluations"
+              to="/session"
               className="group flex items-center gap-2.5 rounded-xl outline-none ring-blue-500/0 transition focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-600/20 transition group-hover:shadow-lg group-hover:shadow-blue-600/25">
@@ -91,8 +120,16 @@ export default function MainLayout() {
       </header>
 
       <div className="flex flex-1 flex-col">
-        <Outlet />
+        <Outlet key={active?._id || "none"} />
       </div>
     </div>
+  );
+}
+
+export default function MainLayout() {
+  return (
+    <SessionProvider>
+      <ShellBody />
+    </SessionProvider>
   );
 }

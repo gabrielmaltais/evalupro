@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { parseCompetencyLines } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
@@ -19,12 +20,13 @@ export default function AdminCourses() {
   const [bulkText, setBulkText] = useState("");
   const [showBulk, setShowBulk] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [sessions, setSessions] = useState([]);
+  const [rubrics, setRubrics] = useState([]);
 
   async function refresh(selectId) {
     try {
-      const list = await api.listCourses();
+      const [list, rubricList] = await Promise.all([api.listCourses(), api.listRubrics().catch(() => [])]);
       setCourses(list);
+      setRubrics(rubricList);
       if (selectId) {
         const found = list.find((c) => c._id === selectId);
         if (found) setCourse({ ...found, competencies: found.competencies || [] });
@@ -38,7 +40,6 @@ export default function AdminCourses() {
 
   useEffect(() => {
     refresh();
-    api.listSessions().then((list) => setSessions(list.filter((x) => !x.archivedAt))).catch(() => {});
   }, []);
 
   function selectCourse(c) {
@@ -102,7 +103,6 @@ export default function AdminCourses() {
     const payload = {
       title: course.title.trim(),
       code: (course.code || "").trim(),
-      session: course.session || null,
       competencies: course.competencies
         .filter((c) => c.title.trim())
         .map((c) => ({ id: String(c.id).startsWith("new-") ? undefined : c.id, title: c.title.trim(), description: (c.description || "").trim() })),
@@ -111,7 +111,11 @@ export default function AdminCourses() {
     try {
       const saved = course._id ? await api.updateCourse(course._id, payload) : await api.createCourse(payload);
       await refresh(saved._id);
-      setSuccess("Cours enregistré.");
+      const sync = saved.sync || {};
+      const parts = ["Cours enregistré."];
+      if (sync.updated) parts.push(`${sync.updated} grille(s) mise(s) à jour avec les compétences modifiées.`);
+      if (sync.skipped) parts.push(`${sync.skipped} grille(s) déjà utilisée(s) en correction ont été laissées telles quelles.`);
+      setSuccess(parts.join(" "));
     } catch (e) {
       setError(String(e.message || e));
     } finally {
@@ -125,7 +129,7 @@ export default function AdminCourses() {
       await api.archiveCourse(course._id);
       setCourse(EMPTY_COURSE);
       await refresh();
-      setSuccess("Cours archivé (avec ses grilles « archivées avec le cours »). Tu peux le restaurer dans Cours et groupes > Archives.");
+      setSuccess("Cours archivé avec ses grilles. Tu peux le restaurer dans Sessions > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -142,7 +146,7 @@ export default function AdminCourses() {
       setCourse(EMPTY_COURSE);
       setConfirmDelete(false);
       await refresh();
-      setSuccess("Cours supprimé. Les grilles déjà créées ne sont pas modifiées.");
+      setSuccess("Cours supprimé.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -153,8 +157,8 @@ export default function AdminCourses() {
       <PageSectionTitle
         icon="fa-book-open"
         iconBgClass="bg-emerald-600"
-        title="Cours et compétences"
-        subtitle="Entrez une fois les compétences (ou critères de performance) de chaque cours : elles seront ajoutées automatiquement au gabarit IA."
+        title="Cours et grilles"
+        subtitle="Un cours regroupe ses compétences (critères de performance) et ses grilles, comme un dossier. Modifier une compétence met à jour les grilles pas encore utilisées."
       />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 whitespace-pre-line">{error}</div>}
@@ -186,7 +190,9 @@ export default function AdminCourses() {
                     }`}
                   >
                     <span className="block font-semibold">{c.code ? `${c.code} · ` : ""}{c.title}</span>
-                    <span className="text-xs text-gray-500">{(c.competencies || []).length} compétence(s)</span>
+                    <span className="text-xs text-gray-500">
+                      {(c.competencies || []).length} compétence(s) · {rubrics.filter((r) => r.course === c._id).length} grille(s)
+                    </span>
                   </button>
                 </li>
               ))}
@@ -207,14 +213,6 @@ export default function AdminCourses() {
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Code (facultatif)</label>
                   <input type="text" value={course.code || ""} onChange={(e) => setCourse({ ...course, code: e.target.value })} placeholder="Ex : 420-XYZ" className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
-                </div>
-                <div className="sm:col-span-3">
-                  <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Session</label>
-                  <select value={course.session || ""} onChange={(e) => setCourse({ ...course, session: e.target.value || null })} className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
-                    <option value="">Aucune session (le cours reste actif)</option>
-                    {sessions.map((x) => <option key={x._id} value={x._id}>{x.name}</option>)}
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">Le cours est archivé avec sa session, ainsi que les grilles réglées sur « archivée avec le cours ».</p>
                 </div>
               </div>
 
@@ -262,6 +260,33 @@ export default function AdminCourses() {
                   </ol>
                 )}
               </div>
+
+              {course._id && (
+                <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-600">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-bold uppercase text-gray-500">
+                      Grilles de ce cours ({rubrics.filter((r) => r.course === course._id).length})
+                    </label>
+                    <Link to={`/ressources/grilles?course=${course._id}`} className="rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                      <i className="fa-solid fa-folder-open mr-1" /> Gérer les grilles de ce cours
+                    </Link>
+                  </div>
+                  {rubrics.filter((r) => r.course === course._id).length === 0 ? (
+                    <p className="text-sm text-gray-500">Aucune grille dans ce cours pour l&apos;instant.</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {rubrics
+                        .filter((r) => r.course === course._id)
+                        .map((r) => (
+                          <li key={r._id} className="flex justify-between gap-2 rounded bg-slate-50/70 px-2 py-1 dark:bg-gray-800/30">
+                            <span className="truncate">{r.taskTitle || r.title}</span>
+                            <span className="shrink-0 text-xs text-gray-500">v{r.version}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-4">
                 <div>

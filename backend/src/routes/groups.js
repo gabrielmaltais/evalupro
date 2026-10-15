@@ -34,10 +34,8 @@ const mine = (req, extra = {}) => ({ ...extra, createdBy: req.user._id });
 function sendError(res, error, fallback) {
   const code = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 400;
   const duplicate = error.code === 11000;
-  res.status(duplicate ? 409 : code).json({
-    message: duplicate ? "Un groupe porte déjà ce nom dans cette session." : code === 400 ? fallback : error.message,
-    details: error.message,
-  });
+  if (duplicate) return res.status(409).json({ message: "Un groupe porte déjà ce nom dans cette session." });
+  res.status(code).json(code === 400 ? { message: fallback, details: error.message } : { message: error.message });
 }
 
 /** Session demandée (`?session=<id>`), sinon la session active. */

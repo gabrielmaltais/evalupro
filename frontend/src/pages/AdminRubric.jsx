@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { normalizeImportedRubric, parseAiJson, tasksTotal } from "../lib/rubricTemplate";
 import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, LEVEL_SCALES } from "../lib/aiTemplate";
@@ -23,7 +23,11 @@ const DEFAULT_CRITERION = {
 };
 
 export default function AdminRubric() {
+  const [searchParams] = useSearchParams();
+  const presetCourse = searchParams.get("course") || "";
   const [rubrics, setRubrics] = useState([]);
+  const [rubricFilterCourse, setRubricFilterCourse] = useState(presetCourse);
+  const [importing, setImporting] = useState(null);
   const [groupOptions, setGroupOptions] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [rubricSearch, setRubricSearch] = useState("");
@@ -40,8 +44,7 @@ export default function AdminRubric() {
   const [criteria, setCriteria] = useState([{ ...DEFAULT_CRITERION, id: "c1" }]);
   const [isActive, setIsActive] = useState(true);
   const [linkCompetencies, setLinkCompetencies] = useState(false);
-  const [courseId, setCourseId] = useState("");
-  const [archiveWithCourse, setArchiveWithCourse] = useState(false);
+  const [courseId, setCourseId] = useState(presetCourse);
   const [duplicating, setDuplicating] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const DEFAULT_FEEDBACK = [
@@ -81,7 +84,7 @@ export default function AdminRubric() {
         api.getStudentGroupDashboard(),
       ]);
       setRubrics(data);
-      setGroupOptions((dashboard || []).map((x) => x.group).filter(Boolean));
+      setGroupOptions((dashboard || []).filter((x) => x.groupId).map((x) => x.group));
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -107,7 +110,6 @@ export default function AdminRubric() {
       isActive: next.isActive ?? isActive,
       linkCompetencies: next.linkCompetencies ?? linkCompetencies,
       courseId: next.courseId ?? courseId,
-      archiveWithCourse: next.archiveWithCourse ?? archiveWithCourse,
       criteria: next.criteria ?? criteria,
       feedbackMessages: next.feedbackMessages ?? feedbackMessages,
     };
@@ -117,7 +119,7 @@ export default function AdminRubric() {
   const hasUnsavedChanges = useMemo(
     () => buildSnapshot() !== savedSnapshot,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedId, title, taskTitle, version, groups, isActive, linkCompetencies, courseId, archiveWithCourse, criteria, feedbackMessages, savedSnapshot]
+    [selectedId, title, taskTitle, version, groups, isActive, linkCompetencies, courseId, criteria, feedbackMessages, savedSnapshot]
   );
 
   useEffect(() => {
@@ -136,7 +138,6 @@ export default function AdminRubric() {
     setIsActive(r.isActive !== false);
     setLinkCompetencies(r.linkCompetencies === true);
     setCourseId(r.course || "");
-    setArchiveWithCourse(r.archiveWithCourse === true);
     setFeedbackMessages(r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -151,7 +152,6 @@ export default function AdminRubric() {
         isActive: r.isActive !== false,
         linkCompetencies: r.linkCompetencies === true,
         courseId: r.course || "",
-        archiveWithCourse: r.archiveWithCourse === true,
         criteria: r.criteria || [],
         feedbackMessages: r.feedbackMessages && r.feedbackMessages.length > 0 ? r.feedbackMessages : DEFAULT_FEEDBACK,
       })
@@ -167,8 +167,7 @@ export default function AdminRubric() {
     setCriteria([{ ...DEFAULT_CRITERION, id: "c1" }]);
     setIsActive(true);
     setLinkCompetencies(false);
-    setCourseId("");
-    setArchiveWithCourse(false);
+    setCourseId(rubricFilterCourse || presetCourse || "");
     setFeedbackMessages(DEFAULT_FEEDBACK);
     setError("");
     setSuccess("");
@@ -182,8 +181,7 @@ export default function AdminRubric() {
         groups: [],
         isActive: true,
         linkCompetencies: false,
-        courseId: "",
-        archiveWithCourse: false,
+        courseId: rubricFilterCourse || presetCourse || "",
         criteria: [{ ...DEFAULT_CRITERION, id: "c1" }],
         feedbackMessages: DEFAULT_FEEDBACK,
       })
@@ -193,12 +191,16 @@ export default function AdminRubric() {
   async function save() {
     setError("");
     setSuccess("");
+    if (!courseId) {
+      setError("Choisis le cours dans lequel classer cette grille.");
+      return;
+    }
     try {
       if (selectedId) {
-        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId || null, archiveWithCourse: courseId ? archiveWithCourse : false, feedbackMessages });
+        await api.updateRubric(selectedId, { title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
         setSuccess("Grille modifiée avec succès !");
       } else {
-        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId || null, archiveWithCourse: courseId ? archiveWithCourse : false, feedbackMessages });
+        const newRubric = await api.createRubric({ title, taskTitle, version, group: groups[0] || "", groups, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages });
         setSelectedId(newRubric._id);
         setSuccess("Nouvelle grille créée avec succès !");
       }
@@ -215,7 +217,7 @@ export default function AdminRubric() {
       await api.archiveRubric(selectedId);
       startNew();
       await refresh();
-      setSuccess("Grille archivée. Tu peux la restaurer dans Cours et groupes > Archives.");
+      setSuccess("Grille archivée. Tu peux la restaurer dans Sessions > Archives.");
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -404,12 +406,17 @@ export default function AdminRubric() {
     }
   }
 
+  const courseLabel = (id) => {
+    const c = courses.find((x) => x._id === id);
+    return c ? `${c.code ? `${c.code} · ` : ""}${c.title}` : "Sans cours";
+  };
   const totalPoints = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
   const filteredRubrics = useMemo(() => {
     const q = rubricSearch.trim().toLowerCase();
     const out = rubrics.filter((r) => {
       if (rubricFilterStatus === "active" && !r.isActive) return false;
       if (rubricFilterStatus === "inactive" && r.isActive) return false;
+      if (rubricFilterCourse && r.course !== rubricFilterCourse) return false;
       if (rubricFilterGroup) {
         const list = Array.isArray(r.groups) && r.groups.length ? r.groups : (r.group ? [r.group] : []);
         if (!list.includes(rubricFilterGroup)) return false;
@@ -427,8 +434,11 @@ export default function AdminRubric() {
       const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return tb - ta;
     });
+    // Classées par cours (le « dossier »), puis selon le tri choisi.
+    const order = new Map(courses.map((c, i) => [c._id, i]));
+    out.sort((a, b) => (order.get(a.course) ?? 1e9) - (order.get(b.course) ?? 1e9));
     return out;
-  }, [rubrics, rubricSearch, rubricFilterGroup, rubricFilterStatus, rubricSortBy]);
+  }, [courses, rubrics, rubricSearch, rubricFilterGroup, rubricFilterCourse, rubricFilterStatus, rubricSortBy]);
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -455,6 +465,9 @@ export default function AdminRubric() {
             <button type="button" onClick={() => setShowPasteJsonModal(true)} className="bg-white text-teal-600 border border-teal-200 hover:bg-teal-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Coller un JSON">
                 <i className="fa-solid fa-paste"></i>
             </button>
+            <button type="button" onClick={() => setImporting({ target: rubricFilterCourse || courseId || "", source: "" })} className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Importer une grille d'un autre cours">
+                <i className="fa-solid fa-file-import"></i>
+            </button>
             <button onClick={exportJSON} className="bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 font-medium py-2 px-3 rounded-lg transition-all flex items-center justify-center text-sm shadow-sm" title="Exporter en JSON">
                 <i className="fa-solid fa-download"></i>
             </button>
@@ -473,6 +486,16 @@ export default function AdminRubric() {
                 placeholder="Rechercher une grille, un cours, un groupe..."
                 className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <select
+                value={rubricFilterCourse}
+                onChange={(e) => setRubricFilterCourse(e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+              >
+                <option value="">Tous les cours</option>
+                {courses.map((c) => (
+                  <option key={`fc-${c._id}`} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
+                ))}
+              </select>
               <div className="grid grid-cols-3 gap-2">
                 <select
                   value={rubricFilterStatus}
@@ -512,8 +535,14 @@ export default function AdminRubric() {
               </p>
             </div>
             <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
-              {filteredRubrics.map(r => (
+              {filteredRubrics.map((r, i) => (
                 <li key={r._id}>
+                  {(i === 0 || filteredRubrics[i - 1].course !== r.course) && (
+                    <div className="bg-slate-50 px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      <i className="fa-solid fa-folder-open mr-1" />
+                      {courseLabel(r.course)}
+                    </div>
+                  )}
                   <button type="button" onClick={() => selectRubric(r)} className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selectedId === r._id ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}>
                     <div className="font-semibold text-sm text-gray-800 line-clamp-2">{r.taskTitle || r.title || 'Nouvelle Grille'}</div>
                     <div className="text-xs text-gray-500 flex justify-between mt-1 items-center">
@@ -583,7 +612,7 @@ export default function AdminRubric() {
                   <input type="number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={version} onChange={e => setVersion(Number(e.target.value))} />
               </div>
               <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Groupes associés (optionnel, multiple)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Importée dans ces groupes (session en cours)</label>
                   <div className="relative">
                     <button
                       type="button"
@@ -598,7 +627,7 @@ export default function AdminRubric() {
                     {showGroupsDropdown && (
                       <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg p-1">
                         {groupOptions.length === 0 && (
-                          <div className="px-2 py-1.5 text-xs text-gray-500">Aucun groupe disponible</div>
+                          <div className="px-2 py-1.5 text-xs text-gray-500">Aucun groupe dans la session en cours</div>
                         )}
                         {groupOptions.map((g) => {
                           const checked = groups.includes(g);
@@ -619,7 +648,7 @@ export default function AdminRubric() {
                       </div>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">Cliquez pour cocher/décocher plusieurs groupes.</p>
+                  <p className="mt-1 text-xs text-gray-500">Seuls les groupes cochés pourront corriger avec cette grille. Tu peux en ajouter à tout moment.</p>
               </div>
               <div className="flex items-end">
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -642,29 +671,20 @@ export default function AdminRubric() {
                 </label>
               </div>
               <div className="md:col-span-2 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
-                <label className="mb-1 block text-sm font-medium text-gray-700">Cours de cette grille (facultatif)</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Cours (le dossier où la grille est classée)</label>
                 <select
                   value={courseId}
-                  onChange={(e) => { setCourseId(e.target.value); if (!e.target.value) setArchiveWithCourse(false); }}
+                  onChange={(e) => setCourseId(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400"
                 >
-                  <option value="">Aucun cours : grille indépendante</option>
+                  <option value="">Choisir un cours…</option>
                   {courses.map((c) => (
                     <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
                   ))}
                 </select>
-                {courseId && (
-                  <div className="mt-2 space-y-1 text-sm text-gray-700">
-                    <label className="flex items-start gap-2">
-                      <input type="radio" name="rubric-persist" className="mt-1" checked={!archiveWithCourse} onChange={() => setArchiveWithCourse(false)} />
-                      <span><strong>Persistante</strong> : la grille reste active quand le cours est archivé (tu la réutilises d&apos;une session à l&apos;autre).</span>
-                    </label>
-                    <label className="flex items-start gap-2">
-                      <input type="radio" name="rubric-persist" className="mt-1" checked={archiveWithCourse} onChange={() => setArchiveWithCourse(true)} />
-                      <span><strong>Archivée avec le cours</strong> : elle est rangée avec lui à la fin de la session.</span>
-                    </label>
-                  </div>
-                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Modifier une compétence du cours met à jour les grilles pas encore utilisées. Pas de cours ? <Link to="/ressources/cours" className="font-semibold text-blue-600 hover:underline">Crée-le dans Ressources</Link>.
+                </p>
               </div>
             </div>
           </div>
@@ -848,8 +868,8 @@ export default function AdminRubric() {
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => setDuplicating({ title: `${title} (copie)`, selected: [], extra: "" })} className="text-blue-600 hover:text-blue-800 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
-                            <i className="fa-solid fa-copy"></i> Dupliquer vers des groupes
+                        <button type="button" onClick={() => setDuplicating({ title: `${title} (copie)`, course: courseId, replaceInGroups: false })} className="text-blue-600 hover:text-blue-800 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+                            <i className="fa-solid fa-copy"></i> Dupliquer
                         </button>
                         <button type="button" onClick={archiveRubric} className="text-amber-700 hover:text-amber-900 font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
                             <i className="fa-solid fa-box-archive"></i> Archiver
@@ -874,18 +894,32 @@ export default function AdminRubric() {
       {duplicating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="text-lg font-bold">Dupliquer la grille vers de nouveaux groupes</h3>
-            <p className="text-xs text-gray-500">La copie repart en version 1, sans évaluations, avec le même cours. L&apos;original reste inchangé.</p>
+            <h3 className="text-lg font-bold">Dupliquer la grille</h3>
+            <p className="text-xs text-gray-500">
+              Pour modifier une grille sans toucher à l&apos;originale. La copie repart en version 1, sans évaluations.
+            </p>
             <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" value={duplicating.title} onChange={(e) => setDuplicating({ ...duplicating, title: e.target.value })} />
-            <div className="max-h-40 space-y-1 overflow-y-auto">
-              {groupOptions.map((g) => (
-                <label key={g} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={duplicating.selected.includes(g)} onChange={() => setDuplicating((d) => ({ ...d, selected: d.selected.includes(g) ? d.selected.filter((x) => x !== g) : [...d.selected, g] }))} />
-                  {g}
-                </label>
-              ))}
-            </div>
-            <input className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="Autres groupes (séparés par des virgules)" value={duplicating.extra} onChange={(e) => setDuplicating({ ...duplicating, extra: e.target.value })} />
+            <label className="block text-xs font-medium text-gray-600">
+              Cours de la copie
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={duplicating.course}
+                onChange={(e) => setDuplicating({ ...duplicating, course: e.target.value })}
+              >
+                {courses.map((c) => (
+                  <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={duplicating.replaceInGroups}
+                onChange={(e) => setDuplicating({ ...duplicating, replaceInGroups: e.target.checked })}
+              />
+              <span>Remplacer l&apos;originale par la copie dans mes groupes de la session en cours</span>
+            </label>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setDuplicating(null)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold">Annuler</button>
               <button
@@ -893,12 +927,11 @@ export default function AdminRubric() {
                 onClick={async () => {
                   const d = duplicating;
                   try {
-                    const extra = d.extra.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
-                    const copy = await api.copyRubric(selectedId, { title: d.title, groups: [...d.selected, ...extra] });
+                    const copy = await api.copyRubric(selectedId, { title: d.title, courseId: d.course, replaceInGroups: d.replaceInGroups });
                     setDuplicating(null);
                     await refresh();
                     selectRubric(copy);
-                    setSuccess("Grille dupliquée (version 1, sans évaluations).");
+                    setSuccess("Grille dupliquée (version 1, sans évaluations). L'originale est inchangée.");
                   } catch (e) {
                     setError(String(e.message || e));
                   }
@@ -906,6 +939,66 @@ export default function AdminRubric() {
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
               >
                 Dupliquer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900">
+            <h3 className="text-lg font-bold">Importer une grille d&apos;un autre cours</h3>
+            <p className="text-xs text-gray-500">La grille est copiée dans le cours choisi (version 1, sans évaluations). L&apos;originale reste inchangée.</p>
+            <label className="block text-xs font-medium text-gray-600">
+              Grille à importer
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={importing.source}
+                onChange={(e) => setImporting({ ...importing, source: e.target.value })}
+              >
+                <option value="">Choisir…</option>
+                {rubrics
+                  .filter((r) => r.course !== importing.target)
+                  .map((r) => (
+                    <option key={r._id} value={r._id}>
+                      {courseLabel(r.course)} — {r.taskTitle || r.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-gray-600">
+              Dans le cours
+              <select
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={importing.target}
+                onChange={(e) => setImporting({ ...importing, target: e.target.value, source: "" })}
+              >
+                <option value="">Choisir…</option>
+                {courses.map((c) => (
+                  <option key={c._id} value={c._id}>{c.code ? `${c.code} · ` : ""}{c.title}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setImporting(null)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold">Annuler</button>
+              <button
+                type="button"
+                disabled={!importing.source || !importing.target}
+                onClick={async () => {
+                  try {
+                    const copy = await api.copyRubric(importing.source, { courseId: importing.target });
+                    setImporting(null);
+                    await refresh();
+                    selectRubric(copy);
+                    setSuccess("Grille importée dans le cours.");
+                  } catch (e) {
+                    setError(String(e.message || e));
+                  }
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                Importer
               </button>
             </div>
           </div>
@@ -957,12 +1050,12 @@ export default function AdminRubric() {
                   </ul>
                 )}
                 {selectedCourse && selectedCourseCompetencies.length === 0 && (
-                  <p className="text-[11px] text-amber-800">Ce cours n&apos;a pas encore de compétences. <Link to="/classes/cours" className="font-semibold underline">Ajoutez-les</Link> pour qu&apos;elles soient incluses, sinon fournissez-les à l&apos;IA.</p>
+                  <p className="text-[11px] text-amber-800">Ce cours n&apos;a pas encore de compétences. <Link to="/ressources/cours" className="font-semibold underline">Ajoutez-les</Link> pour qu&apos;elles soient incluses, sinon fournissez-les à l&apos;IA.</p>
                 )}
                 {!selectedCourse && (
                   <p className="text-[11px] text-gray-500">
                     {courses.length === 0 ? "Vous n'avez pas encore de cours. " : ""}
-                    <Link to="/classes/cours" className="font-semibold text-emerald-700 underline">Entrez une fois les compétences de votre cours</Link> : elles seront ajoutées automatiquement au gabarit.
+                    <Link to="/ressources/cours" className="font-semibold text-emerald-700 underline">Entrez une fois les compétences de votre cours</Link> : elles seront ajoutées automatiquement au gabarit.
                   </p>
                 )}
               </section>

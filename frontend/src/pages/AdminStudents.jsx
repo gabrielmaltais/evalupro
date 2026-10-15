@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { studentDisplayName, splitFullName } from "../lib/studentDisplay";
 import PageSectionTitle from "../components/PageSectionTitle";
+import GroupResourcesPanel from "../components/GroupResourcesPanel";
+import { useSession } from "../lib/sessionState";
 
 /** Une ligne d’import : nom seul, ou nom + courriel (tab, point-virgule, ou virgule si la partie droite ressemble à un mail). */
 function parseStudentBulkLine(line) {
@@ -35,6 +37,7 @@ function parseStudentBulkLine(line) {
 }
 
 export default function AdminStudents() {
+  const { active } = useSession();
   const [students, setStudents] = useState([]);
   const [groupDashboard, setGroupDashboard] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -49,7 +52,6 @@ export default function AdminStudents() {
   const [bulkText, setBulkText] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
   const [renameGroupTo, setRenameGroupTo] = useState("");
-  const [draftGroups, setDraftGroups] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [purgeGroupModal, setPurgeGroupModal] = useState(null);
@@ -81,13 +83,9 @@ export default function AdminStudents() {
 
   const displayedGroupDashboard = useMemo(() => {
     const map = new Map((groupDashboard || []).map((g) => [g.group, g]));
-    draftGroups.forEach((g) => {
-      if (!map.has(g)) {
-        map.set(g, { group: g, students: 0, evaluations: 0, avgPct: 0, sent: 0, failed: 0 });
-      }
-    });
     return Array.from(map.values()).sort((a, b) => a.group.localeCompare(b.group));
-  }, [groupDashboard, draftGroups]);
+  }, [groupDashboard]);
+  const selectedGroupId = displayedGroupDashboard.find((g) => g.group === selectedGroup)?.groupId || null;
   const filteredStudents = selectedGroup ? (groupedStudents[selectedGroup] || []) : students;
 
   function startNew() {
@@ -201,7 +199,7 @@ export default function AdminStudents() {
       setError(String(e.message || e));
     }
   }
-  function prepareNewGroup() {
+  async function prepareNewGroup() {
     const groupName = newGroupName.trim();
     if (!groupName) {
       setError("Nom du groupe requis.");
@@ -209,18 +207,17 @@ export default function AdminStudents() {
     }
     setError("");
     setSuccess("");
-    setSelectedGroup(groupName);
-    setDraftGroups((prev) => (prev.includes(groupName) ? prev : [...prev, groupName]));
-    setNewGroupName("");
-    setSelectedId(null);
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setGroup(groupName);
-    setBulkMode(false);
-    setConfirmDelete(false);
-    setStudentEvals([]);
-    setSuccess(`Groupe "${groupName}" prêt. Ajoutez un étudiant pour le créer.`);
+    try {
+      await api.createGroup({ name: groupName });
+      setNewGroupName("");
+      setSelectedGroup(groupName);
+      startNew();
+      setGroup(groupName);
+      setSuccess(`Groupe « ${groupName} » créé. Lie-lui des cours, importe ses grilles, puis ajoute des élèves.`);
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
   }
   async function clearGroup(groupName) {
     if (!window.confirm(`Retirer le groupe "${groupName}" ?`)) return;
@@ -234,7 +231,7 @@ export default function AdminStudents() {
   }
 
   async function archiveGroup(groupName) {
-    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Cours et groupes > Archives.`)) return;
+    if (!window.confirm(`Archiver le groupe "${groupName}" ? Étudiants et évaluations sont conservés; restauration dans Sessions > Archives.`)) return;
     try {
       await api.archiveGroup(groupName);
       if (selectedGroup === groupName) setSelectedGroup("");
@@ -305,11 +302,17 @@ export default function AdminStudents() {
         <PageSectionTitle
           icon="fa-users-between-lines"
           iconBgClass="bg-blue-600"
-          title="Élèves et groupes"
-          subtitle="Classes, groupes et étudiants"
+          title="Groupes et élèves"
+          subtitle={active ? `Session : ${active.name}. Chaque groupe a ses cours, ses grilles importées et ses élèves.` : "Crée d'abord une session pour y ajouter des groupes."}
         />
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">{error}</div>}
         {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm border border-green-100">{success}</div>}
+        {!active && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            Aucune session en cours. <Link to="/sessions" className="font-semibold underline">Crée une session</Link> pour y ajouter des groupes et des élèves.
+          </div>
+        )}
+        {selectedGroupId && <GroupResourcesPanel key={selectedGroupId} groupId={selectedGroupId} onChanged={refresh} />}
 
         <>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
@@ -393,7 +396,7 @@ export default function AdminStudents() {
                   <h3 className="font-semibold mb-2 text-sm">Créer un groupe</h3>
                   <input className="w-full border rounded-lg px-3 py-2 mb-2" placeholder="Nom du nouveau groupe" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
                   <button onClick={prepareNewGroup} className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm">Créer</button>
-                  <p className="text-xs text-gray-500 mt-2">Un groupe existe dès qu'au moins un étudiant y est ajouté.</p>
+                  <p className="text-xs text-gray-500 mt-2">Le groupe est créé dans la session en cours.</p>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2 text-sm">Modifier le groupe actif</h3>
@@ -510,7 +513,7 @@ export default function AdminStudents() {
                             <div>{ev.date} • {ev.rubric?.taskTitle || ev.rubric?.title}</div>
                             <div className="flex items-center gap-2">
                               <span className="font-semibold">{ev.totalScore}/{ev.totalMax}</span>
-                              <Link to={`/evaluations?load=${ev._id}&tab=corriger`} className="text-blue-600 hover:underline">Voir</Link>
+                              <Link to={`/session?load=${ev._id}&tab=corriger`} className="text-blue-600 hover:underline">Voir</Link>
                               <button onClick={() => removeEval(ev._id)} className="text-red-600 hover:underline">Suppr.</button>
                             </div>
                           </li>

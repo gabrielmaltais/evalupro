@@ -35,7 +35,8 @@ async function activeSessionOrFail(req) {
 
 function sendError(res, error, fallback) {
   const code = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 400;
-  res.status(code).json({ message: code === 409 || code === 404 ? error.message : fallback, details: error.message });
+  const explicit = code !== 400;
+  res.status(code).json(explicit ? { message: error.message } : { message: fallback, details: error.message });
 }
 
 /** Élèves de la session active (inscrits) plus ceux qui n'ont encore aucun groupe nulle part. */
