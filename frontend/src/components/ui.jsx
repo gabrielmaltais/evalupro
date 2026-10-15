@@ -38,6 +38,25 @@ export function FormCard({ mode, title, accent = "#2563eb", onBack, backLabel = 
   );
 }
 
+/** Pastille de choix: un clic sélectionne, l'état actif est bien visible. Remplace les longues listes déroulantes. */
+export function Chip({ active, onClick, icon, children, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex min-h-[2.25rem] items-center gap-2 rounded-xl border px-3.5 py-1.5 text-left text-sm font-medium transition ${
+        active
+          ? "border-blue-600 bg-blue-600 text-white shadow"
+          : "border-gray-300 bg-white text-gray-800 hover:border-blue-500 hover:bg-blue-50 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-800"
+      } ${className}`}
+    >
+      {icon && <i className={`fa-solid ${icon} text-[0.8em] opacity-80`} aria-hidden />}
+      <span>{children}</span>
+    </button>
+  );
+}
+
 export const btnPrimary = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-60";
 export const btnSecondary = "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50";
 export const btnDanger = "rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50";

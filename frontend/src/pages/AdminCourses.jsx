@@ -21,6 +21,7 @@ export default function AdminCourses() {
   const [bulkText, setBulkText] = useState("");
   const [showBulk, setShowBulk] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [rubrics, setRubrics] = useState([]);
 
   async function refresh(selectId) {
@@ -45,6 +46,7 @@ export default function AdminCourses() {
 
   function selectCourse(c) {
     window.scrollTo({ top: 0, behavior: "smooth" });
+    setEditing(false);
     setCourse({ ...c, competencies: c.competencies || [] });
     setError("");
     setSuccess("");
@@ -53,6 +55,14 @@ export default function AdminCourses() {
   }
 
   function closeEditor() {
+    if (course._id && editing) {
+      // Retour à la fiche du cours (ses grilles), sans perdre le cours choisi.
+      const original = courses.find((c) => c._id === course._id);
+      if (original) setCourse({ ...original, competencies: original.competencies || [] });
+      setEditing(false);
+      return;
+    }
+    setEditing(false);
     setCourse(EMPTY_COURSE);
     setError("");
     setConfirmDelete(false);
@@ -60,6 +70,7 @@ export default function AdminCourses() {
 
   function newCourse() {
     window.scrollTo({ top: 0, behavior: "smooth" });
+    setEditing(true);
     setCourse({ ...EMPTY_COURSE, competencies: [newCompetency()] });
     setError("");
     setSuccess("");
@@ -120,6 +131,7 @@ export default function AdminCourses() {
     try {
       const saved = course._id ? await api.updateCourse(course._id, payload) : await api.createCourse(payload);
       await refresh(saved._id);
+      setEditing(false);
       const sync = saved.sync || {};
       const parts = ["Cours enregistré."];
       if (sync.updated) parts.push(`${sync.updated} grille(s) mise(s) à jour avec les compétences modifiées.`);
@@ -161,6 +173,7 @@ export default function AdminCourses() {
     }
   }
 
+  const courseRubrics = rubrics.filter((r) => r.course === course._id);
   const editorOpen = Boolean(course._id || course.title || course.competencies.length > 0);
 
   return (
@@ -214,13 +227,64 @@ export default function AdminCourses() {
             <div className="ui-card ui-card-body hidden text-sm text-gray-600 lg:block">
               <p className="ui-info">Choisis un cours dans la liste pour le modifier, ou clique sur « Nouveau cours ».</p>
             </div>
+          ) : course._id && !editing ? (
+            <Card
+              title={<><i className="fa-solid fa-folder-open text-emerald-600" aria-hidden /> {course.code ? `${course.code} · ` : ""}{course.title}</>}
+              actions={
+                <>
+                  <button type="button" onClick={closeEditor} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 lg:hidden">
+                    <i className="fa-solid fa-arrow-left mr-1" aria-hidden /> Mes cours
+                  </button>
+                  <button type="button" onClick={() => setEditing(true)} title="Modifier le cours et ses compétences" aria-label="Modifier le cours" className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-emerald-700">
+                    <i className="fa-solid fa-gear" aria-hidden />
+                  </button>
+                </>
+              }
+            >
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-gray-800">Grilles de ce cours ({courseRubrics.length})</p>
+                  <Link to={`/ressources/grilles?course=${course._id}`} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                    <i className="fa-solid fa-plus mr-1" aria-hidden /> Nouvelle grille dans ce cours
+                  </Link>
+                </div>
+                {courseRubrics.length === 0 ? (
+                  <p className="ui-info text-sm text-gray-600">Aucune grille dans ce cours pour l&apos;instant.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {courseRubrics.map((r) => (
+                      <li key={r._id}>
+                        <Link to={`/ressources/grilles?course=${course._id}&rubric=${r._id}`} className="ui-item">
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{r.taskTitle || r.title}</span>
+                            <span className="text-xs text-gray-500">v{r.version} · {r.isActive ? "Active" : "Inactive"}{(r.groups || []).length ? ` · ${r.groups.join(", ")}` : ""}</span>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="ui-info">
+                  <p className="ui-label">Compétences ({course.competencies.length})</p>
+                  {course.competencies.length === 0 ? (
+                    <p className="text-sm text-gray-500">Aucune compétence. Utilise l&apos;icône de réglages pour en ajouter.</p>
+                  ) : (
+                    <ol className="list-decimal space-y-0.5 pl-5 text-sm text-gray-700">
+                      {course.competencies.map((comp) => (
+                        <li key={comp.id}>{comp.title}</li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </div>
+            </Card>
           ) : (
             <FormCard
               mode={course._id ? "Modification" : "Nouveau cours"}
               title={course._id ? course.title || "Cours sans titre" : "Entre le nom et les compétences du cours"}
               accent="#059669"
               onBack={closeEditor}
-              backLabel="Mes cours"
+              backLabel={course._id ? "Retour au cours" : "Mes cours"}
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="sm:col-span-2">

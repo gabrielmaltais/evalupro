@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import PageSectionTitle from "../components/PageSectionTitle";
 import HubContextBar from "../components/HubContextBar";
+import { Chip } from "../components/ui";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
@@ -2499,20 +2500,16 @@ export default function Evaluations() {
                   <div className="mt-1 text-xs text-gray-600 dark:text-slate-300">{selectedSendExam.title}</div>
                 )}
               </div>
-              <label className="block text-sm text-gray-700 dark:text-slate-200">
-                Groupe destinataire
-                <select
-                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-slate-600 dark:bg-slate-950/60 dark:text-slate-100"
-                  value={emailBatchConfig.group}
-                  onChange={(e) => setEmailBatchConfig({ ...emailBatchConfig, group: e.target.value })}
-                >
+              <div>
+                <span className="ui-label">Groupe destinataire</span>
+                <div className="flex flex-wrap gap-2">
                   {emailTargets.groups.map((g) => (
-                    <option key={g} value={g}>
+                    <Chip key={g} active={emailBatchConfig.group === g} icon="fa-users" onClick={() => setEmailBatchConfig({ ...emailBatchConfig, group: g })}>
                       {g}
-                    </option>
+                    </Chip>
                   ))}
-                </select>
-              </label>
+                </div>
+              </div>
               <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-200">
                 <input
                   type="checkbox"

@@ -86,16 +86,13 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
             {(group.courseList || []).length === 0 && <span className="text-xs text-gray-400">Aucun cours lié.</span>}
           </div>
           {freeCourses.length > 0 ? (
-            <select
-              className={sel}
-              value=""
-              onChange={(e) => e.target.value && act(() => api.updateGroup(groupId, { courses: [...(group.courses || []), e.target.value] }))}
-            >
-              <option value="">+ Lier un cours…</option>
+            <div className="flex flex-wrap gap-1.5">
               {freeCourses.map((c) => (
-                <option key={c._id} value={c._id}>{c.title}</option>
+                <button key={c._id} type="button" onClick={() => act(() => api.updateGroup(groupId, { courses: [...(group.courses || []), c._id] }))} className={`${chip} border-dashed border-gray-400 bg-white text-gray-700 hover:border-indigo-500 hover:bg-indigo-50`} title="Lier ce cours au groupe">
+                  <i className="fa-solid fa-plus text-[0.8em]" aria-hidden /> {c.title}
+                </button>
               ))}
-            </select>
+            </div>
           ) : (
             courses.length === 0 && (
               <p className="text-xs text-gray-500">Crée d'abord un cours dans <Link to="/ressources/cours" className="font-semibold text-blue-600 underline">Ressources</Link>.</p>
@@ -123,12 +120,14 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
             {(group.rubricList || []).length === 0 && <span className="text-xs text-gray-400">Aucune grille importée : rien à corriger pour l'instant.</span>}
           </div>
           {importable.length > 0 && (
-            <select className={sel} value="" onChange={(e) => e.target.value && act(() => api.importGroupRubrics(groupId, [e.target.value]))}>
-              <option value="">+ Importer une grille…</option>
+            <div className="flex flex-wrap gap-1.5">
               {importable.map((r) => (
-                <option key={r._id} value={r._id}>{r.title} · {courseTitle(r.course)}</option>
+                <button key={r._id} type="button" onClick={() => act(() => api.importGroupRubrics(groupId, [r._id]))} className={`${chip} border-dashed border-gray-400 bg-white text-gray-700 hover:border-emerald-500 hover:bg-emerald-50`} title="Importer cette grille dans le groupe">
+                  <i className="fa-solid fa-plus text-[0.8em]" aria-hidden /> {r.title}
+                  <span className="text-gray-400">· {courseTitle(r.course)}</span>
+                </button>
               ))}
-            </select>
+            </div>
           )}
           {importable.length > 1 && (
             <button type="button" className="block text-xs font-medium text-blue-600 hover:underline" onClick={() => act(() => api.importGroupRubrics(groupId, importable.map((r) => r._id)))}>
