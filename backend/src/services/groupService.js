@@ -93,6 +93,8 @@ async function importRubrics(ownerId, group, rubricIds) {
     { _id: group._id },
     { $addToSet: { rubrics: { $each: rubrics.map((r) => r._id) }, courses: { $each: rubrics.map((r) => r.course) } } }
   );
+  // require tardif: sessionCourseService dépend de ce module.
+  await require("./sessionCourseService").addRubrics(ownerId, group.session, rubrics.map((r) => r._id));
   return fresh.length;
 }
 

@@ -75,6 +75,22 @@ async function removeCourse(ownerId, session, courseId) {
   );
 }
 
+/**
+ * Les imports faits groupe par groupe (anciennes routes) sont reportés dans la session, sinon la prochaine
+ * synchro les effacerait: le cours y est ajouté au besoin, avec seulement ces évaluations.
+ */
+async function addRubrics(ownerId, sessionId, rubricIds) {
+  const session = await Session.findOne({ _id: sessionId, createdBy: ownerId });
+  if (!session || !rubricIds?.length) return;
+  const rubrics = await Rubric.find({ createdBy: ownerId, _id: { $in: rubricIds.filter(isId) } }).select("course").lean();
+  for (const r of rubrics) {
+    const entry = session.courses.find((c) => str(c.course) === str(r.course));
+    if (!entry) session.courses.push({ course: r.course, rubrics: [r._id] });
+    else if (!entry.rubrics.some((id) => str(id) === str(r._id))) entry.rubrics.push(r._id);
+  }
+  await session.save();
+}
+
 /** Lie des cours à un groupe: ceux qui ne sont pas encore dans la session y sont ajoutés (évaluations actives). */
 async function ensureCoursesInSession(ownerId, session, courseIds) {
   for (const id of courseIds) await addCourse(ownerId, session, id);
@@ -131,4 +147,4 @@ async function backfillSessionCourses() {
   return done;
 }
 
-module.exports = { addCourse, setCourseRubrics, removeCourse, ensureCoursesInSession, syncGroups, describe, backfillSessionCourses };
+module.exports = { addRubrics, addCourse, setCourseRubrics, removeCourse, ensureCoursesInSession, syncGroups, describe, backfillSessionCourses };

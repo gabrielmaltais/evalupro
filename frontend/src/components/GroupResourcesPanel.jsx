@@ -3,23 +3,21 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 
 /**
- * Cours, grilles et élèves d'un groupe de la session en cours.
- * Lier un cours n'importe aucune grille: tu choisis celles que tu veux, quand tu veux.
+ * Cours et élèves d'un groupe de la session en cours. Les évaluations se choisissent par cours,
+ * dans « Cours et évaluations » : un groupe reçoit celles de ses cours.
  */
 export default function GroupResourcesPanel({ groupId, onChanged }) {
   const [group, setGroup] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [rubrics, setRubrics] = useState([]);
   const [library, setLibrary] = useState([]);
   const [error, setError] = useState("");
   const [pickStudent, setPickStudent] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [g, c, r, lib] = await Promise.all([api.getGroup(groupId), api.listCourses(), api.listRubrics(), api.listLibraryStudents()]);
+      const [g, c, lib] = await Promise.all([api.getGroup(groupId), api.listCourses(), api.listLibraryStudents()]);
       setGroup(g);
       setCourses(c);
-      setRubrics(r);
       setLibrary(lib);
       setError("");
     } catch (e) {
@@ -44,11 +42,8 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
   }
 
   const linkedIds = useMemo(() => new Set((group?.courses || []).map(String)), [group]);
-  const importedIds = useMemo(() => new Set((group?.rubrics || []).map(String)), [group]);
   const enrolledIds = useMemo(() => new Set((group?.students || []).map((s) => String(s._id))), [group]);
   const freeCourses = courses.filter((c) => !linkedIds.has(String(c._id)));
-  const importable = rubrics.filter((r) => linkedIds.has(String(r.course)) && !importedIds.has(String(r._id)));
-  const courseTitle = (id) => courses.find((c) => c._id === id)?.title || "Cours";
   const outsiders = library.filter((s) => !enrolledIds.has(String(s._id)));
 
   if (!group) return error ? <p className="text-sm text-red-600">{error}</p> : null;
@@ -59,11 +54,11 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
   return (
     <section className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
       <h2 className="text-base font-bold">
-        Cours et grilles de <span className="text-blue-600 dark:text-blue-400">{group.name}</span>
+        Cours et élèves de <span className="text-blue-600 dark:text-blue-400">{group.name}</span>
       </h2>
       {error && <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase text-gray-500">1. Cours du groupe</p>
           <div className="flex flex-wrap gap-1.5">
@@ -73,9 +68,9 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
                 <button
                   type="button"
                   className="text-indigo-500 hover:text-red-600"
-                  title="Retirer ce cours (ses grilles importées sont aussi retirées du groupe)"
+                  title="Retirer ce cours du groupe"
                   onClick={() => {
-                    if (window.confirm(`Retirer « ${c.title} » du groupe ? Les grilles de ce cours importées ici seront retirées (les évaluations déjà faites sont conservées).`))
+                    if (window.confirm(`Retirer « ${c.title} » du groupe ? Le groupe n'aura plus ses évaluations à corriger (les corrections déjà faites sont conservées).`))
                       act(() => api.updateGroup(groupId, { courses: (group.courses || []).filter((x) => String(x) !== String(c._id)) }));
                   }}
                 >
@@ -85,6 +80,7 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
             ))}
             {(group.courseList || []).length === 0 && <span className="text-xs text-gray-400">Aucun cours lié.</span>}
           </div>
+          <p className="text-xs text-gray-500">Le groupe reçoit les évaluations choisies pour ses cours dans <Link to="/session/cours" className="font-semibold text-blue-600 underline">Cours et évaluations</Link>.</p>
           {freeCourses.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {freeCourses.map((c) => (
@@ -101,44 +97,7 @@ export default function GroupResourcesPanel({ groupId, onChanged }) {
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase text-gray-500">2. Grilles importées</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(group.rubricList || []).map((r) => (
-              <span key={r._id} className={`${chip} border-emerald-200 bg-emerald-50 text-emerald-800`}>
-                {r.title}
-                <span className="text-emerald-600/70">· {courseTitle(r.course)}</span>
-                <button
-                  type="button"
-                  className="text-emerald-600 hover:text-red-600"
-                  title="Retirer cette grille du groupe"
-                  onClick={() => act(() => api.removeGroupRubric(groupId, r._id))}
-                >
-                  <i className="fa-solid fa-xmark" aria-hidden />
-                </button>
-              </span>
-            ))}
-            {(group.rubricList || []).length === 0 && <span className="text-xs text-gray-400">Aucune grille importée : rien à corriger pour l'instant.</span>}
-          </div>
-          {importable.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {importable.map((r) => (
-                <button key={r._id} type="button" onClick={() => act(() => api.importGroupRubrics(groupId, [r._id]))} className={`${chip} border-dashed border-gray-400 bg-white text-gray-700 hover:border-emerald-500 hover:bg-emerald-50`} title="Importer cette grille dans le groupe">
-                  <i className="fa-solid fa-plus text-[0.8em]" aria-hidden /> {r.title}
-                  <span className="text-gray-400">· {courseTitle(r.course)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {importable.length > 1 && (
-            <button type="button" className="block text-xs font-medium text-blue-600 hover:underline" onClick={() => act(() => api.importGroupRubrics(groupId, importable.map((r) => r._id)))}>
-              Tout importer ({importable.length})
-            </button>
-          )}
-          {linkedIds.size === 0 && <p className="text-xs text-gray-500">Lie d'abord un cours pour voir ses grilles. Pour créer une grille : <Link to="/ressources/grilles" className="font-semibold text-blue-600 underline">Ressources</Link>.</p>}
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs font-bold uppercase text-gray-500">3. Inscrire un élève existant</p>
+          <p className="text-xs font-bold uppercase text-gray-500">2. Inscrire un élève existant</p>
           {outsiders.length > 0 ? (
             <div className="flex gap-1.5">
               <select className={`${sel} min-w-0 flex-1`} value={pickStudent} onChange={(e) => setPickStudent(e.target.value)}>

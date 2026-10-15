@@ -37,7 +37,7 @@ export default function HubContextBar({
             <span className="ui-label">2. Examen à évaluer</span>
             {(examOptions || []).length === 0 ? (
               <Link to="/session/groupes" className="text-xs font-medium text-blue-700 underline dark:text-blue-300">
-                Aucune grille disponible : importe-en dans un groupe (Groupes et élèves).
+                Aucune évaluation disponible : choisis-en dans « Cours et évaluations ».
               </Link>
             ) : (
               <div className="flex flex-wrap gap-2" role="group" aria-label="Examen">

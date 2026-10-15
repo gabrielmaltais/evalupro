@@ -4,8 +4,10 @@ const mongoose = require("mongoose");
 const Rubric = require("../models/Rubric");
 const Course = require("../models/Course");
 const Group = require("../models/Group");
+const Session = require("../models/Session");
 const Evaluation = require("../models/Evaluation");
 const { resolveActiveSession } = require("../services/sessionService");
+const sessionCourses = require("../services/sessionCourseService");
 const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 const { auth } = require("../middleware/auth");
 const roles = require("../middleware/roles");
@@ -40,6 +42,7 @@ async function setGroupsByName(req, rubric, rawNames) {
     const want = names.has(g.name);
     if (want && !imported(g, rubric._id)) {
       await Group.updateOne({ _id: g._id }, { $addToSet: { rubrics: rubric._id, courses: rubric.course } });
+      await sessionCourses.addRubrics(req.user._id, g.session, [rubric._id]);
     } else if (!want && imported(g, rubric._id)) {
       await Group.updateOne({ _id: g._id }, { $pull: { rubrics: rubric._id } });
     }
@@ -187,6 +190,8 @@ router.post("/:id/copy", roles("admin", "teacher"), async (req, res) => {
         if (!imported(g, src._id)) continue;
         await Group.updateOne({ _id: g._id }, { $addToSet: { rubrics: item._id, courses: item.course } });
         await Group.updateOne({ _id: g._id }, { $pull: { rubrics: src._id } });
+        await sessionCourses.addRubrics(req.user._id, g.session, [item._id]);
+        await Session.updateOne({ _id: g.session }, { $pull: { "courses.$[].rubrics": src._id } });
       }
     }
     const [out] = await withGroups(req, [item]);
@@ -200,6 +205,7 @@ router.delete("/:id", roles("admin", "teacher"), async (req, res) => {
   const deleted = await Rubric.findOneAndDelete(mine(req, req.params.id));
   if (!deleted) return res.status(404).json({ message: "Rubric introuvable" });
   await Group.updateMany({ createdBy: req.user._id, rubrics: deleted._id }, { $pull: { rubrics: deleted._id } });
+  await Session.updateMany({ createdBy: req.user._id }, { $pull: { "courses.$[].rubrics": deleted._id } });
   res.status(204).send();
 });
 
