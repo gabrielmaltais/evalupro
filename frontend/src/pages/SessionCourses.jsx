@@ -150,6 +150,73 @@ export default function SessionCourses() {
       <p className="text-xs text-gray-400">Aucun groupe dans la session. Ajoute-en dans « Groupes de la session ».</p>
     );
 
+  const renderEntry = (entry, key) => (
+      <Card
+        key={`${key}-${entry._id}`}
+        title={
+          <>
+            <i className="fa-solid fa-book text-emerald-600" aria-hidden /> {entry.course.title}
+            {entry.course.code && <span className="font-normal normal-case text-gray-400"> · {entry.course.code}</span>}
+          </>
+        }
+        actions={
+          <button
+            type="button"
+            className={`${btnDanger} !px-2 !py-1 text-xs`}
+            disabled={readOnly}
+            onClick={() => {
+              if (window.confirm(`Retirer « ${entry.course.title} »${entry.groups.length ? ` (${entry.groups.map((g) => g.name).join(", ")})` : ""} de la session ? Ces groupes ne pourront plus corriger ses évaluations (les corrections déjà faites sont conservées).`))
+                act(() => api.removeSessionCourse(sessionId, entry._id));
+            }}
+          >
+            Retirer
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          {entry.groups.length > 1 && (
+            <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              <i className="fa-solid fa-triangle-exclamation mr-1" aria-hidden />
+              Ce cours est lié à {entry.groups.length} groupes ({entry.groups.map((g) => g.name).join(", ")}) : groupe jumelé. Si ce sont deux classes distinctes, ajoute plutôt le cours une fois par groupe.
+            </p>
+          )}
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-blue-700">Changer le groupe de ce cours</summary>
+            <div className="mt-2">
+              {groupChips(
+                entry.groups.map((g) => String(g._id)),
+                (id) => toggleEntryGroup(entry, id),
+                (id) => takenBy(entry.course._id, id, entry._id)
+              )}
+            </div>
+          </details>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase text-gray-500">Évaluations à corriger</p>
+            {entry.rubrics.length ? (
+              <div className="space-y-1.5">
+                {entry.rubrics.map((r) => (
+                  <label key={r._id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <input type="checkbox" checked={r.imported} disabled={readOnly} onChange={() => toggleRubric(entry, r)} />
+                    {r.title}
+                    {!r.isActive && <span className="text-xs text-gray-400">(inactive)</span>}
+                    {r.correctedCount > 0 && <span className="text-xs font-semibold text-emerald-700">({r.correctedCount} copie{r.correctedCount > 1 ? "s" : ""} corrigée{r.correctedCount > 1 ? "s" : ""})</span>}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Aucune évaluation dans ce cours. <Link to="/ressources/grilles" className="text-blue-600 underline">En créer une</Link></p>
+            )}
+          </div>
+        </div>
+      </Card>
+  );
+
+  // Les cours sont classés par groupe (un cours de groupe jumelé figure sous chacun de ses groupes).
+  const sections = [
+    ...groups.map((g) => ({ key: g._id, name: g.name, items: entries.filter((e) => e.groups.some((x) => String(x._id) === String(g.activeGroup._id))) })),
+    { key: "none", name: "Sans groupe", items: entries.filter((e) => e.groups.length === 0) },
+  ].filter((sec) => sec.items.length);
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <PageSectionTitle
@@ -253,73 +320,15 @@ export default function SessionCourses() {
 
       {entries.length === 0 && <p className="ui-info text-sm">Aucun cours dans cette session pour l'instant.</p>}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {entries.map((entry) => (
-          <Card
-            key={entry._id}
-            title={
-              <>
-                <i className="fa-solid fa-book text-emerald-600" aria-hidden /> {entry.course.title}
-                {entry.course.code && <span className="font-normal normal-case text-gray-400"> · {entry.course.code}</span>}
-                {entry.groups.length === 0 ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-amber-800">aucun groupe</span>
-                ) : (
-                  entry.groups.map((g) => (
-                    <span key={g._id} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold normal-case text-blue-700">{g.name}</span>
-                  ))
-                )}
-              </>
-            }
-            actions={
-              <button
-                type="button"
-                className={`${btnDanger} !px-2 !py-1 text-xs`}
-                disabled={readOnly}
-                onClick={() => {
-                  if (window.confirm(`Retirer « ${entry.course.title} »${entry.groups.length ? ` (${entry.groups.map((g) => g.name).join(", ")})` : ""} de la session ? Ces groupes ne pourront plus corriger ses évaluations (les corrections déjà faites sont conservées).`))
-                    act(() => api.removeSessionCourse(sessionId, entry._id));
-                }}
-              >
-                Retirer
-              </button>
-            }
-          >
-            <div className="space-y-4">
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Groupe{entry.groups.length > 1 ? "s" : ""} qui suivent ce cours</p>
-                {groupChips(
-                  entry.groups.map((g) => String(g._id)),
-                  (id) => toggleEntryGroup(entry, id),
-                  (id) => takenBy(entry.course._id, id, entry._id)
-                )}
-                {entry.groups.length > 1 && (
-                  <p className="mt-1.5 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                    <i className="fa-solid fa-triangle-exclamation mr-1" aria-hidden />
-                    Ce cours est lié à {entry.groups.length} groupes (groupe jumelé). Si ce sont deux classes distinctes, ajoute plutôt le cours une fois par groupe.
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase text-gray-500">Évaluations à corriger</p>
-                {entry.rubrics.length ? (
-                  <div className="space-y-1.5">
-                    {entry.rubrics.map((r) => (
-                      <label key={r._id} className="flex flex-wrap items-center gap-2 text-sm">
-                        <input type="checkbox" checked={r.imported} disabled={readOnly} onChange={() => toggleRubric(entry, r)} />
-                        {r.title}
-                        {!r.isActive && <span className="text-xs text-gray-400">(inactive)</span>}
-                        {r.correctedCount > 0 && <span className="text-xs font-semibold text-emerald-700">({r.correctedCount} copie{r.correctedCount > 1 ? "s" : ""} corrigée{r.correctedCount > 1 ? "s" : ""})</span>}
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">Aucune évaluation dans ce cours. <Link to="/ressources/grilles" className="text-blue-600 underline">En créer une</Link></p>
-                )}
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+      {sections.map((sec) => (
+        <section key={sec.key} className="space-y-3">
+          <h2 className="flex items-center gap-2 text-base font-bold text-gray-800 dark:text-gray-100">
+            <i className={`fa-solid ${sec.key === "none" ? "fa-circle-question text-amber-600" : "fa-users text-blue-600"}`} aria-hidden /> {sec.name}
+            <span className="text-xs font-normal text-gray-500">{sec.items.length} cours</span>
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">{sec.items.map((entry) => renderEntry(entry, sec.key))}</div>
+        </section>
+      ))}
       <Link to="/session?tab=corriger" className={`${btnSecondary} inline-block`}>Aller corriger</Link>
     </main>
   );
