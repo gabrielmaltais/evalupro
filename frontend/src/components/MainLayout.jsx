@@ -28,38 +28,70 @@ function SessionSwitcher() {
   );
 }
 
+const iconBtn =
+  "flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-white hover:text-gray-900 hover:shadow-sm dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100";
+
+/** Raccourcis en icônes (Administration, thème, déconnexion) et avatar pour « Mon compte », en haut à droite. */
 function HeaderActions() {
+  const user = getUserFromToken();
+  const initials =
+    String(user?.name || user?.email || "?")
+      .split(/[\s@.]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join("") || "?";
   return (
-    <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+    <div className="flex shrink-0 items-center gap-2">
       <SessionSwitcher />
-      <DarkToggle />
-      <button
-        type="button"
-        onClick={() => {
-          localStorage.removeItem("token");
-          localStorage.removeItem("eval_token");
-          window.location.href = "/login";
-        }}
-        className="p-2 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-950/40 transition-colors"
-        title="Se déconnecter"
+      <div className="flex items-center gap-0.5 rounded-2xl bg-gray-100/90 p-1 ring-1 ring-gray-200/60 dark:bg-gray-800/80 dark:ring-gray-700/60">
+        {user?.role === "admin" && (
+          <NavLink
+            to="/admin/users"
+            title="Administration"
+            aria-label="Administration"
+            className={({ isActive }) => `${iconBtn} ${isActive ? "!bg-white !text-blue-600 shadow-sm ring-1 ring-gray-200/80 dark:!bg-gray-700 dark:!text-blue-300 dark:ring-gray-600" : ""}`}
+          >
+            <i className="fa-solid fa-screwdriver-wrench text-sm" aria-hidden />
+          </NavLink>
+        )}
+        <DarkToggle className="!h-9 !w-9 !bg-transparent hover:!bg-white hover:shadow-sm dark:hover:!bg-gray-700" />
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.removeItem("token");
+            localStorage.removeItem("eval_token");
+            window.location.href = "/login";
+          }}
+          className={`${iconBtn} hover:!text-red-600 dark:hover:!text-red-400`}
+          title="Se déconnecter"
+          aria-label="Se déconnecter"
+        >
+          <i className="fa-solid fa-right-from-bracket text-sm" aria-hidden />
+        </button>
+      </div>
+      <NavLink
+        to="/account"
+        title={user?.name ? `Mon compte — ${user.name}` : "Mon compte"}
+        aria-label="Mon compte"
+        className={({ isActive }) =>
+          `flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-sm font-bold text-white shadow-md shadow-blue-600/20 transition hover:scale-105 hover:shadow-lg ${
+            isActive ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-950" : ""
+          }`
+        }
       >
-        <i className="fa-solid fa-right-from-bracket text-sm sm:text-base" />
-      </button>
+        {initials}
+      </NavLink>
     </div>
   );
 }
 
 function AppNav() {
-  const role = getUserFromToken()?.role;
   const links = [
     { to: "/session", label: "Session en cours", icon: "fa-graduation-cap", end: false },
     { to: "/ressources", label: "Ressources", icon: "fa-book-open", end: false },
     { to: "/sessions", label: "Sessions", icon: "fa-calendar-days", end: false },
-    { to: "/account", label: "Mon compte", icon: "fa-user-gear", end: true },
   ];
-  if (role === "admin") {
-    links.push({ to: "/admin/users", label: "Administration", icon: "fa-screwdriver-wrench", end: true });
-  }
 
   return (
     <nav
