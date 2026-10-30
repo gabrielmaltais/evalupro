@@ -1,0 +1,770 @@
+{
+  "title": "Infrastructure réseau",
+  "taskTitle": "Laboratoire évalué - Succursale Orion : Routage, NAT et VPN",
+  "linkCompetencies": true,
+  "criteria": [
+    {
+      "id": "c2",
+      "title": "Installer et administrer les services d’infrastructure réseau",
+      "competencyElement": "Installer et administrer les services d’infrastructure réseau",
+      "competencyId": "comp-1f963552",
+      "weight": 30,
+      "color": "border-green-500",
+      "levels": [
+        {
+          "label": "Insuffisant",
+          "minPct": 0,
+          "maxPct": 0.3,
+          "desc": "Le routage, le NAT, le VPN ou le filtrage DNS ne fonctionnent pas : la succursale n'est pas opérationnelle."
+        },
+        {
+          "label": "Partiel",
+          "minPct": 0.6,
+          "maxPct": 0.68,
+          "desc": "Plusieurs services clés comportent des erreurs bloquantes qui limitent grandement la connectivité ou la sécurité demandée."
+        },
+        {
+          "label": "Satisfaisant",
+          "minPct": 0.75,
+          "maxPct": 0.82,
+          "desc": "L'essentiel de l'infrastructure fonctionne (NAT, VPN, AdGuard), avec quelques imprécisions ou oublis dans les paramètres."
+        },
+        {
+          "label": "Excellent",
+          "minPct": 0.9,
+          "maxPct": 1,
+          "desc": "Routage, NAT, VPN et filtrage DNS déployés avec rigueur, entièrement fonctionnels et prouvés par les captures."
+        }
+      ],
+      "subCriteria": [
+        {
+          "id": "c2-sc1",
+          "group": "Étape 1 : Cartes et adressage",
+          "label": "Carte PRIVEE de SRV : renommée, 192.168.10.1/24, DNS 127.0.0.1, sans passerelle",
+          "pts": 1.5,
+          "feedback": "Carte PRIVEE non renommée, adresse ou masque incorrect, passerelle configurée à tort ou DNS différent de 127.0.0.1.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Carte PRIVEE non configurée ou confondue avec la carte INTERNET."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Plusieurs éléments de la configuration de la carte sont absents ou inexacts (nom, adresse, masque, DNS, passerelle)."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Configuration de la carte presque complète; un ou deux détails mineurs sont imprécis ou manquants."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Carte PRIVEE renommée, 192.168.10.1/24, DNS 127.0.0.1 et aucune passerelle, visibles dans ipconfig /all."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc2",
+          "group": "Étape 1 : Cartes et adressage",
+          "label": "Carte INTERNET de SRV : renommée, adresse DHCP (100.64.x.y), DNS 127.0.0.1, sans enregistrement dans le DNS",
+          "pts": 1.5,
+          "feedback": "Carte INTERNET non renommée, DNS différent de 127.0.0.1 ou enregistrement des adresses dans le DNS non désactivé.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Carte INTERNET non configurée ou inversée avec la carte PRIVEE."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Plusieurs éléments de la configuration de la carte sont absents ou inexacts (nom, adressage DHCP, DNS, enregistrement dans le DNS)."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Configuration de la carte presque complète; un détail mineur est imprécis ou manquant."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Carte INTERNET renommée, adresse 100.64.x.y obtenue par DHCP, DNS 127.0.0.1 et enregistrement DNS désactivé."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc3",
+          "group": "Étape 1 : Cartes et adressage",
+          "label": "Carte du PC : renommée, 192.168.10.10/24, passerelle 192.168.10.1, DNS 192.168.10.1",
+          "pts": 1.5,
+          "feedback": "Carte du PC non renommée, adresse incorrecte, passerelle absente ou DNS différent de 192.168.10.1.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Carte du PC non configurée ou capture ipconfig /all absente."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Plusieurs éléments de la configuration de la carte sont absents ou inexacts (nom, adresse, passerelle, DNS)."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Configuration de la carte presque complète; un ou deux détails mineurs sont imprécis ou manquants."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Carte renommée, 192.168.10.10/24, passerelle et DNS 192.168.10.1, visibles dans ipconfig /all."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc4",
+          "group": "Étape 1 : Cartes et adressage",
+          "label": "Redirecteur DNS de SRV vers le serveur DNS reçu par la carte INTERNET",
+          "pts": 1.5,
+          "feedback": "Redirecteur DNS absent, mal configuré ou ne pointant pas vers le DNS reçu par la carte INTERNET.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucun redirecteur configuré."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Redirecteur DNS présent mais non conforme à la demande, ou démonstration très incomplète."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Redirecteur DNS essentiellement conforme; un détail de configuration ou de preuve est imprécis ou manquant."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Redirecteur DNS pointant vers le serveur DNS reçu par la carte INTERNET, prouvé par la capture."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc5",
+          "group": "Étape 2 : Routeur et NAT",
+          "label": "Installation du rôle Accès à distance (DirectAccess et VPN (RAS) et Routage)",
+          "pts": 1.5,
+          "feedback": "Rôle Accès à distance absent ou services de rôle DirectAccess/VPN (RAS) et Routage incomplets.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Rôle Accès à distance non installé."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Installation incomplète : une partie des éléments demandés (rôle, services de rôle) manque."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Rôle installé avec les services demandés; un détail de l'installation ou de sa preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Rôle Accès à distance installé avec DirectAccess et VPN (RAS) ainsi que Routage."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc6",
+          "group": "Étape 2 : Routeur et NAT",
+          "label": "Activation de Routage et accès distant en configuration personnalisée (Accès VPN et NAT) et démarrage du service",
+          "pts": 1.5,
+          "feedback": "Configuration non personnalisée, Accès VPN ou NAT non coché, ou service non démarré.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Routage et accès distant non configuré."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Service configuré de façon partielle : plusieurs des options demandées (type de configuration, VPN, NAT, démarrage) manquent ou sont inexactes."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Service configuré et fonctionnel pour l'essentiel; un détail de configuration ou de preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Configuration personnalisée avec Accès VPN et NAT, service démarré."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc7",
+          "group": "Étape 2 : Routeur et NAT",
+          "label": "Interfaces du NAT : INTERNET publique avec NAT activé, PRIVEE privée",
+          "pts": 2,
+          "feedback": "Interface INTERNET non publique, NAT non activé sur INTERNET ou interface PRIVEE mal typée.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucune interface NAT définie."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Interfaces du NAT partiellement conformes : plusieurs éléments (types d'interfaces, activation du NAT) manquent ou sont inexacts."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Interfaces du NAT essentiellement conformes; un détail est imprécis ou une preuve est incomplète."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "INTERNET publique avec NAT activé et PRIVEE privée, démontrés par les deux captures."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc8",
+          "group": "Étape 2 : Routeur et NAT",
+          "label": "Tests depuis le PC : ping 8.8.8.8, ping google.com et tracert -d 8.8.8.8",
+          "pts": 1.5,
+          "feedback": "Ping ou résolution de google.com en échec, ou tracert sans premier saut visible.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucun test réussi ou aucune capture."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Tests partiellement réussis ou démontrés : une partie importante des tests demandés échoue ou est absente."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Tests réussis dans l'ensemble; un test ou une preuve est incomplet."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "ping 8.8.8.8, ping google.com et tracert -d 8.8.8.8 (premier saut 192.168.10.1) réussis et captés."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc9",
+          "group": "Étape 2 : Routeur et NAT",
+          "label": "Mappages NAT de l'interface INTERNET pendant un ping -t 8.8.8.8",
+          "pts": 1.5,
+          "feedback": "Mappages NAT absents de la capture ou ping continu non démontré.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucune capture des mappages NAT."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Démonstration des mappages incomplète ou peu probante par rapport à ce qui est demandé."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Mappages démontrés pour l'essentiel; un détail de la démonstration est imprécis ou manquant."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Mappages NAT de l'interface INTERNET affichés pendant le ping -t, avec traduction de 192.168.10.10."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc10",
+          "group": "Étape 3 : Serveur VPN PPTP",
+          "label": "Serveur RRAS : routeur IPv4 (réseau local uniquement) et serveur d'accès à distance IPv4",
+          "pts": 1,
+          "feedback": "Routeur IPv4 en mode « réseau local et appels à la demande » ou accès à distance IPv4 non activé.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Propriétés du serveur RRAS non configurées."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Configuration du serveur RRAS partielle : une des fonctions demandées manque ou est inexacte."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Fonctions demandées activées; un détail de leur paramétrage est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Routeur IPv4 (réseau local uniquement) et serveur d'accès à distance IPv4 activés."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc11",
+          "group": "Étape 3 : Serveur VPN PPTP",
+          "label": "Pool d'adresses statiques 192.168.10.200 à 192.168.10.210 sur l'adaptateur PRIVEE",
+          "pts": 1.5,
+          "feedback": "Pool absent, plage différente de .200 à .210 ou adaptateur autre que PRIVEE.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucun pool d'adresses statiques."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Pool d'adresses partiellement conforme (plage, type de pool, adaptateur) ou preuve incomplète."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Pool d'adresses essentiellement conforme; un détail (plage, adaptateur ou preuve) est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Pool statique 192.168.10.200 à 192.168.10.210 sur l'adaptateur PRIVEE, prouvé par la capture."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc12",
+          "group": "Étape 3 : Serveur VPN PPTP",
+          "label": "Authentification MS-CHAP v2 activée",
+          "pts": 1,
+          "feedback": "MS-CHAP v2 non activé, ou méthodes d'authentification non sécuritaires laissées actives.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucune méthode d'authentification configurée."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Authentification partiellement conforme à la demande."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Authentification conforme pour l'essentiel; un détail est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "MS-CHAP v2 activé."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc13",
+          "group": "Étape 3 : Serveur VPN PPTP",
+          "label": "Port WAN Miniport (PPTP) : connexions d'accès à distance entrantes seulement, 5 ports maximum",
+          "pts": 1.5,
+          "feedback": "Port PPTP accepte aussi le routage, ou nombre de ports différent de 5.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Port WAN Miniport (PPTP) non configuré."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Configuration du port PPTP partiellement conforme : plusieurs éléments demandés (type de connexions, nombre de ports) manquent ou sont inexacts."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Port PPTP essentiellement conforme; un détail ou une preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "WAN Miniport (PPTP) limité aux connexions d'accès à distance entrantes avec 5 ports, liste des ports captée."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc14",
+          "group": "Étape 3 : Serveur VPN PPTP",
+          "label": "Compte vpn_externe : mot de passe Bordeaux00 qui n'expire jamais, accès à distance autorisé",
+          "pts": 1,
+          "feedback": "Compte absent, mot de passe qui expire ou autorisation d'accès à distance non accordée.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Compte vpn_externe inexistant."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Compte créé de façon partielle : plusieurs des paramètres demandés (mot de passe, expiration, accès à distance) manquent ou sont inexacts."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Compte conforme pour l'essentiel; un paramètre ou une preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Compte vpn_externe créé, mot de passe sans expiration et accès à distance autorisé, prouvé par la capture."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc15",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Déploiement de la VM ADGUARD-Prénom à partir du template TPL-AdGuard-Orion (vnet personnel, une seule carte)",
+          "pts": 2,
+          "feedback": "VM non nommée correctement, mauvais template, carte sur le réseau internet ou plusieurs cartes.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucune VM AdGuard déployée."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Déploiement de la VM partiellement conforme : plusieurs éléments demandés (template, nom, réseau, carte) manquent ou sont inexacts."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "VM déployée conformément pour l'essentiel; un détail (nom, réseau ou carte) est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "VM ADGUARD-Prénom issue de TPL-AdGuard-Orion, une seule carte sur le vnet personnel."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc16",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Adressage IP statique de la VM dans DeltaCloud : 192.168.10.53/24, passerelle 192.168.10.1",
+          "pts": 1.5,
+          "feedback": "IP statique non configurée dans DeltaCloud, adresse, masque ou passerelle incorrect.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucune IP statique configurée."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Adressage statique partiellement conforme : plusieurs paramètres (adresse, masque, passerelle) manquent ou sont inexacts."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Adressage statique essentiellement conforme; un paramètre est imprécis ou manquant."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "IP statique 192.168.10.53/24 et passerelle 192.168.10.1 configurées dans la section réseau de DeltaCloud."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc17",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Joignabilité depuis le PC : interface web d'AdGuard et nslookup google.com 192.168.10.53",
+          "pts": 1.5,
+          "feedback": "Interface web inaccessible depuis le PC ou nslookup sans réponse (AdGuard ne sort pas par SRV).",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Ni l'interface web ni le nslookup ne fonctionnent."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Joignabilité partiellement démontrée : une partie des vérifications demandées échoue ou manque."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Joignabilité démontrée pour l'essentiel; une preuve est incomplète."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Interface web ouverte depuis le PC et nslookup google.com 192.168.10.53 répondu, captés."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc18",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Branchement du DNS : le redirecteur de SRV pointe seulement vers AdGuard, le DNS de PC reste SRV",
+          "pts": 1.5,
+          "feedback": "Redirecteur de SRV vers autre chose qu'AdGuard seul, ou DNS du PC modifié.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Redirecteur de SRV inchangé; le blocage ne s'applique pas au réseau."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Branchement du DNS partiellement conforme à la demande."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Branchement du DNS essentiellement conforme; un détail ou une preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Redirecteur de SRV vers AdGuard seulement, DNS du PC toujours SRV, prouvé par les captures."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc19",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Blocage de steampowered.com, epicgames.com et roblox.com, sous-domaines inclus",
+          "pts": 1.5,
+          "feedback": "Un ou plusieurs domaines non bloqués, ou règle qui ne couvre pas les sous-domaines.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucun domaine bloqué."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Blocage partiel : une partie des domaines demandés, ou de leurs sous-domaines, n'est pas bloquée."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Blocage conforme pour l'essentiel; un domaine, un sous-domaine ou une preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Les trois domaines bloqués avec sous-domaines, règles visibles dans AdGuard."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc20",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Blocage du service TikTok",
+          "pts": 1,
+          "feedback": "Service TikTok non bloqué ou blocage par domaines manuels au lieu du service.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "TikTok non bloqué."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Blocage de TikTok partiel ou peu probant."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Service bloqué pour l'essentiel; un détail de la configuration ou de la preuve est imprécis."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Service TikTok bloqué dans AdGuard, visible dans la capture des règles et services."
+            }
+          ]
+        },
+        {
+          "id": "c2-sc21",
+          "group": "Étape 4 : Demande urgente de sécurité (DNS filtrant AdGuard)",
+          "label": "Contrôle : caches DNS vidés, nslookup d'un domaine bloqué de chaque type et de microsoft.com, journal des requêtes",
+          "pts": 1,
+          "feedback": "Caches non vidés, nslookup incomplets ou journal des blocages absent.",
+          "levels": [
+            {
+              "label": "Insuffisant",
+              "minPct": 0,
+              "maxPct": 0.3,
+              "desc": "Aucun test de contrôle."
+            },
+            {
+              "label": "Partiel",
+              "minPct": 0.6,
+              "maxPct": 0.68,
+              "desc": "Contrôle partiellement réalisé : plusieurs des vérifications demandées (caches, nslookup, journal) manquent."
+            },
+            {
+              "label": "Satisfaisant",
+              "minPct": 0.75,
+              "maxPct": 0.82,
+              "desc": "Contrôle réalisé pour l'essentiel; une vérification ou une preuve est incomplète."
+            },
+            {
+              "label": "Excellent",
+              "minPct": 0.9,
+              "maxPct": 1,
+              "desc": "Caches vidés, nslookup d'un domaine bloqué de chaque type et de microsoft.com, journal montrant les blocages."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "feedbackMessages": [
+    {
+      "minPct": 0,
+      "maxPct": 60,
+      "message": "L'infrastructure demande encore beaucoup de travail. Reprends les notions de routage, de NAT et de redirecteurs DNS, et n'hésite pas à venir poser tes questions : on les reverra ensemble."
+    },
+    {
+      "minPct": 60,
+      "maxPct": 75,
+      "message": "Tu as configuré une partie des services, mais plusieurs étapes clés (NAT, VPN ou filtrage) comportent des lacunes. Relis attentivement les consignes de chaque étape avant ton prochain déploiement."
+    },
+    {
+      "minPct": 75,
+      "maxPct": 85,
+      "message": "Bon travail ! L'essentiel de ton infrastructure fonctionne. Quelques détails (paramètres, captures manquantes) restent à peaufiner, mais tu es sur la bonne voie."
+    },
+    {
+      "minPct": 85,
+      "maxPct": 95,
+      "message": "Très bon laboratoire ! Ton infrastructure est solide et bien configurée, et tu as bien justifié tes résultats. Continue ainsi !"
+    },
+    {
+      "minPct": 95,
+      "maxPct": 100,
+      "message": "Excellent travail ! Ta configuration est rigoureuse, précise et entièrement fonctionnelle, avec toutes les preuves demandées. Félicitations !"
+    }
+  ],
+  "aValider": [
+    "Les points par élément ne figurent pas dans l'énoncé (seulement 6, 8, 6 et 10 par étape) : la répartition entre éléments est une proposition à ajuster (somme exacte par étape).",
+    "Les critères « Analyser le projet de déploiement » et « Planifier l'implantation de services infonuagiques » n'ont aucune question rattachée : ils ont été retirés. L'étape 4 (DeltaCloud) pourrait relever de la planification infonuagique si tu le souhaites.",
+    "La pénalité de langue (0,25 point par faute, jusqu'à 10 %) n'est pas une tâche : à appliquer manuellement.",
+    "L'énoncé indique un pool VPN de 192.168.10.200 à 192.168.10.210 (et non .218) : la grille suit l'énoncé.",
+    "La durée de l'étape 3 diffère dans l'énoncé (20 min dans le tableau, 15 min dans l'étape) : sans effet sur les points."
+  ]
+}

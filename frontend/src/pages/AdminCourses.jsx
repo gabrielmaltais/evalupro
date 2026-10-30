@@ -24,6 +24,7 @@ export default function AdminCourses() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rubrics, setRubrics] = useState([]);
+  const [archivedRubrics, setArchivedRubrics] = useState([]);
   const { active } = useSession();
   // Évaluations importées dans la session en cours (badge « Cette session »).
   const [sessionRubricIds, setSessionRubricIds] = useState(new Set());
@@ -37,9 +38,10 @@ export default function AdminCourses() {
 
   async function refresh(selectId) {
     try {
-      const [list, rubricList] = await Promise.all([api.listCourses(), api.listRubrics().catch(() => [])]);
+      const [list, rubricList, archivedList] = await Promise.all([api.listCourses(), api.listRubrics().catch(() => []), api.listRubricsArchived().catch(() => [])]);
       setCourses(list);
       setRubrics(rubricList);
+      setArchivedRubrics(archivedList);
       if (selectId) {
         const found = list.find((c) => c._id === selectId);
         if (found) setCourse({ ...found, competencies: found.competencies || [] });
@@ -185,6 +187,17 @@ export default function AdminCourses() {
   }
 
   const courseRubrics = rubrics.filter((r) => r.course === course._id);
+  const courseArchived = archivedRubrics.filter((r) => r.course === course._id);
+
+  async function toggleRubricArchive(r, archive) {
+    setError("");
+    try {
+      await (archive ? api.archiveRubric(r._id) : api.restoreRubric(r._id));
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
   const editorOpen = Boolean(course._id || course.title || course.competencies.length > 0);
 
   return (
@@ -264,8 +277,8 @@ export default function AdminCourses() {
                 ) : (
                   <ul className="space-y-2">
                     {courseRubrics.map((r) => (
-                      <li key={r._id}>
-                        <Link to={`/ressources/grilles?course=${course._id}&rubric=${r._id}`} className="ui-item">
+                      <li key={r._id} className="flex items-stretch gap-2">
+                        <Link to={`/ressources/grilles?course=${course._id}&rubric=${r._id}`} className="ui-item min-w-0 flex-1">
                           <span className="min-w-0">
                             <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{r.taskTitle || r.title}</span>
                             <span className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
@@ -278,9 +291,27 @@ export default function AdminCourses() {
                             </span>
                           </span>
                         </Link>
+                        <button type="button" onClick={() => toggleRubricArchive(r, true)} className="shrink-0 rounded-lg border border-amber-200 px-3 text-amber-700 hover:bg-amber-50" title="Archiver cette évaluation" aria-label={`Archiver ${r.taskTitle || r.title}`}>
+                          <i className="fa-solid fa-box-archive" aria-hidden />
+                        </button>
                       </li>
                     ))}
                   </ul>
+                )}
+                {courseArchived.length > 0 && (
+                  <details className="rounded-lg border border-gray-200 p-3 dark:border-gray-600">
+                    <summary className="cursor-pointer text-sm font-semibold text-gray-600">Archives ({courseArchived.length})</summary>
+                    <ul className="mt-2 space-y-1">
+                      {courseArchived.map((r) => (
+                        <li key={r._id} className="flex items-center justify-between gap-2 rounded bg-slate-50/70 px-2 py-1 text-sm dark:bg-gray-800/30">
+                          <span className="truncate text-gray-600">{r.taskTitle || r.title} <span className="text-xs text-gray-400">v{r.version}</span></span>
+                          <button type="button" onClick={() => toggleRubricArchive(r, false)} className="shrink-0 text-xs font-semibold text-emerald-700 hover:underline">
+                            <i className="fa-solid fa-box-open mr-1" aria-hidden />Désarchiver
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
                 <div className="ui-info">
                   <p className="ui-label">Compétences ({course.competencies.length})</p>

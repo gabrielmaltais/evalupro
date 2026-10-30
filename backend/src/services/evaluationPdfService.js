@@ -194,6 +194,8 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
 
     // Critères (barre bleue à gauche après calcul de la hauteur du bloc)
     (rubric.criteria || []).forEach((c, i) => {
+      // Critère sans tâche ni points (ancienne grille): non évalué, on ne l'imprime pas.
+      if (!(c.subCriteria || []).length && !(Number(c.weight) > 0)) return;
       const cid = criterionKey(c, i);
       const s = getScore(scores, cid);
       const descText = levelDescription(c, s, scores, cid);
@@ -246,8 +248,16 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
         const chkGap = 4;
         const labelX = textLeft + chkSize + chkGap + 2;
         const labelW = pageWidth - 24 - chkSize - chkGap - 2;
+        let lastGroup = "";
         c.subCriteria.forEach((sc) => {
           ensureCursorSpaceForCriterion(18);
+          if (sc.group && sc.group !== lastGroup) {
+            lastGroup = sc.group;
+            ensureCursorSpaceForCriterion(30);
+            doc.font("Helvetica-Bold").fontSize(9).fillColor("#6d28d9").text(sc.group, textLeft, cursorY, { width: pageWidth - 24 });
+            cursorY += 14;
+            stripeEndY = Math.max(stripeEndY, cursorY);
+          }
           const earned = taskPoints(sc, subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)]);
           const maxPts = Number(sc.pts) || 0;
           const isChecked = earned >= maxPts && earned > 0;

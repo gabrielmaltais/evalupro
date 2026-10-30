@@ -164,6 +164,9 @@ function normalizeSubCriteria(rawSubCriteria, criterionId, criterionWeight, used
       label,
       pts,
       feedback: asText(firstDefined(item.feedback, item.retroaction, item.rétroaction, item.comment, item.commentaire), ""),
+      group: asText(firstDefined(item.group, item.groupe, item.etape, item.étape, item.step, item.bloc), ""),
+      // Niveaux propres à la tâche: seulement si l'IA en a fourni (sinon la tâche suit ceux du critère).
+      ...(asArray(firstDefined(item.levels, item.niveaux)).length ? { levels: normalizeLevels(firstDefined(item.levels, item.niveaux)) } : {}),
     };
   });
 }
@@ -218,8 +221,14 @@ export function normalizeImportedRubric(json, options = {}) {
     };
   });
 
+  // Un critère sans aucune tâche ni point n'est pas évalué par cet examen: on ne le garde pas.
+  const evaluated = criteria.filter((c) => c.subCriteria.length > 0 || c.weight > 0);
+  const dropped = evaluated.length ? criteria.filter((c) => !evaluated.includes(c)).map((c) => c.title) : [];
+  if (dropped.length) criteria.splice(0, criteria.length, ...evaluated);
+
   return {
     ok: true,
+    dropped,
     rubric: {
       title: asText(firstDefined(json.title, json.titre, json.courseTitle, json.cours, json.nomCours, json.rubric?.title, json.grille?.title, json.grille?.titre), "Grille importée"),
       taskTitle: asText(firstDefined(json.taskTitle, json.task, json.tache, json.tâche, json.assignment, json.examen, json.rubric?.taskTitle, json.grille?.taskTitle, json.grille?.tache, json.grille?.tâche), "Travail final"),
@@ -275,6 +284,18 @@ export function parseAiJson(text) {
   throw new Error(opens > closes ? "Réponse incomplète: l'IA s'est arrêtée avant la fin. Demande-lui de continuer, puis colle la réponse complète." : "JSON invalide");
 }
 
+/** Regroupe les tâches d'un critère par bloc (`group`), en gardant l'ordre; sans nom de bloc, un seul groupe sans titre. */
+export function groupTasks(tasks) {
+  const groups = [];
+  asArray(tasks).forEach((t) => {
+    const name = String(t.group || "").trim();
+    let g = groups.find((x) => x.name === name);
+    if (!g) groups.push((g = { name, tasks: [] }));
+    g.tasks.push(t);
+  });
+  return groups;
+}
+
 /** Total des points des tâches d'un critère. */
 export function tasksTotal(criterion) {
   return Number(asArray(criterion?.subCriteria).reduce((sum, t) => sum + (Number(t.pts) || 0), 0).toFixed(2));
@@ -315,6 +336,13 @@ export function applyLevelToCriterion(criterion, level) {
     total += points[task.id];
   });
   return { score: Math.min(weight, Number(total.toFixed(2))), taskPoints: points };
+}
+
+/** Points d'une tâche quand on clique sur l'un de ses niveaux (arrondi au quart de point). */
+export function pointsForLevel(task, level) {
+  const max = Math.max(0, Number(task?.pts) || 0);
+  const pct = clampNumber(level?.maxPct, 0, 1, 0);
+  return pct >= 1 ? max : Math.min(max, Math.round(max * pct * 4) / 4);
 }
 
 /** Points obtenus pour une tâche : `true` (ancien format) = max, nombre = points partiels, sinon 0. */

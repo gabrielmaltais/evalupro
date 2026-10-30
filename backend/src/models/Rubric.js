@@ -18,6 +18,10 @@ const subCriterionSchema = new mongoose.Schema(
     label: { type: String, required: true },
     pts: { type: Number, required: true },
     feedback: { type: String, default: "" },
+    // Niveaux propres à la tâche (facultatif): chaque question peut avoir ses descripteurs; absent = niveaux du critère.
+    levels: { type: [levelSchema], default: [] },
+    // Bloc d'affichage (ex. « Étape 2 : Routeur et NAT »): les tâches qui partagent le même nom sont regroupées à la correction.
+    group: { type: String, default: "" },
   },
   { _id: false }
 );

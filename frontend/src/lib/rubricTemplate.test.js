@@ -66,3 +66,18 @@ describe("rubric template helpers", () => {
     expect(result.rubric.criteria[0].subCriteria[0]).toMatchObject({ id: "sc1", pts: 12 });
   });
 });
+
+describe("niveaux propres à une tâche", () => {
+  it("l'import les conserve et le clic sur un niveau donne les points de la tâche", async () => {
+    const { normalizeImportedRubric, pointsForLevel } = await import("./rubricTemplate");
+    const levels = [
+      { label: "Insuffisant", minPct: 0, maxPct: 0, desc: "Rien de fonctionnel" },
+      { label: "Excellent", minPct: 0.9, maxPct: 1, desc: "Tout est correct" },
+    ];
+    const res = normalizeImportedRubric({ criteria: [{ id: "c1", title: "C", weight: 4, subCriteria: [{ id: "q1", label: "Q1", pts: 4, levels }] }] });
+    const task = res.rubric.criteria[0].subCriteria[0];
+    expect(task.levels.map((l) => l.label)).toEqual(["Insuffisant", "Excellent"]);
+    expect(pointsForLevel(task, task.levels[1])).toBe(4);
+    expect(pointsForLevel(task, task.levels[0])).toBe(0);
+  });
+});

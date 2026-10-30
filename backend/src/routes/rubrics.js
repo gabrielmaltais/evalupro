@@ -51,6 +51,8 @@ async function alignToCourse(req, rubric) {
   return rubric.save();
 }
 
+const levelInput = z.object({ label: z.string(), maxPct: z.number().min(0).max(1), minPct: z.number().min(0).max(1).optional(), desc: z.string() });
+
 const rubricSchema = z.object({
   title: z.string().min(1),
   taskTitle: z.string().min(1),
@@ -66,8 +68,8 @@ const rubricSchema = z.object({
       competencyId: z.string().optional(),
       weight: z.number().nonnegative(),
       color: z.string().optional(),
-      levels: z.array(z.object({ label: z.string(), maxPct: z.number().min(0).max(1), minPct: z.number().min(0).max(1).optional(), desc: z.string() })).optional(),
-      subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional() })).optional(),
+      levels: z.array(levelInput).optional(),
+      subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional(), group: z.string().optional(), levels: z.array(levelInput).optional() })).optional(),
     })
   ),
   feedbackMessages: z.array(z.object({ minPct: z.number(), maxPct: z.number(), message: z.string() })).optional(),

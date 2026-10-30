@@ -121,3 +121,27 @@ describe("gabarit IA -> réponse -> import", () => {
     expect(t._prompt_configuration.criteres_de_performance_du_cours).toBeUndefined();
   });
 });
+
+describe("laboratoire Orion (exemple rempli avec le gabarit)", () => {
+  it("s'importe: un seul critère évalué, 4 blocs, 30 pts, rétroactions au constat", async () => {
+    const { readFileSync } = await import("node:fs");
+    const json = JSON.parse(readFileSync(new URL("../../../docs/exemples/laboratoire-orion.json", import.meta.url), "utf8"));
+    const res = normalizeImportedRubric(unwrapAiTemplateEnvelope(json));
+    expect(res.ok).toBe(true);
+    expect(res.warnings).toEqual([]);
+    expect(res.rubric.criteria).toHaveLength(1);
+    const tasks = res.rubric.criteria[0].subCriteria;
+    expect(tasks.reduce((s, t) => s + t.pts, 0)).toBe(30);
+    expect(new Set(tasks.map((t) => t.group)).size).toBe(4);
+    expect(tasks.every((t) => t.levels.length === 4 && !isTemplatePlaceholder(t.feedback) && !/^(assure|vérifie|révise|revois|ajoute|compare)/i.test(t.feedback))).toBe(true);
+    expect(tasks.flatMap((t) => t.levels).some((l) => isTemplatePlaceholder(l.desc))).toBe(false);
+    const al = alignCriteriaToCourse(res.rubric.criteria, [{ id: "comp-1f963552", title: "Installer et administrer les services d’infrastructure réseau" }]);
+    expect(al.linked).toBe(1);
+  });
+
+  it("un critère sans tâche ni points est écarté à l'import", () => {
+    const res = normalizeImportedRubric({ criteria: [{ id: "a", title: "Vide", weight: 0, subCriteria: [] }, { id: "b", title: "Plein", subCriteria: [{ id: "q", label: "Q", pts: 2 }] }] });
+    expect(res.rubric.criteria.map((c) => c.title)).toEqual(["Plein"]);
+    expect(res.dropped).toEqual(["Vide"]);
+  });
+});

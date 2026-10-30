@@ -1,0 +1,412 @@
+{
+  "_prompt_configuration": {
+    "role": "Expert en technopédagogie collégiale, spécialisé dans la construction de grilles d'évaluation critériées à échelle descriptive.",
+    "reponse_attendue": "Remplis l'objet 'template_a_remplir'. Ta réponse finale doit être UNIQUEMENT le JSON rempli, qui commence par { \"title\": ... }. N'inclus PAS l'objet '_prompt_configuration' dans ta réponse.",
+    "ce_que_l_enseignant_te_fournit": "Les 3 compétences / critères de performance du cours « Infrastructure réseau » sont déjà inclus dans ce gabarit (voir 'criteres_de_performance_du_cours' et 'template_a_remplir.criteria'). L'enseignant te fournit en plus son examen ou l'énoncé du travail avec les points de chaque question (OBLIGATOIRE), et éventuellement un corrigé, un barème ou des consignes. Si l'examen est absent, ne génère pas de grille : demande-le.",
+    "criteres_de_performance_du_cours": [
+      {
+        "numero": 1,
+        "titre": "Analyser le projet de déploiement"
+      },
+      {
+        "numero": 2,
+        "titre": "Installer et administrer les services d’infrastructure réseau"
+      },
+      {
+        "numero": 3,
+        "titre": "Planifier l’implantation de services infonuagiques"
+      }
+    ],
+    "logique_de_la_grille": [
+      "1. Les critères de performance appartiennent à l'enseignant. Utilise EXACTEMENT ceux qu'il fournit : même titre, même nombre, aucun ajout, aucune fusion. Ils sont larges (ex. « Installer et administrer les services d'infrastructure réseau »). Mets l'élément de compétence correspondant dans `competencyElement` si l'enseignant l'indique.",
+      "2. Les tâches (`subCriteria`) sont la partie concrète et vérifiable : chaque question ou consigne de l'énoncé devient une tâche, rattachée au critère qu'elle permet de juger (ex. « Déploiement d'OPNsense et configuration adéquate des interfaces »). Une tâche appartient à UN SEUL critère. Si une question couvre deux critères, scinde-la en deux tâches (ex. « Q12a … », « Q12b … ») avec leurs propres points. Quand l'énoncé est une suite d'ÉTAPES ou de consignes (laboratoire, travail pratique) plutôt que des questions numérotées, ne fais PAS une seule tâche par étape : décortique chaque étape en éléments distincts, observables et notables un à un (ex. une carte réseau configurée, un service installé, une règle appliquée, une capture exigée), chacun étant une tâche. Mets le nom de l'étape dans `group` de chacune de ses tâches pour les regrouper à la correction. N'invente aucune exigence absente de l'énoncé, mais ne laisse de côté AUCUNE exigence qu'il contient. Si l'énoncé ne donne que le total de l'étape, répartis ses points entre les éléments de façon raisonnable (somme exacte) et signale cette répartition dans `aValider`.",
+      "3. Les points vivent dans les tâches : `pts` est le maximum de points de la tâche. La somme des `pts` des tâches d'un critère = `weight` du critère. La somme des `weight` = total de l'examen (pas forcément 100).",
+      "4. CHAQUE tâche a ses propres niveaux de performance (`levels` dans la tâche) : chaque `desc` décrit ce que l'élève a réussi ou raté À CETTE QUESTION précise (résultat attendu, erreur typique), jamais en général. Les descripteurs d'une même tâche doivent être clairement différents d'un niveau à l'autre. Rédige d'abord Excellent, Satisfaisant et Insuffisant, puis les niveaux intermédiaires. ATTENTION : pour un niveau intermédiaire (Partiel, Satisfaisant) tu ne peux PAS savoir quelle erreur précise l'élève a commise (un élève peut avoir bien renommé la carte et s'être trompé d'adresse). Ne désigne donc jamais un élément particulier comme raté (« la carte n'est pas renommée »). Décris plutôt le DEGRÉ d'atteinte de l'ensemble des éléments attendus de la tâche (ex. « La plupart des éléments demandés sont conformes; un ou deux détails sont imprécis ou manquants », « Une partie seulement des éléments demandés est conforme »), au besoin en rappelant entre parenthèses la liste de ce qui est évalué sans dire lequel manque. Seuls Excellent (tout est conforme : énumère ce qui est attendu) et Insuffisant (rien ou presque rien de fonctionnel : tu peux donner plusieurs exemples d'échecs possibles) peuvent être concrets. Les `levels` du critère, eux, résument la maîtrise d'ensemble (sans recompter les tâches ni écrire « 7 tâches sur 10 »).",
+      "5. La rétroaction d'une tâche (`feedback`) est affichée à l'élève quand la tâche n'a pas obtenu tous ses points. Rédige-la comme un CONSTAT de correction, en une phrase nominale ou au passé, sur l'erreur ou l'oubli probable (ex. « Redirecteur DNS mal configuré ou option manquante », « Pool d'adresses hors de la plage demandée ou adaptateur incorrect »). Comme plusieurs erreurs sont possibles, énumère les causes probables avec « ou » au lieu d'en affirmer une seule. Jamais d'ordre ni de conseil au présent ou à l'impératif (pas de « Assure-toi… », « Vérifie… », « Révise… »).",
+      "6. Un critère = une seule qualité jugée. Une même erreur ne doit pas être pénalisée dans deux critères.",
+      "7. En cas de doute (rattachement ambigu, points absents ou incohérents, question qui ne correspond à aucun critère), NE DEVINE PAS : fais ton meilleur choix et ajoute une ligne explicative dans `aValider`."
+    ],
+    "structure": "Le gabarit contient déjà 3 critères, un par compétence du cours, dans cet ordre. Garde leur titre, leur `competencyElement` et leur `competencyId` (s'il est présent) tels quels et ne les supprime pas. Remplis pour chacun : `weight`, les tâches (`subCriteria`, à répéter autant que nécessaire, chacune avec ses `levels`) et les `desc` des niveaux. Si l'examen ne contient AUCUNE question ni exigence rattachée à une compétence, SUPPRIME ce critère de la réponse (pas de critère à 0 point, pas de niveaux « non évalué ») et signale-le dans `aValider`.",
+    "regles_mathematiques": "Somme des `pts` des tâches = `weight` du critère. Somme des `weight` = total de l'examen. Les valeurs de `weight` et `pts` dans le gabarit (0) sont des substituts à remplacer.",
+    "niveaux_de_performance": "Garde exactement ces 4 niveaux (mêmes `label`, `minPct` et `maxPct`) pour chaque critère. `minPct` est le pourcentage à partir duquel le niveau s'applique ; `maxPct` est la note proposée quand le correcteur clique sur le niveau. Seuls les `desc` sont à rédiger (niveaux du critère ET niveaux de chaque tâche).",
+    "points": "Les points partiels sont permis : le correcteur peut donner à une tâche n'importe quelle note entre 0 et `pts`. Décris donc dans `feedback` ce qui est attendu pour obtenir tous les points.",
+    "retroaction_globale": "Rédige 5 messages de rétroaction globale (`feedbackMessages`), un par tranche de note. Ton encourageant, motivant, professionnel et respectueux. Tutoie l'élève. Ne copie jamais le texte d'instruction.",
+    "auto_verification_avant_de_repondre": [
+      "Chaque critère de l'enseignant est présent, avec son titre exact.",
+      "Chaque question et chaque exigence de l'énoncé apparaît dans exactement une tâche (aucune oubliée, aucune en double), et les étapes sont décortiquées en éléments notables.",
+      "Chaque `feedback` est un constat (erreur ou oubli), sans impératif ni conseil au présent.",
+      "Les descripteurs Partiel et Satisfaisant d'une tâche ne désignent aucun élément précis comme raté : ils décrivent un degré d'atteinte.",
+      "Aucun critère sans tâche n'est resté dans la réponse.",
+      "Les sommes de points concordent (tâches → critère → total de l'examen).",
+      "Chaque tâche a ses propres niveaux, spécifiques à sa question, et deux niveaux d'une même tâche n'ont pas la même description.",
+      "Tout ce qui est incertain est listé dans `aValider`."
+    ],
+    "exemple_de_logique": {
+      "note": "EXEMPLE DE LOGIQUE UNIQUEMENT : ne reprends ni son contenu ni ses points.",
+      "critere": "Installer et administrer les services d'infrastructure réseau",
+      "weight": 20,
+      "taches": [
+        {
+          "label": "Déploiement d'OPNsense et configuration adéquate des interfaces",
+          "pts": 6,
+          "feedback": "Interfaces WAN/LAN inversées ou adresses incorrectes."
+        },
+        {
+          "label": "Règles de filtrage conformes à la politique demandée",
+          "pts": 8,
+          "feedback": "Règle manquante, trop permissive ou placée dans le mauvais ordre."
+        },
+        {
+          "label": "Tests de connectivité documentés",
+          "pts": 6,
+          "feedback": "Capture ou sortie de commande absente pour au moins un test."
+        }
+      ],
+      "niveaux": "Excellent : le pare-feu est fonctionnel et respecte entièrement la politique ; Insuffisant : le pare-feu n'est pas fonctionnel ou ne reflète pas la politique."
+    },
+    "instructions_specifiques_utilisateur": null
+  },
+  "template_a_remplir": {
+    "title": "Infrastructure réseau",
+    "taskTitle": "Titre de l'évaluation (examen, laboratoire, travail pratique)",
+    "linkCompetencies": true,
+    "criteria": [
+      {
+        "id": "c1",
+        "title": "Analyser le projet de déploiement",
+        "competencyElement": "Analyser le projet de déploiement",
+        "competencyId": "comp-637ca0e5",
+        "weight": 0,
+        "color": "border-blue-500",
+        "levels": [
+          {
+            "label": "Insuffisant",
+            "minPct": 0,
+            "maxPct": 0.3,
+            "desc": "Décris la qualité de la performance au niveau « Insuffisant » pour ce critère."
+          },
+          {
+            "label": "Partiel",
+            "minPct": 0.6,
+            "maxPct": 0.68,
+            "desc": "Décris la qualité de la performance au niveau « Partiel » pour ce critère."
+          },
+          {
+            "label": "Satisfaisant",
+            "minPct": 0.75,
+            "maxPct": 0.82,
+            "desc": "Décris la qualité de la performance au niveau « Satisfaisant » pour ce critère."
+          },
+          {
+            "label": "Excellent",
+            "minPct": 0.9,
+            "maxPct": 1,
+            "desc": "Décris la qualité de la performance au niveau « Excellent » pour ce critère."
+          }
+        ],
+        "subCriteria": [
+          {
+            "id": "c1-sc1",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 1",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          },
+          {
+            "id": "c1-sc2",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 2",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "c2",
+        "title": "Installer et administrer les services d’infrastructure réseau",
+        "competencyElement": "Installer et administrer les services d’infrastructure réseau",
+        "competencyId": "comp-1f963552",
+        "weight": 0,
+        "color": "border-green-500",
+        "levels": [
+          {
+            "label": "Insuffisant",
+            "minPct": 0,
+            "maxPct": 0.3,
+            "desc": "Décris la qualité de la performance au niveau « Insuffisant » pour ce critère."
+          },
+          {
+            "label": "Partiel",
+            "minPct": 0.6,
+            "maxPct": 0.68,
+            "desc": "Décris la qualité de la performance au niveau « Partiel » pour ce critère."
+          },
+          {
+            "label": "Satisfaisant",
+            "minPct": 0.75,
+            "maxPct": 0.82,
+            "desc": "Décris la qualité de la performance au niveau « Satisfaisant » pour ce critère."
+          },
+          {
+            "label": "Excellent",
+            "minPct": 0.9,
+            "maxPct": 1,
+            "desc": "Décris la qualité de la performance au niveau « Excellent » pour ce critère."
+          }
+        ],
+        "subCriteria": [
+          {
+            "id": "c2-sc1",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 1",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          },
+          {
+            "id": "c2-sc2",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 2",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "c3",
+        "title": "Planifier l’implantation de services infonuagiques",
+        "competencyElement": "Planifier l’implantation de services infonuagiques",
+        "competencyId": "comp-6a86f81f",
+        "weight": 0,
+        "color": "border-purple-500",
+        "levels": [
+          {
+            "label": "Insuffisant",
+            "minPct": 0,
+            "maxPct": 0.3,
+            "desc": "Décris la qualité de la performance au niveau « Insuffisant » pour ce critère."
+          },
+          {
+            "label": "Partiel",
+            "minPct": 0.6,
+            "maxPct": 0.68,
+            "desc": "Décris la qualité de la performance au niveau « Partiel » pour ce critère."
+          },
+          {
+            "label": "Satisfaisant",
+            "minPct": 0.75,
+            "maxPct": 0.82,
+            "desc": "Décris la qualité de la performance au niveau « Satisfaisant » pour ce critère."
+          },
+          {
+            "label": "Excellent",
+            "minPct": 0.9,
+            "maxPct": 1,
+            "desc": "Décris la qualité de la performance au niveau « Excellent » pour ce critère."
+          }
+        ],
+        "subCriteria": [
+          {
+            "id": "c3-sc1",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 1",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          },
+          {
+            "id": "c3-sc2",
+            "label": "Tâche précise et vérifiable tirée de l'énoncé 2",
+            "pts": 0,
+            "feedback": "Constat d'erreur ou d'oubli si cette tâche n'obtient pas tous ses points (nominal ou au passé, jamais à l'impératif).",
+            "group": "Nom de l'étape ou du bloc de l'énoncé auquel appartient cette tâche (facultatif)",
+            "levels": [
+              {
+                "label": "Insuffisant",
+                "minPct": 0,
+                "maxPct": 0.3,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Insuffisant »."
+              },
+              {
+                "label": "Partiel",
+                "minPct": 0.6,
+                "maxPct": 0.68,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Partiel »."
+              },
+              {
+                "label": "Satisfaisant",
+                "minPct": 0.75,
+                "maxPct": 0.82,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Satisfaisant »."
+              },
+              {
+                "label": "Excellent",
+                "minPct": 0.9,
+                "maxPct": 1,
+                "desc": "Décris ce que l'élève a réussi ou raté à CETTE question au niveau « Excellent »."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "feedbackMessages": [
+      {
+        "minPct": 0,
+        "maxPct": 60,
+        "message": "Message de rétroaction pour cette tranche de note (à rédiger)."
+      },
+      {
+        "minPct": 60,
+        "maxPct": 75,
+        "message": "Message de rétroaction pour cette tranche de note (à rédiger)."
+      },
+      {
+        "minPct": 75,
+        "maxPct": 85,
+        "message": "Message de rétroaction pour cette tranche de note (à rédiger)."
+      },
+      {
+        "minPct": 85,
+        "maxPct": 95,
+        "message": "Message de rétroaction pour cette tranche de note (à rédiger)."
+      },
+      {
+        "minPct": 95,
+        "maxPct": 100,
+        "message": "Message de rétroaction pour cette tranche de note (à rédiger)."
+      }
+    ],
+    "aValider": [
+      "Liste ici chaque point incertain à faire valider par l'enseignant."
+    ]
+  }
+}

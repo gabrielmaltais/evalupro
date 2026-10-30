@@ -28,6 +28,8 @@ export default function AdminRubric() {
   const [sessionKey, setSessionKey] = useState("");
   const presetCourse = searchParams.get("course") || "";
   const [rubrics, setRubrics] = useState([]);
+  const [archivedRubrics, setArchivedRubrics] = useState([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [rubricFilterCourse, setRubricFilterCourse] = useState(presetCourse);
   const [importing, setImporting] = useState(null);
   const [groupOptions, setGroupOptions] = useState([]);
@@ -75,11 +77,13 @@ export default function AdminRubric() {
 
   async function refresh() {
     try {
-      const [data, dashboard] = await Promise.all([
+      const [data, dashboard, archived] = await Promise.all([
         api.listRubrics(),
         api.getStudentGroupDashboard(),
+        api.listRubricsArchived().catch(() => []),
       ]);
       setRubrics(data);
+      setArchivedRubrics(archived);
       const wanted = searchParams.get("rubric");
       if (wanted && !presetRubricDone.current) {
         presetRubricDone.current = true;
@@ -295,6 +299,16 @@ export default function AdminRubric() {
     }
   }
 
+  async function toggleArchive(r, archive) {
+    setError("");
+    try {
+      await (archive ? api.archiveRubric(r._id) : api.restoreRubric(r._id));
+      await refresh();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  }
+
   async function removeRubric() {
     if (!selectedId) return;
     try {
@@ -463,6 +477,8 @@ export default function AdminRubric() {
       return false;
     }
     const imported = result.rubric;
+    // Un nom de bloc resté celui du gabarit n'est pas un vrai nom.
+    imported.criteria.forEach((c) => c.subCriteria.forEach((t) => { if (isTemplatePlaceholder(t.group)) t.group = ""; }));
     const course = courses.find((c) => c._id === courseId) || null;
     // Les critères sont rattachés aux compétences du cours choisi MAINTENANT (même si le cours a changé depuis la génération).
     const al = alignCriteriaToCourse(imported.criteria, course?.competencies);
@@ -470,14 +486,13 @@ export default function AdminRubric() {
       ...imported.criteria.flatMap((c) => [
         ...(c.subCriteria || []).filter((t) => isTemplatePlaceholder(t.label) || isTemplatePlaceholder(t.feedback)).map(() => c.title),
         ...(c.levels || []).filter((l) => isTemplatePlaceholder(l.desc)).map(() => c.title),
+        ...(c.subCriteria || []).flatMap((t) => t.levels || []).filter((l) => isTemplatePlaceholder(l.desc)).map(() => c.title),
       ]),
       ...(imported.feedbackMessages || []).filter((m) => isTemplatePlaceholder(m.message)).map(() => "rétroaction globale"),
     ];
-    const keptName = !isTemplatePlaceholder(imported.taskTitle);
-    if (!keptName) {
-      // Le nom de l'évaluation est resté celui du gabarit: on garde ce que l'enseignant avait saisi.
-      imported.taskTitle = taskTitle && !isTemplatePlaceholder(taskTitle) && taskTitle !== "Tâche" ? taskTitle : "";
-    }
+    // Ce que l'enseignant a déjà saisi (nom) prime sur la réponse de l'IA; sinon on prend celui de l'IA (s'il n'est pas du gabarit).
+    const typedName = taskTitle && !isTemplatePlaceholder(taskTitle) && taskTitle !== "Tâche" && taskTitle !== "Tâche Finale" ? taskTitle : "";
+    imported.taskTitle = typedName || (isTemplatePlaceholder(imported.taskTitle) ? "" : imported.taskTitle);
     setEditorOpen(true);
     setTitle(course ? course.title : imported.title);
     setTaskTitle(imported.taskTitle);
@@ -495,7 +510,7 @@ export default function AdminRubric() {
     else if (!(course.competencies || []).length) notes.push(`Le cours « ${course.title} » n'a pas de compétences : les critères ne sont pas rattachés.`);
     else {
       if (al.unlinked) notes.push(`${al.unlinked} critère(s) ne correspondent à aucune compétence de « ${course.title} » (titre modifié par l'IA ?).`);
-      if (al.missing.length) notes.push(`Compétence(s) du cours sans critère : ${al.missing.map((c) => c.title).join(" ; ")}. Utilise « Ajouter les compétences manquantes ».`);
+      if (al.missing.length) notes.push(`Compétence(s) non évaluée(s) par cet examen, donc absentes de la grille : ${al.missing.map((c) => c.title).join(" ; ")}.`);
     }
     if (placeholders.length) notes.push(`Du texte du gabarit n'a pas été remplacé par l'IA (${[...new Set(placeholders)].join(" ; ")}).`);
     if (!imported.taskTitle) notes.push("Donne un nom à l'évaluation (étape 2).");
@@ -577,7 +592,7 @@ export default function AdminRubric() {
 
   return (
     <div className="flex w-full flex-1 flex-col">
-      <main className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-4 lg:px-8">
+      <main className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 content-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-4 lg:px-8">
         <div className="lg:col-span-4">
           <PageSectionTitle
             icon="fa-sliders"
@@ -669,7 +684,7 @@ export default function AdminRubric() {
                 {filteredRubrics.length} / {rubrics.length} évaluation(s) affichée(s)
               </p>
             </div>
-            <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
+            {showEditor && <ul className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
               {filteredRubrics.map((r, i) => (
                 <li key={r._id}>
                   {(i === 0 || filteredRubrics[i - 1].course !== r.course) && (
@@ -699,7 +714,7 @@ export default function AdminRubric() {
                 </li>
               ))}
               {filteredRubrics.length === 0 && <li className="p-4 text-sm text-gray-500 text-center">Aucune évaluation pour ce filtre.</li>}
-            </ul>
+            </ul>}
           </div>
         </div>
 
@@ -709,8 +724,46 @@ export default function AdminRubric() {
           {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm whitespace-pre-line text-emerald-700 dark:border-emerald-300/50 dark:bg-teal-950/45 dark:text-emerald-200"><i className="fa-solid fa-check mr-2"></i>{success}</div>}
 
           {!showEditor && (
-            <div className="ui-card ui-card-body hidden lg:block">
-              <p className="ui-info text-sm text-gray-600">Choisis une évaluation dans la liste pour la modifier, ou clique sur « Nouvelle » pour en créer une.</p>
+            <div className="ui-card ui-card-body space-y-5">
+              {filteredRubrics.length === 0 && <p className="ui-info text-sm text-gray-600">Aucune évaluation pour ce filtre. Clique sur « Nouvelle évaluation » pour en créer une.</p>}
+              {[...new Set(filteredRubrics.map((r) => r.course))].map((cid) => (
+                <section key={cid}>
+                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500"><i className="fa-solid fa-folder-open mr-1" />{courseLabel(cid)}</h3>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {filteredRubrics.filter((r) => r.course === cid).map((r) => (
+                      <li key={r._id} className="flex items-stretch gap-1 rounded-xl border border-gray-200 bg-white hover:border-blue-300 dark:bg-transparent">
+                        <button type="button" onClick={() => selectRubric(r)} className="min-w-0 flex-1 px-3 py-2.5 text-left">
+                          <span className="line-clamp-2 text-sm font-semibold text-gray-800 dark:text-gray-100">{r.taskTitle || r.title}</span>
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                            v{r.version} · {r.isActive ? "Active" : "Inactive"}
+                            {importedHere(r._id) && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Cette session</span>}
+                          </span>
+                        </button>
+                        <button type="button" onClick={() => toggleArchive(r, true)} className="px-3 text-amber-700 hover:bg-amber-50" title="Archiver" aria-label={`Archiver ${r.taskTitle || r.title}`}>
+                          <i className="fa-solid fa-box-archive" aria-hidden />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+              {archivedRubrics.length > 0 && (
+                <div className="border-t border-gray-100 pt-3">
+                  <button type="button" onClick={() => setShowArchived((v) => !v)} className="text-sm font-semibold text-gray-600 hover:text-gray-900" aria-expanded={showArchived}>
+                    <i className={`fa-solid ${showArchived ? "fa-chevron-down" : "fa-chevron-right"} mr-1.5 text-xs`} aria-hidden />Archives ({archivedRubrics.length})
+                  </button>
+                  {showArchived && (
+                    <ul className="mt-2 space-y-1">
+                      {archivedRubrics.map((r) => (
+                        <li key={r._id} className="flex items-center justify-between gap-2 rounded bg-slate-50/70 px-3 py-1.5 text-sm dark:bg-gray-800/30">
+                          <span className="min-w-0 truncate text-gray-600">{r.taskTitle || r.title} <span className="text-xs text-gray-400">· {courseLabel(r.course)} · v{r.version}</span></span>
+                          <button type="button" onClick={() => toggleArchive(r, false)} className="shrink-0 text-xs font-semibold text-emerald-700 hover:underline"><i className="fa-solid fa-box-open mr-1" aria-hidden />Désarchiver</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {showEditor && (
@@ -736,6 +789,17 @@ export default function AdminRubric() {
                 </div>
 
                 <div className="ui-card-body space-y-6">
+                  {!selectedId && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 dark:border-purple-400/30 dark:bg-purple-950/20">
+                      <p className="mr-auto text-sm text-purple-900 dark:text-purple-100"><i className="fa-solid fa-robot mr-1.5" aria-hidden />Gagne du temps : fais générer les critères par une IA, puis importe sa réponse. Le cours et le nom saisis sont conservés.</p>
+                      <button type="button" onClick={() => setShowAIModal(true)} className="rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-50">1. Générer le gabarit IA</button>
+                      <button type="button" onClick={() => setShowPasteJsonModal(true)} className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700">2. Importer la réponse</button>
+                      <label className="cursor-pointer rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-50">
+                        <i className="fa-solid fa-upload mr-1" aria-hidden />Fichier JSON
+                        <input type="file" className="hidden" accept=".json" onChange={handleImportJSON} />
+                      </label>
+                    </div>
+                  )}
                   {/* 1. Cours */}
                   <section>
                     <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-100"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">1</span> Cours</h3>
@@ -928,7 +992,26 @@ export default function AdminRubric() {
                              <button type="button" onClick={() => removeSC(idx, scIdx)} className="text-red-400 hover:text-red-600 opacity-20 group-hover:opacity-100 transition p-2" title="Supprimer cette tâche"><i className="fa-solid fa-times"></i></button>
                            </div>
                          </div>
+                         <input type="text" className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" placeholder="Bloc / étape (facultatif) : les tâches de même bloc sont regroupées à la correction" value={sc.group || ''} onChange={e => updateSC(idx, scIdx, 'group', e.target.value)} />
                          <textarea className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" rows="1" placeholder="⚠ Rétroaction (optionnel) — affichée à l'élève quand la tâche n'obtient pas tous ses points" value={sc.feedback || ''} onChange={e => updateSC(idx, scIdx, 'feedback', e.target.value)}></textarea>
+                         {sc.levels?.length > 0 ? (
+                           <div className="space-y-1 pt-1">
+                             {sc.levels.map((l, lIdx) => {
+                               const setLvl = (field, v) => updateSC(idx, scIdx, 'levels', sc.levels.map((x, i) => (i === lIdx ? { ...x, [field]: v } : x)));
+                               return (
+                                 <div key={lIdx} className="flex flex-wrap gap-1.5 items-start">
+                                   <input type="text" className="w-full sm:w-28 px-2 py-1 border border-purple-100 rounded text-xs outline-none bg-white font-semibold" value={l.label} onChange={e => setLvl('label', e.target.value)} aria-label="Nom du niveau" />
+                                   <input type="number" step="0.05" min="0" max="1" className="w-16 px-1 py-1 border border-purple-100 rounded text-xs outline-none bg-white" value={l.minPct ?? l.maxPct} onChange={e => setLvl('minPct', Number(e.target.value))} title="Pourcentage (0 à 1) à partir duquel ce niveau s'applique" aria-label="Dès" />
+                                   <input type="number" step="0.05" min="0" max="1" className="w-16 px-1 py-1 border border-purple-100 rounded text-xs outline-none bg-white" value={l.maxPct} onChange={e => setLvl('maxPct', Number(e.target.value))} title="Note proposée (0 à 1) quand on clique sur ce niveau" aria-label="Note" />
+                                   <input type="text" className="flex-1 min-w-0 px-2 py-1 border border-purple-100 rounded text-xs outline-none bg-white" placeholder="Ce que l'élève a réussi ou raté à cette question" value={l.desc} onChange={e => setLvl('desc', e.target.value)} />
+                                 </div>
+                               );
+                             })}
+                             <button type="button" onClick={() => updateSC(idx, scIdx, 'levels', [])} className="text-[11px] text-gray-500 hover:text-red-600">Retirer les niveaux de cette tâche</button>
+                           </div>
+                         ) : (
+                           <button type="button" onClick={() => updateSC(idx, scIdx, 'levels', (c.levels?.length ? c.levels : LEVEL_SCALES[4]).map((l) => ({ label: l.label, minPct: l.minPct, maxPct: l.maxPct, desc: '' })))} className="text-[11px] font-semibold text-purple-600 hover:text-purple-800"><i className="fa-solid fa-layer-group mr-1"></i>Niveaux propres à cette tâche</button>
+                         )}
                       </div>
                     ))}
                     {c.subCriteria?.length > 0 && (() => {

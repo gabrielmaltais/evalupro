@@ -7,6 +7,7 @@ import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
 import { applyLevelToCriterion, matchLevel, taskPoints } from "../lib/rubricTemplate";
+import TaskGroups from "../components/TaskGroups";
 
 function evalItemStudentId(it) {
   return evalStudentId(it);
@@ -1596,7 +1597,11 @@ export default function Evaluations() {
 
           <div className={`space-y-4 ${!canEditEvaluation ? "opacity-60 pointer-events-none select-none" : ""}`}>
             {selectedRubric && selectedRubric.criteria && selectedRubric.criteria.map((c, i) => {
+              // Critère sans tâche ni points: non évalué dans cet examen, on ne l'affiche pas.
+              if (!(c.subCriteria || []).length && !(Number(c.weight) > 0)) return null;
               const cid = c.id || c._id || String(i);
+              const hasTasks = (c.subCriteria || []).length > 0;
+              const tasksOwnLevels = hasTasks && c.subCriteria.every((t) => t.levels?.length > 0);
               const currentScore = scores[cid] || 0;
               const pctC = currentScore / (c.weight || 1);
 
@@ -1630,9 +1635,9 @@ export default function Evaluations() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                    <div className={`grid grid-cols-1 ${hasTasks ? "" : "md:grid-cols-2"} gap-6 items-center`}>
                       <div className="space-y-3">
-                        {c.levels && c.levels.length > 0 && (
+                        {c.levels && c.levels.length > 0 && !tasksOwnLevels && (
                           <div className={`grid gap-2 ${c.levels.length === 2 ? 'grid-cols-2' : c.levels.length === 4 ? 'grid-cols-2 md:grid-cols-4' : c.levels.length === 5 ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-3'}`}>
                             {c.levels.map((lvl, lnum) => {
                               const colorType = lvl.maxPct < 0.5 ? 'red' : lvl.maxPct < 0.8 ? 'yellow' : 'green';
@@ -1652,69 +1657,11 @@ export default function Evaluations() {
                           </div>
                         )}
 
-                        {c.subCriteria && c.subCriteria.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2">
-                            {c.subCriteria.map(sc => {
-                              const earned = taskPoints(sc, subScores[cid]?.[sc.id]);
-                              const maxPts = Number(sc.pts) || 0;
-                              const isFull = maxPts > 0 && earned >= maxPts;
-                              const touched = subCriteriaTouched[cid]?.[sc.id];
-                              const step = maxPts > 0 && maxPts <= 2 ? 0.25 : 0.5;
-                              const quick = [["0", 0], ["½", Number((maxPts / 2).toFixed(2))], ["Max", maxPts]];
-                              return (
-                                <div key={sc.id} className={`flex flex-col gap-1.5 p-2 rounded border ${isFull ? 'border-purple-200 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40' : earned > 0 ? 'border-amber-200 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-950/20' : 'border-transparent'}`}>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <span className={`text-sm min-w-0 ${isFull ? "text-purple-700 font-semibold dark:text-violet-200" : "text-gray-900 dark:text-slate-200"}`}>{sc.label}</span>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      {quick.map(([lbl, val]) => (
-                                        <button key={lbl} type="button" disabled={!canEditEvaluation} onClick={() => handleSubScore(cid, sc.id, val, c)} className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold transition disabled:cursor-not-allowed ${earned === val && touched ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600'}`}>{lbl}</button>
-                                      ))}
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={maxPts}
-                                        step={step}
-                                        disabled={!canEditEvaluation}
-                                        value={touched || earned > 0 ? earned : ""}
-                                        placeholder="0"
-                                        onChange={e => handleSubScore(cid, sc.id, e.target.value === "" ? 0 : Number(e.target.value), c)}
-                                        className="w-14 px-1 py-0.5 border border-gray-300 rounded text-xs text-center outline-none focus:ring-1 focus:ring-purple-400 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
-                                        aria-label={`Points pour ${sc.label}`}
-                                      />
-                                      <span className="text-xs text-slate-600 dark:text-slate-300">/ {maxPts}</span>
-                                    </div>
-                                  </div>
-                                  {earned < maxPts && sc.feedback && touched && (
-                                    <p className="text-xs text-red-700 dark:text-red-200 italic rounded-md border border-red-200/80 bg-red-50/90 px-2 py-1.5 dark:border-red-500/35 dark:bg-red-950/55 leading-snug">
-                                      ⚠ {sc.feedback}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                        {hasTasks && <TaskGroups criterion={c} cid={cid} subScores={subScores} touched={subCriteriaTouched} canEdit={canEditEvaluation} onSubScore={handleSubScore} />}
 
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center dark:border-white/10">
                         <p className="text-sm text-gray-700 dark:text-slate-200 italic leading-snug">{descText}</p>
-                        {c.subCriteria && c.subCriteria.length > 0 && (() => {
-                          const missingFeedbacks = c.subCriteria
-                            .filter(
-                              (sc) =>
-                                taskPoints(sc, subScores[cid]?.[sc.id]) < (Number(sc.pts) || 0) && sc.feedback && subCriteriaTouched[cid]?.[sc.id]
-                            )
-                            .map((sc) => sc.feedback);
-                          return missingFeedbacks.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 space-y-1.5">
-                              {missingFeedbacks.map((fb, fbI) => (
-                                <p key={fbI} className="text-xs text-red-700 dark:text-red-200 rounded-md border border-red-200/70 bg-red-50/90 px-2 py-1 dark:border-red-500/35 dark:bg-red-950/50 leading-snug">
-                                  ✗ {fb}
-                                </p>
-                              ))}
-                            </div>
-                          );
-                        })()}
                       </div>
                     </div>
 
