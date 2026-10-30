@@ -260,7 +260,7 @@ export default function AdminRubric() {
       return;
     }
     try {
-      const payload = { title: selectedCourse?.title || title, taskTitle, version, criteria, isActive, linkCompetencies, course: courseId, feedbackMessages };
+      const payload = { title: selectedCourse?.title || title, taskTitle, version, criteria: criteria.map((c) => ({ ...c, subCriteria: (c.subCriteria || []).map((sc) => (sc.checks ? { ...sc, checks: sc.checks.map((x) => x.trim()).filter(Boolean) } : sc)) })), isActive, linkCompetencies, course: courseId, feedbackMessages };
       let rid = selectedId;
       if (selectedId) {
         await api.updateRubric(selectedId, payload);
@@ -993,6 +993,7 @@ export default function AdminRubric() {
                            </div>
                          </div>
                          <input type="text" className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" placeholder="Bloc / étape (facultatif) : les tâches de même bloc sont regroupées à la correction" value={sc.group || ''} onChange={e => updateSC(idx, scIdx, 'group', e.target.value)} />
+                         <textarea rows={2} className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" placeholder="Éléments pouvant être manqués, un par ligne (fragments de constat, ex. « la carte n'est pas renommée ») : cochables à la correction" value={(sc.checks || []).join('\n')} onChange={e => updateSC(idx, scIdx, 'checks', e.target.value.split('\n'))} />
                          <textarea className="w-full px-2 py-1 border border-purple-100 focus:border-purple-300 rounded text-xs outline-none bg-white text-gray-600" rows="1" placeholder="⚠ Rétroaction (optionnel) — affichée à l'élève quand la tâche n'obtient pas tous ses points" value={sc.feedback || ''} onChange={e => updateSC(idx, scIdx, 'feedback', e.target.value)}></textarea>
                          {sc.levels?.length > 0 ? (
                            <div className="space-y-1 pt-1">

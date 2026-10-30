@@ -69,7 +69,7 @@ const rubricSchema = z.object({
       weight: z.number().nonnegative(),
       color: z.string().optional(),
       levels: z.array(levelInput).optional(),
-      subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional(), group: z.string().optional(), levels: z.array(levelInput).optional() })).optional(),
+      subCriteria: z.array(z.object({ id: z.string(), label: z.string(), pts: z.number(), feedback: z.string().optional(), group: z.string().optional(), checks: z.array(z.string()).optional(), levels: z.array(levelInput).optional() })).optional(),
     })
   ),
   feedbackMessages: z.array(z.object({ minPct: z.number(), maxPct: z.number(), message: z.string() })).optional(),

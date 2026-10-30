@@ -6,7 +6,7 @@ import { Chip } from "../components/ui";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
-import { applyLevelToCriterion, matchLevel, taskPoints } from "../lib/rubricTemplate";
+import { applyLevelToCriterion, matchLevel, MISSED_KEY, taskPoints } from "../lib/rubricTemplate";
 import TaskGroups from "../components/TaskGroups";
 
 function evalItemStudentId(it) {
@@ -1528,6 +1528,14 @@ export default function Evaluations() {
     setScores((sc) => ({ ...sc, [cid]: score }));
   }
 
+  // Éléments cochés comme manqués: rangés dans subScores[cid][MISSED_KEY][tâche] (sauvegardés avec l'évaluation).
+  function handleMissed(cid, scId, list) {
+    setSubScores((prev) => {
+      const block = prev[cid] || {};
+      return { ...prev, [cid]: { ...block, [MISSED_KEY]: { ...(block[MISSED_KEY] || {}), [scId]: list } } };
+    });
+  }
+
   // `value` : points obtenus pour la tâche (nombre), ou booléen pour l'ancien format (case à cocher).
   function handleSubScore(cid, scId, value, criterion) {
     const task = criterion.subCriteria.find((sc) => sc.id === scId);
@@ -1657,7 +1665,7 @@ export default function Evaluations() {
                           </div>
                         )}
 
-                        {hasTasks && <TaskGroups criterion={c} cid={cid} subScores={subScores} touched={subCriteriaTouched} canEdit={canEditEvaluation} onSubScore={handleSubScore} />}
+                        {hasTasks && <TaskGroups criterion={c} cid={cid} subScores={subScores} touched={subCriteriaTouched} canEdit={canEditEvaluation} onSubScore={handleSubScore} onMissed={handleMissed} />}
 
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center dark:border-white/10">

@@ -42,6 +42,25 @@ function taskPoints(task, value) {
   return Math.min(Math.max(n, Math.min(0, max)), Math.max(0, max));
 }
 
+const MISSED_KEY = "_manques";
+
+// Même assemblage qu'à l'écran (frontend/src/lib/rubricTemplate.js taskFeedback).
+function taskFeedback(task, missed) {
+  const list = (missed || []).filter(Boolean);
+  if (!list.length) return task.feedback || "";
+  const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+function taskLevel(task, earned, max) {
+  if (!task.levels || !task.levels.length || !max) return null;
+  const pct = earned / max;
+  const sorted = [...task.levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
+  let m = sorted[0];
+  for (const l of sorted) if (pct >= levelThreshold(l)) m = l;
+  return m;
+}
+
 function levelDescription(criterion, s, scoresObj, cid) {
   let descText = "Non évalué";
   const raw = getNumber(scoresObj, cid);
@@ -258,24 +277,40 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
             cursorY += 14;
             stripeEndY = Math.max(stripeEndY, cursorY);
           }
-          const earned = taskPoints(sc, subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)]);
+          const raw = subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)];
+          const earned = taskPoints(sc, raw);
           const maxPts = Number(sc.pts) || 0;
           const isChecked = earned >= maxPts && earned > 0;
+          const evaluated = raw !== undefined && raw !== null;
           const labelText = `${sc.label} (${earned}/${maxPts} pts)`;
           doc.font("Helvetica").fontSize(8);
           const labelH = doc.heightOfString(labelText, { width: labelW });
           const rowH = Math.max(chkSize, labelH);
           const boxY = cursorY + (rowH - chkSize) / 2;
           drawCheckbox(doc, textLeft, boxY, chkSize, isChecked);
-          doc.fillColor(isChecked ? "#1f2937" : "#9ca3af").text(labelText, labelX, cursorY, { width: labelW });
+          doc.fillColor(isChecked ? "#1f2937" : "#374151").text(labelText, labelX, cursorY, { width: labelW });
           stripeEndY = Math.max(stripeEndY, cursorY + rowH + 2);
           cursorY += rowH + 4;
 
-          if (!isChecked && sc.feedback) {
+          // Niveau atteint à cette question (comme à l'écran), puis rétroaction adaptée aux éléments manqués.
+          const lvl = evaluated ? taskLevel(sc, earned, maxPts) : null;
+          if (lvl && (lvl.label || lvl.desc)) {
+            const lvlText = `${lvl.label}${lvl.desc ? ` : ${lvl.desc}` : ""}`;
+            doc.font("Helvetica-Oblique").fontSize(8).fillColor("#6b7280");
+            const lh = doc.heightOfString(lvlText, { width: labelW });
+            ensureCursorSpaceForCriterion(lh + 4);
+            doc.text(lvlText, labelX, cursorY, { width: labelW });
+            stripeEndY = Math.max(stripeEndY, cursorY + lh + 2);
+            cursorY += lh + 4;
+            doc.font("Helvetica");
+          }
+
+          const missedBlock = subScoreBlock[MISSED_KEY] || {};
+          const fbText = !isChecked && evaluated ? taskFeedback(sc, missedBlock[sc.id] || missedBlock[String(sc.id)]) : "";
+          if (fbText) {
             const pad = 4;
             const boxInnerW = pageWidth - 36;
-            const fbText = `⚠ ${sc.feedback}`;
-            doc.fontSize(8);
+            doc.font("Helvetica").fontSize(8);
             const fbTextH = doc.heightOfString(fbText, { width: boxInnerW - pad * 2 });
             const fbH = fbTextH + pad * 2;
             ensureCursorSpaceForCriterion(fbH + 8);

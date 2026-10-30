@@ -165,6 +165,7 @@ function normalizeSubCriteria(rawSubCriteria, criterionId, criterionWeight, used
       pts,
       feedback: asText(firstDefined(item.feedback, item.retroaction, item.rétroaction, item.comment, item.commentaire), ""),
       group: asText(firstDefined(item.group, item.groupe, item.etape, item.étape, item.step, item.bloc), ""),
+      checks: asArray(firstDefined(item.checks, item.manques, item.erreurs, item.elementsManques)).map((x) => asText(x, "")).filter(Boolean),
       // Niveaux propres à la tâche: seulement si l'IA en a fourni (sinon la tâche suit ceux du critère).
       ...(asArray(firstDefined(item.levels, item.niveaux)).length ? { levels: normalizeLevels(firstDefined(item.levels, item.niveaux)) } : {}),
     };
@@ -378,4 +379,15 @@ export function normalizeFeedbackMessages(messages, fallback = []) {
     }))
     .filter((message) => message.message);
   return normalized.length ? normalized : fallback;
+}
+
+/** Clé réservée dans subScores[critère] qui garde, par tâche, les éléments cochés comme manqués. */
+export const MISSED_KEY = "_manques";
+
+/** Rétroaction d'une tâche: les éléments cochés (fragments joints par « , » et « et »), sinon le texte général. */
+export function taskFeedback(task, missed) {
+  const list = (missed || []).filter(Boolean);
+  if (!list.length) return task.feedback || "";
+  const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }

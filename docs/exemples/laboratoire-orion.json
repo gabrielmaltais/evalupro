@@ -68,6 +68,12 @@
               "maxPct": 1,
               "desc": "Carte PRIVEE renommée, 192.168.10.1/24, DNS 127.0.0.1 et aucune passerelle, visibles dans ipconfig /all."
             }
+          ],
+          "checks": [
+            "la carte PRIVEE n'est pas renommée",
+            "l'adresse ou le masque est incorrect",
+            "une passerelle est configurée à tort",
+            "le DNS est différent de 127.0.0.1"
           ]
         },
         {
@@ -101,6 +107,12 @@
               "maxPct": 1,
               "desc": "Carte INTERNET renommée, adresse 100.64.x.y obtenue par DHCP, DNS 127.0.0.1 et enregistrement DNS désactivé."
             }
+          ],
+          "checks": [
+            "la carte INTERNET n'est pas renommée",
+            "l'adressage n'est pas obtenu par DHCP",
+            "le DNS est différent de 127.0.0.1",
+            "l'enregistrement des adresses dans le DNS n'est pas désactivé"
           ]
         },
         {
@@ -134,6 +146,12 @@
               "maxPct": 1,
               "desc": "Carte renommée, 192.168.10.10/24, passerelle et DNS 192.168.10.1, visibles dans ipconfig /all."
             }
+          ],
+          "checks": [
+            "la carte du PC n'est pas renommée",
+            "l'adresse est incorrecte",
+            "la passerelle est absente ou incorrecte",
+            "le DNS est différent de 192.168.10.1"
           ]
         },
         {
@@ -167,6 +185,10 @@
               "maxPct": 1,
               "desc": "Redirecteur DNS pointant vers le serveur DNS reçu par la carte INTERNET, prouvé par la capture."
             }
+          ],
+          "checks": [
+            "le redirecteur DNS est absent",
+            "le redirecteur ne pointe pas vers le DNS reçu par la carte INTERNET"
           ]
         },
         {
@@ -200,6 +222,10 @@
               "maxPct": 1,
               "desc": "Rôle Accès à distance installé avec DirectAccess et VPN (RAS) ainsi que Routage."
             }
+          ],
+          "checks": [
+            "le rôle Accès à distance n'est pas installé",
+            "les services de rôle DirectAccess et VPN (RAS) ou Routage sont incomplets"
           ]
         },
         {
@@ -233,6 +259,11 @@
               "maxPct": 1,
               "desc": "Configuration personnalisée avec Accès VPN et NAT, service démarré."
             }
+          ],
+          "checks": [
+            "la configuration n'est pas personnalisée",
+            "l'Accès VPN ou le NAT n'est pas coché",
+            "le service n'est pas démarré"
           ]
         },
         {
@@ -266,6 +297,11 @@
               "maxPct": 1,
               "desc": "INTERNET publique avec NAT activé et PRIVEE privée, démontrés par les deux captures."
             }
+          ],
+          "checks": [
+            "l'interface INTERNET n'est pas publique",
+            "le NAT n'est pas activé sur INTERNET",
+            "l'interface PRIVEE est mal typée"
           ]
         },
         {
@@ -299,6 +335,11 @@
               "maxPct": 1,
               "desc": "ping 8.8.8.8, ping google.com et tracert -d 8.8.8.8 (premier saut 192.168.10.1) réussis et captés."
             }
+          ],
+          "checks": [
+            "le ping 8.8.8.8 échoue",
+            "la résolution de google.com échoue",
+            "le tracert n'affiche pas le premier saut"
           ]
         },
         {
@@ -332,6 +373,10 @@
               "maxPct": 1,
               "desc": "Mappages NAT de l'interface INTERNET affichés pendant le ping -t, avec traduction de 192.168.10.10."
             }
+          ],
+          "checks": [
+            "les mappages NAT sont absents de la capture",
+            "le ping continu n'est pas démontré"
           ]
         },
         {
@@ -365,6 +410,10 @@
               "maxPct": 1,
               "desc": "Routeur IPv4 (réseau local uniquement) et serveur d'accès à distance IPv4 activés."
             }
+          ],
+          "checks": [
+            "le routeur IPv4 n'est pas en mode réseau local uniquement",
+            "l'accès à distance IPv4 n'est pas activé"
           ]
         },
         {
@@ -398,6 +447,11 @@
               "maxPct": 1,
               "desc": "Pool statique 192.168.10.200 à 192.168.10.210 sur l'adaptateur PRIVEE, prouvé par la capture."
             }
+          ],
+          "checks": [
+            "le pool d'adresses statiques est absent",
+            "la plage est différente de .200 à .210",
+            "l'adaptateur n'est pas PRIVEE"
           ]
         },
         {
@@ -431,6 +485,10 @@
               "maxPct": 1,
               "desc": "MS-CHAP v2 activé."
             }
+          ],
+          "checks": [
+            "MS-CHAP v2 n'est pas activé",
+            "des méthodes non sécuritaires sont restées actives"
           ]
         },
         {
@@ -464,6 +522,10 @@
               "maxPct": 1,
               "desc": "WAN Miniport (PPTP) limité aux connexions d'accès à distance entrantes avec 5 ports, liste des ports captée."
             }
+          ],
+          "checks": [
+            "le port PPTP accepte aussi le routage",
+            "le nombre de ports est différent de 5"
           ]
         },
         {
@@ -497,6 +559,11 @@
               "maxPct": 1,
               "desc": "Compte vpn_externe créé, mot de passe sans expiration et accès à distance autorisé, prouvé par la capture."
             }
+          ],
+          "checks": [
+            "le compte vpn_externe est absent",
+            "le mot de passe expire",
+            "l'accès à distance n'est pas autorisé"
           ]
         },
         {
@@ -530,6 +597,12 @@
               "maxPct": 1,
               "desc": "VM ADGUARD-Prénom issue de TPL-AdGuard-Orion, une seule carte sur le vnet personnel."
             }
+          ],
+          "checks": [
+            "la VM n'est pas nommée correctement",
+            "le mauvais template est utilisé",
+            "la carte est sur le réseau internet",
+            "la VM a plusieurs cartes"
           ]
         },
         {
@@ -563,6 +636,11 @@
               "maxPct": 1,
               "desc": "IP statique 192.168.10.53/24 et passerelle 192.168.10.1 configurées dans la section réseau de DeltaCloud."
             }
+          ],
+          "checks": [
+            "l'IP statique n'est pas configurée dans DeltaCloud",
+            "l'adresse ou le masque est incorrect",
+            "la passerelle est incorrecte"
           ]
         },
         {
@@ -596,6 +674,10 @@
               "maxPct": 1,
               "desc": "Interface web ouverte depuis le PC et nslookup google.com 192.168.10.53 répondu, captés."
             }
+          ],
+          "checks": [
+            "l'interface web d'AdGuard est inaccessible depuis le PC",
+            "le nslookup ne répond pas"
           ]
         },
         {
@@ -629,6 +711,10 @@
               "maxPct": 1,
               "desc": "Redirecteur de SRV vers AdGuard seulement, DNS du PC toujours SRV, prouvé par les captures."
             }
+          ],
+          "checks": [
+            "le redirecteur de SRV pointe vers autre chose qu'AdGuard seul",
+            "le DNS du PC a été modifié"
           ]
         },
         {
@@ -662,6 +748,10 @@
               "maxPct": 1,
               "desc": "Les trois domaines bloqués avec sous-domaines, règles visibles dans AdGuard."
             }
+          ],
+          "checks": [
+            "un ou plusieurs domaines ne sont pas bloqués",
+            "la règle ne couvre pas les sous-domaines"
           ]
         },
         {
@@ -695,6 +785,10 @@
               "maxPct": 1,
               "desc": "Service TikTok bloqué dans AdGuard, visible dans la capture des règles et services."
             }
+          ],
+          "checks": [
+            "le service TikTok n'est pas bloqué",
+            "le blocage est fait par domaines manuels au lieu du service"
           ]
         },
         {
@@ -728,6 +822,11 @@
               "maxPct": 1,
               "desc": "Caches vidés, nslookup d'un domaine bloqué de chaque type et de microsoft.com, journal montrant les blocages."
             }
+          ],
+          "checks": [
+            "les caches DNS ne sont pas vidés",
+            "les nslookup sont incomplets",
+            "le journal des blocages est absent"
           ]
         }
       ]

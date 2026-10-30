@@ -1,10 +1,10 @@
-import { groupTasks, matchLevel, pointsForLevel, taskPoints } from "../lib/rubricTemplate";
+import { groupTasks, matchLevel, MISSED_KEY, pointsForLevel, taskFeedback, taskPoints } from "../lib/rubricTemplate";
 
 const tone = (maxPct) =>
   maxPct < 0.5 ? "border-red-200 text-red-600 hover:bg-red-50" : maxPct < 0.8 ? "border-yellow-300 text-yellow-600 hover:bg-yellow-50" : "border-green-200 text-green-600 hover:bg-green-50";
 
 /** Une tâche (question ou élément à noter): son propre encadré, ses points et ses niveaux. */
-function TaskCard({ task, value, touched, canEdit, onChange }) {
+function TaskCard({ task, value, missed, touched, canEdit, onChange, onMissed }) {
   const earned = taskPoints(task, value);
   const max = Number(task.pts) || 0;
   const isFull = max > 0 && earned >= max;
@@ -32,15 +32,26 @@ function TaskCard({ task, value, touched, canEdit, onChange }) {
         </div>
       )}
       {current?.desc && <p className="mt-2 text-sm italic leading-snug text-gray-600 dark:text-slate-300">{current.desc}</p>}
-      {earned < max && task.feedback && touched && (
-        <p className="mt-2 rounded-md border border-red-200/80 bg-red-50/90 px-2.5 py-1.5 text-xs italic leading-snug text-red-700 dark:border-red-500/35 dark:bg-red-950/55 dark:text-red-200">⚠ {task.feedback}</p>
+      {earned < max && touched && task.checks?.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">Éléments manqués (facultatif)</p>
+          {task.checks.map((chk) => (
+            <label key={chk} className="flex items-start gap-2 text-xs text-gray-700 dark:text-slate-200">
+              <input type="checkbox" disabled={!canEdit} checked={missed.includes(chk)} onChange={(e) => onMissed(e.target.checked ? [...missed, chk] : missed.filter((x) => x !== chk))} className="mt-0.5" />
+              <span>{chk}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      {earned < max && touched && taskFeedback(task, missed) && (
+        <p className="mt-2 rounded-md border border-red-200/80 bg-red-50/90 px-2.5 py-1.5 text-xs italic leading-snug text-red-700 dark:border-red-500/35 dark:bg-red-950/55 dark:text-red-200">{taskFeedback(task, missed)}</p>
       )}
     </div>
   );
 }
 
 /** Tâches d'un critère, regroupées par bloc (étape) quand elles en ont un. */
-export default function TaskGroups({ criterion, cid, subScores, touched, canEdit, onSubScore }) {
+export default function TaskGroups({ criterion, cid, subScores, touched, canEdit, onSubScore, onMissed }) {
   return (
     <div className="space-y-4">
       {groupTasks(criterion.subCriteria).map((g, gi) => {
@@ -55,7 +66,7 @@ export default function TaskGroups({ criterion, cid, subScores, touched, canEdit
               </div>
             )}
             {g.tasks.map((t) => (
-              <TaskCard key={t.id} task={t} value={subScores[cid]?.[t.id]} touched={touched[cid]?.[t.id]} canEdit={canEdit} onChange={(v) => onSubScore(cid, t.id, v, criterion)} />
+              <TaskCard key={t.id} task={t} value={subScores[cid]?.[t.id]} missed={subScores[cid]?.[MISSED_KEY]?.[t.id] || []} onMissed={(list) => onMissed(cid, t.id, list)} touched={touched[cid]?.[t.id]} canEdit={canEdit} onChange={(v) => onSubScore(cid, t.id, v, criterion)} />
             ))}
           </section>
         );

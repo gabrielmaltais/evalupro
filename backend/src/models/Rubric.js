@@ -22,6 +22,8 @@ const subCriterionSchema = new mongoose.Schema(
     levels: { type: [levelSchema], default: [] },
     // Bloc d'affichage (ex. « Étape 2 : Routeur et NAT »): les tâches qui partagent le même nom sont regroupées à la correction.
     group: { type: String, default: "" },
+    // Éléments qui peuvent être manqués (cases à cocher à la correction): chacun est un fragment de phrase d'observation.
+    checks: { type: [String], default: [] },
   },
   { _id: false }
 );
