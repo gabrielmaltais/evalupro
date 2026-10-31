@@ -1,9 +1,23 @@
+const path = require("path");
 const PDFDocument = require("pdfkit");
 const { toPlainObject, criterionKey } = require("../utils/evaluationTotals");
 const { helpers: H } = require("./evaluationPdfService");
 const { DEFAULTS, fill } = require("../utils/pdfSettings");
 
 const { getScore, getNumber, getSubBlock, taskPoints, computeTotals, pickFeedbackMessage, taskFeedback, pickLevel, latin, formatDate, NUM, openingText, pct1, short, MISSED_KEY, LEVELS_KEY } = H;
+
+// Polices intégrées au PDF (sinon Times/Helvetica non incluses: rendu variable selon le lecteur).
+// Les noms standards sont redirigés vers FreeSerif / FreeSans.
+const FONT_DIR = path.join(__dirname, "../../assets/fonts");
+const FONT_ALIASES = {
+  "Times-Roman": "FreeSerif", "Times-Bold": "FreeSerifBold", "Times-Italic": "FreeSerifItalic", "Times-BoldItalic": "FreeSerifBoldItalic",
+  Helvetica: "FreeSans", "Helvetica-Bold": "FreeSansBold", "Helvetica-Oblique": "FreeSansOblique", "Courier-Bold": "FreeSansBold",
+};
+function newDoc(opts) {
+  const doc = new PDFDocument(opts);
+  for (const [name, file] of Object.entries(FONT_ALIASES)) doc.registerFont(name, path.join(FONT_DIR, `${file}.otf`));
+  return doc;
+}
 
 /** Trois directions graphiques. `fonts`: titre / texte / chiffres / lettre. */
 const THEMES = {
@@ -98,7 +112,7 @@ function createCompactPdfBuffer(evaluation, rubric, { teacherName = "", settings
   const F = P.fonts;
   const D = prepare(evaluation, rubric);
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: S.pageSize, margin: 40, bufferPages: true });
+    const doc = newDoc({ size: S.pageSize, margin: 40, bufferPages: true });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -273,7 +287,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
   const F = P.fonts;
   const D = prepare(evaluation, rubric);
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: S.pageSize, margin: 40, bufferPages: true });
+    const doc = newDoc({ size: S.pageSize, margin: 40, bufferPages: true });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
