@@ -53,13 +53,13 @@ function prepare(evaluation, rubric) {
         const scale = sc.levels && sc.levels.length ? sc.levels : c.levels;
         const chosen = (block[LEVELS_KEY] || {})[sc.id];
         const lvl = evaluated ? (scale || []).find((l) => l.label === chosen) || pickLevel(scale, max ? earned / max : 0) : null;
-        items.push({ n: ++qn, group: sc.group || "", label: latin(sc.label), earned, max, evaluated, level: lvl && lvl.label, feedback: evaluated && earned < max ? taskFeedback(sc, missedBlock[sc.id] || missedBlock[String(sc.id)]) : "", insight: evaluated && earned < max ? latin(sc.insight) : "" });
+        items.push({ n: ++qn, group: sc.group || "", label: latin(sc.label), earned, max, evaluated, level: lvl && lvl.label, feedback: evaluated && earned < max ? taskFeedback(sc, missedBlock[sc.id] || missedBlock[String(sc.id)]) : "", insight: evaluated && earned < max ? latin(sc.insight) : "", expected: evaluated && earned < max && sc.levels && sc.levels.length ? latin([...sc.levels].sort((a, b) => b.maxPct - a.maxPct)[0].desc) : "" });
       });
     } else {
       const s = getScore(scores, cid);
       const max = Number(c.weight) || 0;
       const lvl = pickLevel(c.levels, max ? s / max : 0);
-      items.push({ n: ++qn, group: "", label: latin(c.title), earned: s, max, evaluated: getNumber(scores, cid) !== undefined, level: lvl && lvl.label, feedback: "", insight: "" });
+      items.push({ n: ++qn, group: "", label: latin(c.title), earned: s, max, evaluated: getNumber(scores, cid) !== undefined, level: lvl && lvl.label, feedback: "", insight: "", expected: "" });
     }
     sections.push({ c, items, note: comments[cid] || comments[String(cid)], earned: getScore(scores, cid) });
   });
@@ -302,7 +302,67 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
         y += HH(ct, W, F.body, 8) + 8;
       }
       let last = null;
-      s.items.forEach((it) => {
+      if (theme === "carnet") {
+        const bodyFont = F.letter;
+        s.items.forEach((it) => {
+          const gb = D.blocks.find((b) => b.name === it.group);
+          if (it.group && it.group !== last) {
+            last = it.group;
+            const gname = latin(it.group);
+            const inGroup = s.items.filter((x) => x.group === it.group);
+            const toReview = inGroup.filter((x) => x.evaluated && x.earned < x.max).length;
+            const p = gb ? pct1(gb) : 1;
+            const verdict = p >= 0.999 ? "Étape entièrement réussie." : p >= 0.85 ? "Étape bien maîtrisée; quelques détails ont coûté des points." : p >= 0.65 ? "Étape en bonne partie réussie, avec des éléments à reprendre." : "Cette étape demande une reprise plus complète.";
+            const vtxt = p >= 0.999 ? verdict : `${verdict} ${toReview} question${toReview > 1 ? "s" : ""} à revoir.`;
+            need(130);
+            T(gname, L, y, { width: W - 100 }, F.letterB, 13.5, P.accent2);
+            if (gb) T(`${NUM(gb.earned)} / ${NUM(gb.max)}`, L + W - 90, y + 1, { width: 90, align: "right", lineBreak: false }, F.head, 11, P.muted);
+            const gh = HH(gname, W - 100, F.letterB, 13.5);
+            doc.moveTo(L, y + gh + 3).lineTo(L + W, y + gh + 3).strokeColor(P.line).lineWidth(0.8).stroke();
+            y += gh + 10;
+            T(vtxt, L, y, { width: W }, F.letterI, 10.5, P.muted);
+            y += HH(vtxt, W, F.letterI, 10.5) + 10;
+          }
+          const k = keyOf(it.evaluated, it.earned, it.max);
+          const color = col(k);
+          const ptsStr = `${NUM(it.earned)} / ${NUM(it.max)}`;
+          const labelW = W - numW - ptsW - 10;
+          const lostItem = it.evaluated && it.earned < it.max;
+          if (!lostItem) {
+            const lh = HH(it.label, labelW, bodyFont, 10.5);
+            need(lh + 12);
+            T(`${it.n}.`, L, y, { width: numW - 8, lineBreak: false }, F.body, 10, P.muted);
+            T(it.label, L + numW, y, { width: labelW }, bodyFont, 10.5, P.ink);
+            T(it.evaluated ? ptsStr : "non évalué", L + W - ptsW, y, { width: ptsW, align: "right", lineBreak: false }, bodyFont, 10.5, it.evaluated ? P.full : P.muted);
+            y += Math.max(lh, 13) + 7;
+            return;
+          }
+          const lh = HH(it.label, labelW, F.letterB, 11.5);
+          const pw = W - numW - 14;
+          const paras = [
+            ["Ce qui était attendu. ", it.expected, P.accent2],
+            ["Ce que j'ai relevé. ", it.feedback || "Des points ont été retranchés sur des détails de cette question.", P.accent],
+            ["Pour comprendre. ", it.insight, P.muted],
+          ].filter((x) => x[1]);
+          const heights = paras.map(([lead, txt]) => HH(lead + txt, pw, "Times-Roman", 10.5, { lineGap: 1 }) * 1.03);
+          const blockH = Math.max(lh, 16) + 14 + heights.reduce((a, b) => a + b + 6, 0);
+          need(Math.min(blockH + 8, 330));
+          T(`${it.n}.`, L, y, { width: numW - 8, lineBreak: false }, F.head, 13, color);
+          T(it.label, L + numW, y, { width: labelW }, F.letterB, 11.5, P.ink);
+          T(ptsStr, L + W - ptsW, y, { width: ptsW, align: "right", lineBreak: false }, F.head, 14, color);
+          let yy = y + Math.max(lh, 16) + 2;
+          if (it.level) T(it.level, L + numW, yy, { lineBreak: false }, F.letterI, 9, color);
+          yy += 14;
+          doc.rect(L + numW, yy, 1.4, heights.reduce((a, b) => a + b + 6, 0) - 4).fill(color);
+          paras.forEach(([lead, txt, lc], i) => {
+            doc.font("Times-BoldItalic").fontSize(10.5).fillColor(lc).text(lead, L + numW + 12, yy, { width: pw, continued: true, lineGap: 1 });
+            doc.font("Times-Roman").fontSize(10.5).fillColor(P.ink).text(txt, { width: pw, lineGap: 1 });
+            yy += heights[i] + 6;
+          });
+          y = yy + 8;
+        });
+      }
+      (theme === "carnet" ? [] : s.items).forEach((it) => {
         if (it.group && it.group !== last) {
           need(110);
           last = it.group;

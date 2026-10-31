@@ -91,3 +91,19 @@ describe("taskFeedback", () => {
     expect(_tf({}, ["a", "b", "c"])).toBe("A, b et c.");
   });
 });
+
+import { lockLevelScale, normalizeImportedRubric as _norm, startsImperative } from "./rubricTemplate";
+describe("import robuste des checks", () => {
+  it("accepte objets, chaîne séparée par « ; », retire doublons et vides", () => {
+    const r = _norm({ title: "T", criteria: [{ title: "C", subCriteria: [
+      { label: "Q1", pts: 1, checks: [{ label: "a" }, { texte: "b" }, "b", "  "] },
+      { label: "Q2", pts: 1, checks: "x; y" },
+    ] }] });
+    expect(r.rubric.criteria[0].subCriteria.map((s) => s.checks)).toEqual([["a", "b"], ["x", "y"]]);
+  });
+  it("détecte l'impératif et verrouille l'échelle", () => {
+    expect(startsImperative("Assure-toi de vérifier")).toBe(true);
+    expect(startsImperative("Redirecteur DNS mal configuré")).toBe(false);
+    expect(lockLevelScale([{ label: "Partiel", minPct: 0.1, maxPct: 0.9, desc: "d" }], [{ label: "Partiel", minPct: 0.6, maxPct: 0.68 }])[0]).toMatchObject({ minPct: 0.6, maxPct: 0.68, desc: "d" });
+  });
+});

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { normalizeImportedRubric, parseAiJson, tasksTotal, unwrapAiTemplateEnvelope } from "../lib/rubricTemplate";
+import { lockLevelScale, startsImperative } from "../lib/rubricTemplate";
 import { buildAITemplate as buildAITemplateJson, DEFAULT_AI_CONFIG, isTemplatePlaceholder, LEVEL_SCALES } from "../lib/aiTemplate";
 import { alignCriteriaToCourse, competenciesForAi } from "../lib/courseHelpers";
 import PageSectionTitle from "../components/PageSectionTitle";
@@ -478,7 +479,23 @@ export default function AdminRubric() {
     }
     const imported = result.rubric;
     // Un nom de bloc resté celui du gabarit n'est pas un vrai nom.
-    imported.criteria.forEach((c) => c.subCriteria.forEach((t) => { if (isTemplatePlaceholder(t.group)) t.group = ""; }));
+    // Texte du gabarit resté tel quel (nom de bloc, rétroaction, élément à cocher, « Pour comprendre ») : retiré, il ne doit jamais atteindre l'élève.
+    let cleared = 0;
+    const imperative = [];
+    const scale = LEVEL_SCALES[aiConfig.niveaux] || LEVEL_SCALES[4];
+    imported.criteria.forEach((c) => {
+      c.levels = lockLevelScale(c.levels, scale);
+      c.subCriteria.forEach((t) => {
+        if (isTemplatePlaceholder(t.group)) t.group = "";
+        if (isTemplatePlaceholder(t.feedback)) { t.feedback = ""; cleared += 1; }
+        if (isTemplatePlaceholder(t.insight)) { t.insight = ""; cleared += 1; }
+        const kept = (t.checks || []).filter((x) => !isTemplatePlaceholder(x));
+        cleared += (t.checks || []).length - kept.length;
+        t.checks = kept;
+        if (t.levels) t.levels = lockLevelScale(t.levels, scale);
+        if ([t.feedback, ...t.checks].some(startsImperative)) imperative.push(t.label);
+      });
+    });
     const course = courses.find((c) => c._id === courseId) || null;
     // Les critères sont rattachés aux compétences du cours choisi MAINTENANT (même si le cours a changé depuis la génération).
     const al = alignCriteriaToCourse(imported.criteria, course?.competencies);
@@ -512,6 +529,8 @@ export default function AdminRubric() {
       if (al.unlinked) notes.push(`${al.unlinked} critère(s) ne correspondent à aucune compétence de « ${course.title} » (titre modifié par l'IA ?).`);
       if (al.missing.length) notes.push(`Compétence(s) non évaluée(s) par cet examen, donc absentes de la grille : ${al.missing.map((c) => c.title).join(" ; ")}.`);
     }
+    if (cleared) notes.push(`${cleared} texte(s) du gabarit non remplacé(s) par l'IA ont été retirés (rétroaction, éléments à cocher ou « Pour comprendre »).`);
+    if (imperative.length) notes.push(`Rétroaction à l'impératif (à reformuler en constat) : ${imperative.slice(0, 3).join(" ; ")}${imperative.length > 3 ? ` et ${imperative.length - 3} autre(s)` : ""}.`);
     if (placeholders.length) notes.push(`Du texte du gabarit n'a pas été remplacé par l'IA (${[...new Set(placeholders)].join(" ; ")}).`);
     if (!imported.taskTitle) notes.push("Donne un nom à l'évaluation (étape 2).");
     setSuccess(

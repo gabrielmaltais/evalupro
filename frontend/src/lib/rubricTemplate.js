@@ -49,6 +49,18 @@ function asText(value, fallback) {
   return text || fallback;
 }
 
+/** Liste de textes: tableau (chaînes ou objets {label/texte/...}) ou chaîne séparée par « ; » ou retours de ligne. Sans doublons ni vides. */
+function asTextList(value, max = 8) {
+  const parts = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[;\n]/) : [];
+  const out = [];
+  parts.forEach((part) => {
+    const raw = part && typeof part === "object" ? firstDefined(part.label, part.texte, part.text, part.fragment, part.desc, part.description) : part;
+    const text = asText(raw, "");
+    if (text && !out.some((x) => x.toLowerCase() === text.toLowerCase())) out.push(text);
+  });
+  return out.slice(0, max);
+}
+
 function parsePoints(value) {
   if (typeof value === "string") {
     const normalized = value.replace(",", ".").match(/-?\d+(\.\d+)?/);
@@ -166,7 +178,7 @@ function normalizeSubCriteria(rawSubCriteria, criterionId, criterionWeight, used
       feedback: asText(firstDefined(item.feedback, item.retroaction, item.rétroaction, item.comment, item.commentaire), ""),
       group: asText(firstDefined(item.group, item.groupe, item.etape, item.étape, item.step, item.bloc), ""),
       insight: asText(firstDefined(item.insight, item.contexte, item.pourquoi, item.explication), ""),
-      checks: asArray(firstDefined(item.checks, item.manques, item.erreurs, item.elementsManques)).map((x) => asText(x, "")).filter(Boolean),
+      checks: asTextList(firstDefined(item.checks, item.manques, item.erreurs, item.elementsManques)),
       // Niveaux propres à la tâche: seulement si l'IA en a fourni (sinon la tâche suit ceux du critère).
       ...(asArray(firstDefined(item.levels, item.niveaux)).length ? { levels: normalizeLevels(firstDefined(item.levels, item.niveaux)) } : {}),
     };
@@ -393,4 +405,17 @@ export function taskFeedback(task, missed) {
   if (!list.length) return task.checks?.length ? "" : task.feedback || "";
   const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+/** Vrai si une rétroaction commence par un verbe à l'impératif (« Assure-toi… », « Vérifie… »): elle doit être un constat. */
+export function startsImperative(text) {
+  return /^\s*(assure|vérifie|verifie|révise|revise|revois|relis|reprends|pense|n'oublie|utilise|consulte|fais|prends|configure|ajoute|corrige|make sure|check|review|remember|use|try|revisit)\b/i.test(String(text || ""));
+}
+
+/** Aligne les pourcentages des niveaux sur l'échelle choisie (par libellé), pour que l'IA ne puisse pas les modifier. */
+export function lockLevelScale(levels, scale) {
+  return asArray(levels).map((l) => {
+    const ref = scale.find((x) => x.label.toLowerCase() === String(l.label || "").toLowerCase());
+    return ref ? { ...l, minPct: ref.minPct, maxPct: ref.maxPct } : l;
+  });
 }
