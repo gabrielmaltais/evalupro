@@ -38,7 +38,7 @@ async function selectEvaluationsForBatch({ ownerId, groupId, rubricId }) {
   const studentIds = validStudents.map((s) => s._id);
   if (!studentIds.length) return [];
 
-  const evaluations = await Evaluation.find({ owner: ownerId, rubric: rubricId, studentId: { $in: studentIds } })
+  const evaluations = await Evaluation.find({ owner: ownerId, rubric: rubricId, status: { $ne: "draft" }, studentId: { $in: studentIds } })
     .populate("rubric")
     .sort({ createdAt: -1 });
 
@@ -143,7 +143,7 @@ async function runBatchJob({
     }
 
     try {
-      const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric);
+      const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName });
       const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
       const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
         owner: ownerForTemplate,
@@ -203,6 +203,11 @@ async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
     err.statusCode = 404;
     throw err;
   }
+  if (evaluation.status === "draft") {
+    const err = new Error("Correction non terminée : marque-la « terminée » avant de l'envoyer");
+    err.statusCode = 400;
+    throw err;
+  }
   if (!evaluation.studentId) {
     const err = new Error("Aucun étudiant associé à cette évaluation");
     err.statusCode = 400;
@@ -259,7 +264,7 @@ async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
   const ownerForTemplate = { ...owner, name: teacherName };
 
   try {
-    const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric);
+    const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName });
     const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
     const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
       owner: ownerForTemplate,

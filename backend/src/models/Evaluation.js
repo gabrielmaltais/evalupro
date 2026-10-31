@@ -18,6 +18,8 @@ const evaluationSchema = new mongoose.Schema(
     session: { type: mongoose.Schema.Types.ObjectId, ref: "Session", default: null },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     /** Repère visuel optionnel (pastille / icône) pour tri visuel en correction */
+    /** « draft » = correction en cours (jamais envoyée par courriel); « final » = terminée. Les anciennes évaluations sont terminées. */
+    status: { type: String, enum: ["draft", "final"], default: "final" },
     markerColor: { type: String, default: "" },
     markerIcon: { type: String, default: "" },
   },

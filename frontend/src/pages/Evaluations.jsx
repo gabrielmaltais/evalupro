@@ -229,6 +229,7 @@ export default function Evaluations() {
         generalComment: next.form?.generalComment ?? form.generalComment ?? "",
         markerColor: next.form?.markerColor ?? form.markerColor ?? "",
         markerIcon: next.form?.markerIcon ?? form.markerIcon ?? "",
+        status: next.form?.status ?? form.status ?? "",
       },
       scores: next.scores ?? scores,
       subScores: next.subScores ?? subScores,
@@ -1117,6 +1118,7 @@ export default function Evaluations() {
         rubric: typeof data.rubric === 'object' ? data.rubric._id : data.rubric,
         markerColor: data.markerColor || "",
         markerIcon: data.markerIcon || "",
+        status: data.status || "final",
       });
       setScores(data.scores || {});
       setSubScores(data.subScores || {});
@@ -1142,6 +1144,7 @@ export default function Evaluations() {
           rubric: typeof data.rubric === "object" ? data.rubric._id : data.rubric,
           markerColor: data.markerColor || "",
           markerIcon: data.markerIcon || "",
+          status: data.status || "final",
         },
         scores: data.scores || {},
         subScores: data.subScores || {},
@@ -1445,13 +1448,13 @@ export default function Evaluations() {
     }
     try {
       if (form._id) {
-        await api.updateEvaluation(form._id, { ...form, scores, subScores, comments });
+        await api.updateEvaluation(form._id, { ...form, status: form.status || "draft", scores, subScores, comments });
         lastCommittedEvalRef.current = captureEvalSnapshot();
         clearLocalDraft();
         await refresh();
         return form._id;
       } else {
-        const res = await api.createEvaluation({ ...form, scores, subScores, comments });
+        const res = await api.createEvaluation({ ...form, status: form.status || "draft", scores, subScores, comments });
         setForm(f => ({ ...f, _id: res._id }));
         lastCommittedEvalRef.current = captureEvalSnapshot({
           form: { ...form, _id: res._id },
@@ -1699,7 +1702,14 @@ export default function Evaluations() {
               <h3 className="text-lg font-bold text-gray-800">Synthèse & Commentaires Généraux</h3>
             </div>
             <textarea disabled={!canEditEvaluation} rows="6" className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" placeholder="Observations générales sur le travail..." value={form.generalComment} onChange={e => setForm({ ...form, generalComment: e.target.value })}></textarea>
-            <div className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-slate-900/40">
+            <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-white/10 dark:bg-slate-900/40">
+              <input type="checkbox" className="mt-0.5" disabled={!canEditEvaluation} checked={form.status === "final"} onChange={(e) => setForm((f) => ({ ...f, status: e.target.checked ? "final" : "draft" }))} />
+              <span>
+                <strong>Correction terminée</strong>
+                <span className="block text-xs text-gray-500 dark:text-slate-400">Décoché = brouillon : la copie n&apos;est jamais envoyée par courriel à l&apos;étudiant.</span>
+              </span>
+            </label>
+            <div className="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-slate-900/40">
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">
                 Repère visuel de cette copie (optionnel)
               </h4>
@@ -1761,6 +1771,7 @@ export default function Evaluations() {
                     <p className="text-sm text-gray-800 hover:text-blue-600 transition">
                       <strong>{it.studentName}</strong> <span className="text-gray-400 mx-2">•</span> {it.date}
                     </p>
+                    {it.status === "draft" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Brouillon</span>}
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="font-semibold text-blue-600">{it.totalScore}/{it.totalMax}</span>
@@ -2046,6 +2057,7 @@ export default function Evaluations() {
                               <div className="flex items-center gap-2">
                                 <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
                                 <span>{studentDisplayName(row.student)}</span>
+                                {row.evaluation?.status === "draft" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Brouillon</span>}
                               </div>
                             </td>
                             <td className="px-4 py-3">
@@ -2253,6 +2265,7 @@ export default function Evaluations() {
                               <div className="flex items-center gap-2">
                                 <MarkerBadge color={row.evaluation?.markerColor} icon={row.evaluation?.markerIcon} />
                                 <span>{studentDisplayName(row.student)}</span>
+                                {row.evaluation?.status === "draft" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">Brouillon</span>}
                               </div>
                             </td>
                             <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.student.email || "—"}</td>

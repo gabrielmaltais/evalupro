@@ -127,12 +127,34 @@ function statusOf(evaluated, earned, max) {
   return STATUS.partial;
 }
 
+const pct1 = (b) => (b.max ? b.earned / b.max : 0);
+const short = (str, n = 78) => (str.length > n ? `${str.slice(0, n - 1).trim()}…` : str);
+
+/** Résumé écrit à l'élève à partir de ses résultats par étape (points forts, priorité). */
+function openingText(firstName, totalScore, totalMax, finalPct, blocks, lost) {
+  const parts = [`${firstName}, tu as obtenu ${NUM(Math.round(totalScore * 10) / 10)} sur ${NUM(totalMax)} (${Math.round(finalPct)} %).`];
+  if (!lost.length) {
+    parts.push("Tous les points sont acquis : chaque élément demandé a été réalisé correctement.");
+    return parts.join(" ");
+  }
+  if (blocks.length > 1) {
+    const ranked = [...blocks].sort((a, b) => pct1(b) - pct1(a));
+    const best = ranked[0];
+    const worst = ranked[ranked.length - 1];
+    if (pct1(best) > pct1(worst)) {
+      parts.push(`Ton point le plus solide est « ${latin(best.name)} » (${NUM(best.earned)} sur ${NUM(best.max)}).`);
+      parts.push(`C'est dans « ${latin(worst.name)} » (${NUM(worst.earned)} sur ${NUM(worst.max)}) que se trouvent le plus de points à aller chercher.`);
+    }
+  }
+  return parts.join(" ");
+}
+
 const INK = "#111827";
 const MUTED = "#6b7280";
 const ACCENT = "#3730a3";
 
 /** Rapport individuel: en-tête, synthèse par étape, questions numérotées (pointage à droite + rétroaction choisie), message final. */
-function createEvaluationPdfBuffer(evaluation, rubric) {
+function createEvaluationPdfBuffer(evaluation, rubric, { teacherName = "" } = {}) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
     const chunks = [];
@@ -243,6 +265,49 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       });
       blocks.push(...seen.values());
     });
+    // --- Mot d'ouverture écrit pour l'étudiant, puis réussites et points à gagner
+    const all = sections.flatMap((s) => s.items);
+    const lost = all.filter((it) => it.evaluated && it.earned < it.max).sort((a, b) => b.max - b.earned - (a.max - a.earned));
+    const done = all.filter((it) => it.evaluated && it.max > 0 && it.earned >= it.max);
+    const opening = openingText(firstName, totalScore, totalMax, finalPct, blocks, lost);
+    const oh = heightOf(opening, W, "Times-Roman", 11.5);
+    need(oh + 20);
+    text(opening, L, y, { width: W, lineGap: 2 }, "Times-Roman", 11.5, INK);
+    y += oh + 16;
+
+    const colW = (W - 20) / 2;
+    const winsText = done.length ? done.map((it) => it.n).join(", ") : "-";
+    const lossRows = lost.slice(0, 3).map((it) => ({
+      head: `${it.n}. ${short(it.label, 70)}`,
+      pts: `-${NUM(it.max - it.earned)} pt`,
+      fb: it.feedback,
+    }));
+    const lossH = lossRows.reduce((h, r) => h + heightOf(r.head, colW - 60, "Helvetica-Bold", 8.5) + (r.fb ? heightOf(r.fb, colW - 8, "Helvetica", 8) : 0) + 8, 0);
+    const winH = heightOf(`${done.length} sur ${all.length} questions pleinement réussies`, colW, "Helvetica-Bold", 9) + heightOf(winsText, colW, "Helvetica", 8.5) + 8;
+    const boxH = Math.max(lossH, winH) + 30;
+    need(boxH + 14);
+    doc.rect(L, y, 3, boxH).fill("#16a34a");
+    text("CE QUE TU MAÎTRISES", L + 12, y + 2, { width: colW - 12, characterSpacing: 1 }, "Helvetica-Bold", 7.5, "#15803d");
+    text(`${done.length} sur ${all.length} questions pleinement réussies`, L + 12, y + 16, { width: colW - 12 }, "Helvetica-Bold", 9, INK);
+    text(`Questions ${winsText}`, L + 12, y + 16 + heightOf(`${done.length} sur ${all.length} questions pleinement réussies`, colW - 12, "Helvetica-Bold", 9) + 4, { width: colW - 12 }, "Helvetica", 8.5, MUTED);
+    const rx2 = L + colW + 20;
+    doc.rect(rx2, y, 3, boxH).fill("#ea580c");
+    text("OÙ GAGNER DES POINTS", rx2 + 12, y + 2, { width: colW - 12, characterSpacing: 1 }, "Helvetica-Bold", 7.5, "#c2410c");
+    let ly = y + 16;
+    if (!lossRows.length) text("Rien à signaler.", rx2 + 12, ly, { width: colW - 12 }, "Helvetica", 9, MUTED);
+    lossRows.forEach((r) => {
+      const hh = heightOf(r.head, colW - 60, "Helvetica-Bold", 8.5);
+      text(r.head, rx2 + 12, ly, { width: colW - 62 }, "Helvetica-Bold", 8.5, INK);
+      text(r.pts, rx2 + colW - 48, ly, { width: 48, align: "right", lineBreak: false }, "Helvetica-Bold", 8.5, "#b91c1c");
+      ly += hh + 1;
+      if (r.fb) {
+        text(r.fb, rx2 + 12, ly, { width: colW - 12 }, "Helvetica", 8, MUTED);
+        ly += heightOf(r.fb, colW - 12, "Helvetica", 8);
+      }
+      ly += 7;
+    });
+    y += boxH + 22;
+
     if (blocks.length > 1) {
       text("SYNTHÈSE PAR ÉTAPE", L, y, { width: W, characterSpacing: 1 }, "Helvetica-Bold", 8, ACCENT);
       y += 16;
@@ -327,28 +392,34 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
       y += 8;
     });
 
-    // --- Synthèse de l'enseignant
-    if (evaluation.generalComment) {
-      const gc = latin(evaluation.generalComment);
-      const h = heightOf(gc, W - 28, "Helvetica", 9.5) + 34;
-      need(h + 10);
-      doc.roundedRect(L, y, W, h, 6).fillAndStroke("#f8fafc", "#e2e8f0");
-      text("COMMENTAIRE DE L'ENSEIGNANT", L + 14, y + 11, { width: W - 28, characterSpacing: 1 }, "Helvetica-Bold", 7.5, MUTED);
-      text(gc, L + 14, y + 24, { width: W - 28 }, "Helvetica", 9.5, "#374151");
-      y += h + 14;
-    }
-
-    // --- Message final, adressé à l'étudiant
+    // --- Mot de la fin, en lettre: message adapté au résultat, étape à reprendre, commentaire de l'enseignant, signature
     const match = pickFeedbackMessage(rubric, finalPct);
-    if (match && match.message) {
-      const msg = latin(match.message);
-      const h = heightOf(msg, W - 32, "Helvetica", 10) + 40;
-      need(h + 10);
-      doc.roundedRect(L, y, W, h, 6).fill(colors.bg);
-      doc.rect(L, y, 4, h).fill(colors.border);
-      text(`MESSAGE POUR ${firstName.toUpperCase()}`, L + 16, y + 11, { width: W - 32, characterSpacing: 1 }, "Helvetica-Bold", 7.5, colors.text);
-      text(msg, L + 16, y + 26, { width: W - 32 }, "Helvetica", 10, colors.text);
-      y += h + 10;
+    const gc = latin(evaluation.generalComment);
+    const paras = [];
+    if (match && match.message) paras.push(latin(match.message));
+    if (lost.length && blocks.length > 1) {
+      const worst = [...blocks].sort((a, b) => pct1(a) - pct1(b))[0];
+      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique, commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
+    }
+    if (gc) paras.push(gc);
+    if (paras.length) {
+      const bodyW = W - 24;
+      const total = paras.reduce((h, p) => h + heightOf(p, bodyW, "Times-Roman", 11.5) + 8, 0) + 70;
+      need(Math.min(total, 220));
+      doc.moveTo(L, y).lineTo(L + 60, y).strokeColor(colors.border).lineWidth(1.5).stroke();
+      y += 14;
+      text(`${firstName},`, L + 12, y, { width: bodyW }, "Times-Bold", 12, INK);
+      y += 20;
+      paras.forEach((p) => {
+        const ph = heightOf(p, bodyW, "Times-Roman", 11.5);
+        need(ph + 8);
+        text(p, L + 12, y, { width: bodyW, lineGap: 2 }, p === gc ? "Times-Italic" : "Times-Roman", 11.5, p === gc ? "#374151" : INK);
+        y += ph + 8;
+      });
+      need(36);
+      y += 6;
+      text(latin(teacherName) || "Ton enseignant", L + 12, y, { width: bodyW }, "Times-BoldItalic", 11.5, ACCENT);
+      y += 14;
     }
 
     // --- Pied de page sur chaque page

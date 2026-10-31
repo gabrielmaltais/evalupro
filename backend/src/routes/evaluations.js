@@ -30,6 +30,7 @@ const schema = z.object({
   rubric: z.string().min(1),
   generateAiSummary: z.boolean().optional(),
   // Optionnels: ne doivent jamais bloquer l’enregistrement d’une évaluation.
+  status: z.enum(["draft", "final"]).optional(),
   markerColor: z.string().optional(),
   markerIcon: z.string().optional(),
 });
@@ -268,7 +269,7 @@ router.get("/:id/pdf", async (req, res) => {
     }
     if (!item.rubric) return res.status(400).json({ message: "Rubric introuvable pour cette evaluation" });
 
-    const pdfBuffer = await createEvaluationPdfBuffer(item, item.rubric);
+    const pdfBuffer = await createEvaluationPdfBuffer(item, item.rubric, { teacherName: req.user.name });
     const filename = getEvaluationPdfFileName(item, item.rubric);
 
     res.setHeader("Content-Type", "application/pdf");
