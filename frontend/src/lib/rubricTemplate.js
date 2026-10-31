@@ -384,10 +384,10 @@ export function normalizeFeedbackMessages(messages, fallback = []) {
 /** Clé réservée dans subScores[critère] qui garde, par tâche, les éléments cochés comme manqués. */
 export const MISSED_KEY = "_manques";
 
-/** Rétroaction d'une tâche: les éléments cochés (fragments joints par « , » et « et »), sinon le texte général. */
+/** Rétroaction d'une tâche: les éléments cochés (fragments joints par « , » et « et »). Sans élément coché: rien si la tâche en propose, sinon son texte général. */
 export function taskFeedback(task, missed) {
   const list = (missed || []).filter(Boolean);
-  if (!list.length) return task.feedback || "";
+  if (!list.length) return task.checks?.length ? "" : task.feedback || "";
   const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }

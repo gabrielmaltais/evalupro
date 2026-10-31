@@ -42,44 +42,6 @@ function taskPoints(task, value) {
   return Math.min(Math.max(n, Math.min(0, max)), Math.max(0, max));
 }
 
-const MISSED_KEY = "_manques";
-
-// Même assemblage qu'à l'écran (frontend/src/lib/rubricTemplate.js taskFeedback).
-function taskFeedback(task, missed) {
-  const list = (missed || []).filter(Boolean);
-  if (!list.length) return task.feedback || "";
-  const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
-}
-
-function taskLevel(task, earned, max) {
-  if (!task.levels || !task.levels.length || !max) return null;
-  const pct = earned / max;
-  const sorted = [...task.levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
-  let m = sorted[0];
-  for (const l of sorted) if (pct >= levelThreshold(l)) m = l;
-  return m;
-}
-
-function levelDescription(criterion, s, scoresObj, cid) {
-  let descText = "Non évalué";
-  const raw = getNumber(scoresObj, cid);
-  if (s > 0 || raw === 0) {
-    if (criterion.levels && criterion.levels.length > 0) {
-      const pctC = s / (criterion.weight || 1);
-      const sortedLevels = [...criterion.levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
-      let matchedLevel = sortedLevels[0];
-      for (const lvl of sortedLevels) {
-        if (pctC >= levelThreshold(lvl)) matchedLevel = lvl;
-      }
-      descText = matchedLevel.desc || "Score attribué";
-    } else {
-      descText = "Score attribué";
-    }
-  }
-  return descText;
-}
-
 function computeTotals(rubric, scoresObj) {
   return computeEvaluationTotals(rubric, scoresObj);
 }
@@ -115,36 +77,63 @@ function criterionStripeColor(criterion) {
   return map[raw] || "#3b82f6";
 }
 
-function drawCheckbox(doc, x, y, size, isChecked) {
-  if (isChecked) {
-    doc.rect(x, y, size, size).fillAndStroke("#9333ea", "#9333ea");
-    doc.save();
-    doc.moveTo(x + size * 0.22, y + size * 0.52)
-      .lineTo(x + size * 0.42, y + size * 0.72)
-      .lineTo(x + size * 0.82, y + size * 0.28)
-      .lineWidth(size * 0.12)
-      .strokeColor("#ffffff")
-      .stroke();
-    doc.restore();
-  } else {
-    doc.rect(x, y, size, size).strokeColor("#d1d5db").lineWidth(0.6).stroke();
+const MISSED_KEY = "_manques";
+
+// Même règle qu'à l'écran (frontend/src/lib/rubricTemplate.js taskFeedback): quand la tâche propose des
+// éléments à cocher, seule la sélection de l'enseignant sert; sinon, le texte général de la tâche.
+function taskFeedback(task, missed) {
+  const list = (missed || []).filter(Boolean);
+  if (!list.length) return task.checks && task.checks.length ? "" : task.feedback || "";
+  const text = list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} et ${list[list.length - 1]}`;
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+function pickLevel(levels, pct) {
+  if (!levels || !levels.length) return null;
+  const sorted = [...levels].sort((a, b) => levelThreshold(a) - levelThreshold(b));
+  let m = sorted[0];
+  for (const l of sorted) if (pct >= levelThreshold(l)) m = l;
+  return m;
+}
+
+// Helvetica (WinAnsi) n'affiche ni emoji ni symboles: on les retire pour éviter les caractères parasites.
+function latin(text) {
+  return String(text || "").replace(/[^ -~ -ÿ‘’“”–—…Œœ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function formatDate(iso) {
+  try {
+    const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
+    return d.toLocaleDateString("fr-CA", { dateStyle: "long", timeZone: "UTC" });
+  } catch {
+    return "";
   }
 }
 
-function ensureSpace(doc, neededHeight, extraBottom = 0) {
-  const available = doc.page.height - doc.page.margins.bottom - doc.y - extraBottom;
-  if (neededHeight > available) {
-    doc.addPage();
-  }
+const NUM = (n) => String(Math.round(n * 100) / 100).replace(".", ",");
+
+const STATUS = {
+  full: { fg: "#15803d", bg: "#dcfce7", name: "Atteint" },
+  partial: { fg: "#b45309", bg: "#fef3c7", name: "Partiellement atteint" },
+  none: { fg: "#b91c1c", bg: "#fee2e2", name: "Non atteint" },
+  open: { fg: "#6b7280", bg: "#f3f4f6", name: "Non évalué" },
+};
+
+function statusOf(evaluated, earned, max) {
+  if (!evaluated) return STATUS.open;
+  if (max > 0 && earned >= max) return STATUS.full;
+  if (earned <= 0) return STATUS.none;
+  return STATUS.partial;
 }
 
-/**
- * Aligne le rendu sur le template #pdf-content de Evaluations.jsx (export manuel).
- * showDatePdf côté UI n'est pas persisté : on n'affiche pas la date (comportement par défaut de la page).
- */
+const INK = "#111827";
+const MUTED = "#6b7280";
+const ACCENT = "#3730a3";
+
+/** Rapport individuel: en-tête, synthèse par étape, questions numérotées (pointage à droite + rétroaction choisie), message final. */
 function createEvaluationPdfBuffer(evaluation, rubric) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "LETTER", margin: 40 });
+    const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
     const chunks = [];
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -153,235 +142,221 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
     const scores = toPlainObject(evaluation.scores);
     const comments = toPlainObject(evaluation.comments);
     const subScores = toPlainObject(evaluation.subScores);
-
     const { totalScore, totalMax } = computeTotals(rubric, scores);
-    const displayScore = Math.round(totalScore * 10) / 10;
     const finalPct = totalMax > 0 ? (totalScore / totalMax) * 100 : 0;
+    const student = latin(evaluation.studentName) || "Non spécifié";
+    const firstName = student.split(" ")[0];
+    const course = latin(rubric.title) || "Évaluation";
+    const exam = latin(rubric.taskTitle);
 
-    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const left = doc.page.margins.left;
-    let y = doc.page.margins.top;
-    const bottomBuffer = 6;
-    const getPageBottomY = () => doc.page.height - doc.page.margins.bottom - bottomBuffer;
-    const ensureCursorSpace = (cursorY, neededHeight) => {
-      if (cursorY + neededHeight > getPageBottomY()) {
+    const L = doc.page.margins.left;
+    const W = doc.page.width - L - doc.page.margins.right;
+    const bottom = () => doc.page.height - 56;
+    let y = 0;
+    const need = (h) => {
+      if (y + h > bottom()) {
         doc.addPage();
-        return doc.y;
+        y = doc.page.margins.top - 6;
       }
-      return cursorY;
+    };
+    const text = (str, x, yy, opts, font = "Helvetica", size = 9, color = INK) => {
+      doc.font(font).fontSize(size).fillColor(color).text(str, x, yy, opts);
+    };
+    const heightOf = (str, width, font = "Helvetica", size = 9) => {
+      doc.font(font).fontSize(size);
+      return doc.heightOfString(str, { width });
     };
 
-    // En-tête : hauteurs dynamiques (évite le chevauchement titre / sous-titre si le titre passe sur 2 lignes)
-    const split = 0.58;
-    const colW = pageWidth * split;
-    const rightW = pageWidth * (1 - split);
-    const rightX = left + colW;
-    const titleStr = rubric.title || "Évaluation";
-    const taskStr = String(rubric.taskTitle || "").toUpperCase();
+    // --- En-tête
+    doc.rect(0, 0, doc.page.width, 92).fill(ACCENT);
+    text("RAPPORT DE CORRECTION INDIVIDUEL", L, 22, { width: W, characterSpacing: 1 }, "Helvetica-Bold", 8, "#c7d2fe");
+    text(course, L, 36, { width: W * 0.7 }, "Helvetica-Bold", 20, "#ffffff");
+    if (exam) text(exam, L, 62, { width: W * 0.75 }, "Helvetica", 10, "#e0e7ff");
+    y = 112;
 
-    doc.font("Helvetica-Bold").fontSize(20).fillColor("#111827");
-    const titleH = doc.heightOfString(titleStr, { width: colW });
-    doc.text(titleStr, left, y, { width: colW });
+    // --- Carte étudiant + note
+    const cardH = 74;
+    doc.roundedRect(L, y, W, cardH, 6).fillAndStroke("#f8fafc", "#e2e8f0");
+    text("ÉTUDIANT", L + 16, y + 12, { width: W * 0.55, characterSpacing: 1 }, "Helvetica-Bold", 7.5, MUTED);
+    text(student, L + 16, y + 25, { width: W * 0.55 }, "Helvetica-Bold", 17, INK);
+    const dateStr = formatDate(evaluation.date);
+    if (dateStr) text(`Évaluation du ${dateStr}`, L + 16, y + 49, { width: W * 0.55 }, "Helvetica", 9, MUTED);
+    const colors = feedbackBandColors(finalPct);
+    const rx = L + W * 0.58;
+    const rw = W * 0.42 - 16;
+    text("NOTE FINALE", rx, y + 12, { width: rw, align: "right", characterSpacing: 1 }, "Helvetica-Bold", 7.5, MUTED);
+    text(`${NUM(Math.round(totalScore * 10) / 10)} / ${NUM(totalMax)}`, rx, y + 22, { width: rw, align: "right" }, "Helvetica-Bold", 22, ACCENT);
+    doc.roundedRect(rx + rw - 150, y + 54, 150, 6, 3).fill("#e2e8f0");
+    doc.roundedRect(rx + rw - 150, y + 54, Math.max(4, 150 * Math.min(1, finalPct / 100)), 6, 3).fill(colors.border);
+    text(`${Math.round(finalPct)} %`, rx, y + 46, { width: rw - 156, align: "right" }, "Helvetica-Bold", 9, colors.text);
+    y += cardH + 18;
 
-    const gapTitleTask = 8;
-    const subY = y + titleH + gapTitleTask;
-    doc.font("Helvetica").fontSize(9).fillColor("#6b7280");
-    const taskH = taskStr ? doc.heightOfString(taskStr, { width: colW }) : 0;
-    if (taskStr) doc.text(taskStr, left, subY, { width: colW });
-
-    const leftBlockH = titleH + gapTitleTask + taskH;
-    const noteLabelH = 12;
-    const scoreH = 32;
-    const rightBlockH = noteLabelH + scoreH;
-    const headerH = Math.max(leftBlockH, rightBlockH);
-
-    doc.fontSize(9).fillColor("#6b7280").text("Note Finale", rightX, y, { width: rightW, align: "right" });
-    doc.fontSize(28).fillColor("#2563eb").text(`${displayScore}/${totalMax}`, rightX, y + noteLabelH, { width: rightW, align: "right" });
-
-    y += headerH + 10;
-    doc.moveTo(left, y).lineTo(left + pageWidth, y).strokeColor("#111827").lineWidth(2).stroke();
-    y += 14;
-    doc.y = y;
-
-    // Bloc étudiant (sans date : défaut showDatePdf = false sur la page Évaluations)
-    const boxTop = doc.y;
-    doc.rect(left, boxTop, pageWidth, 52).fillAndStroke("#f9fafb", "#e5e7eb");
-    doc.fontSize(8).fillColor("#9ca3af").text("ÉTUDIANT", left + 12, boxTop + 10);
-    doc.fontSize(14).fillColor("#111827").text(evaluation.studentName || "Non spécifié", left + 12, boxTop + 22, { width: pageWidth - 24 });
-    doc.y = boxTop + 58;
-    doc.moveDown(1);
-
-    // Critères (barre bleue à gauche après calcul de la hauteur du bloc)
+    // --- Questions à plat (numérotation continue) + synthèse par bloc
+    const sections = [];
+    let qn = 0;
     (rubric.criteria || []).forEach((c, i) => {
-      // Critère sans tâche ni points (ancienne grille): non évalué, on ne l'imprime pas.
-      if (!(c.subCriteria || []).length && !(Number(c.weight) > 0)) return;
+      const hasTasks = (c.subCriteria || []).length > 0;
+      if (!hasTasks && !(Number(c.weight) > 0)) return;
       const cid = criterionKey(c, i);
-      const s = getScore(scores, cid);
-      const descText = levelDescription(c, s, scores, cid);
-      const commentLine = comments[cid] || comments[String(cid)];
-      const subScoreBlock = getSubBlock(subScores, cid);
-      // Évite les grands blancs: on n'impose pas tout le critère sur une nouvelle page.
-      // On garantit seulement l'espace minimal pour l'entête du critère.
-      ensureSpace(doc, 46, 6);
-
-      const rowTop = doc.y;
-      const textLeft = left + 14;
-      const stripeColor = criterionStripeColor(c);
-      let cursorY = rowTop + 4;
-      let stripeStartY = rowTop;
-      let stripeEndY = rowTop + 2;
-      const flushStripeForCurrentPage = () => {
-        const h = Math.max(2, stripeEndY - stripeStartY);
-        doc.save();
-        doc.rect(left, stripeStartY, 4, h).fill(stripeColor);
-        doc.restore();
-      };
-      const ensureCursorSpaceForCriterion = (neededHeight) => {
-        if (cursorY + neededHeight > getPageBottomY()) {
-          stripeEndY = Math.max(stripeEndY, getPageBottomY());
-          flushStripeForCurrentPage();
-          doc.addPage();
-          cursorY = doc.y;
-          stripeStartY = cursorY;
-          stripeEndY = cursorY + 2;
-        }
-      };
-
-      doc.font("Helvetica-Bold").fontSize(11).fillColor("#1f2937").text(c.title || "Critère", textLeft, cursorY, { width: pageWidth - 100 });
-      doc.font("Helvetica-Bold").fontSize(11).fillColor("#111827").text(String(s), left + pageWidth - 86, cursorY, { width: 36, align: "right" });
-      doc.font("Helvetica").fontSize(9).fillColor("#9ca3af").text(`/ ${c.weight || 0}`, left + pageWidth - 48, cursorY, { width: 40, align: "right" });
-
-      cursorY += 16;
-      if (c.competencyElement) {
-        doc.font("Helvetica").fontSize(8).fillColor("#4338ca").text(`Élément de compétence: ${c.competencyElement}`, textLeft, cursorY, {
-          width: pageWidth - 24,
-        });
-        cursorY += 12;
-      }
-      doc.fontSize(9).fillColor("#4b5563").text(descText, textLeft, cursorY, { width: pageWidth - 24 });
-      cursorY += 14;
-      stripeEndY = Math.max(stripeEndY, cursorY);
-
-      if (c.subCriteria && c.subCriteria.length) {
-        const chkSize = 8;
-        const chkGap = 4;
-        const labelX = textLeft + chkSize + chkGap + 2;
-        const labelW = pageWidth - 24 - chkSize - chkGap - 2;
-        let lastGroup = "";
+      const block = getSubBlock(subScores, cid);
+      const missedBlock = block[MISSED_KEY] || {};
+      const items = [];
+      if (hasTasks) {
         c.subCriteria.forEach((sc) => {
-          ensureCursorSpaceForCriterion(18);
-          if (sc.group && sc.group !== lastGroup) {
-            lastGroup = sc.group;
-            ensureCursorSpaceForCriterion(30);
-            doc.font("Helvetica-Bold").fontSize(9).fillColor("#6d28d9").text(sc.group, textLeft, cursorY, { width: pageWidth - 24 });
-            cursorY += 14;
-            stripeEndY = Math.max(stripeEndY, cursorY);
-          }
-          const raw = subScoreBlock[sc.id] ?? subScoreBlock[String(sc.id)];
-          const earned = taskPoints(sc, raw);
-          const maxPts = Number(sc.pts) || 0;
-          const isChecked = earned >= maxPts && earned > 0;
+          const raw = block[sc.id] ?? block[String(sc.id)];
           const evaluated = raw !== undefined && raw !== null;
-          const labelText = `${sc.label} (${earned}/${maxPts} pts)`;
-          doc.font("Helvetica").fontSize(8);
-          const labelH = doc.heightOfString(labelText, { width: labelW });
-          const rowH = Math.max(chkSize, labelH);
-          const boxY = cursorY + (rowH - chkSize) / 2;
-          drawCheckbox(doc, textLeft, boxY, chkSize, isChecked);
-          doc.fillColor(isChecked ? "#1f2937" : "#374151").text(labelText, labelX, cursorY, { width: labelW });
-          stripeEndY = Math.max(stripeEndY, cursorY + rowH + 2);
-          cursorY += rowH + 4;
-
-          // Niveau atteint à cette question (comme à l'écran), puis rétroaction adaptée aux éléments manqués.
-          const lvl = evaluated ? taskLevel(sc, earned, maxPts) : null;
-          if (lvl && (lvl.label || lvl.desc)) {
-            const lvlText = `${lvl.label}${lvl.desc ? ` : ${lvl.desc}` : ""}`;
-            doc.font("Helvetica-Oblique").fontSize(8).fillColor("#6b7280");
-            const lh = doc.heightOfString(lvlText, { width: labelW });
-            ensureCursorSpaceForCriterion(lh + 4);
-            doc.text(lvlText, labelX, cursorY, { width: labelW });
-            stripeEndY = Math.max(stripeEndY, cursorY + lh + 2);
-            cursorY += lh + 4;
-            doc.font("Helvetica");
-          }
-
-          const missedBlock = subScoreBlock[MISSED_KEY] || {};
-          const fbText = !isChecked && evaluated ? taskFeedback(sc, missedBlock[sc.id] || missedBlock[String(sc.id)]) : "";
-          if (fbText) {
-            const pad = 4;
-            const boxInnerW = pageWidth - 36;
-            doc.font("Helvetica").fontSize(8);
-            const fbTextH = doc.heightOfString(fbText, { width: boxInnerW - pad * 2 });
-            const fbH = fbTextH + pad * 2;
-            ensureCursorSpaceForCriterion(fbH + 8);
-            const fbX = textLeft + 10;
-            const fbY = cursorY;
-            doc.rect(fbX, fbY, pageWidth - 28, fbH).fillAndStroke("#fef2f2", "#fecaca");
-            doc.fillColor("#b91c1c").text(fbText, fbX + pad, fbY + pad, { width: boxInnerW - pad * 2 });
-            stripeEndY = Math.max(stripeEndY, fbY + fbH + 2);
-            cursorY = fbY + fbH + 6;
-          }
+          const max = Number(sc.pts) || 0;
+          const earned = taskPoints(sc, raw);
+          const lvl = evaluated ? pickLevel(sc.levels && sc.levels.length ? sc.levels : c.levels, max ? earned / max : 0) : null;
+          items.push({
+            n: ++qn,
+            group: sc.group || "",
+            label: latin(sc.label),
+            earned,
+            max,
+            evaluated,
+            level: lvl && lvl.label,
+            feedback: evaluated && earned < max ? taskFeedback(sc, missedBlock[sc.id] || missedBlock[String(sc.id)]) : "",
+          });
         });
+      } else {
+        const s = getScore(scores, cid);
+        const max = Number(c.weight) || 0;
+        const lvl = pickLevel(c.levels, max ? s / max : 0);
+        items.push({ n: ++qn, group: "", label: latin(c.title), earned: s, max, evaluated: getNumber(scores, cid) !== undefined, level: lvl && lvl.label, feedback: "" });
       }
-
-      if (commentLine) {
-        ensureCursorSpaceForCriterion(16);
-        doc.font("Helvetica-Oblique").fontSize(8).fillColor("#6b7280").text(`Note: ${commentLine}`, textLeft, cursorY + 2, { width: pageWidth - 24 });
-        stripeEndY = Math.max(stripeEndY, cursorY + 14);
-        doc.font("Helvetica");
-        cursorY += 14;
-      }
-
-      const blockBottom = cursorY + 6;
-      stripeEndY = Math.max(stripeEndY, blockBottom);
-      flushStripeForCurrentPage();
-
-      doc.y = blockBottom > getPageBottomY() ? getPageBottomY() : blockBottom;
-      if (doc.y >= getPageBottomY()) {
-        doc.addPage();
-      }
-      doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#f3f4f6").lineWidth(0.5).stroke();
-      doc.moveDown(0.6);
+      sections.push({ c, cid, items, note: comments[cid] || comments[String(cid)], earned: getScore(scores, cid) });
     });
 
-    // Synthèse enseignant
-    if (evaluation.generalComment) {
-      doc.fontSize(10);
-      const summaryH = 44 + doc.heightOfString(evaluation.generalComment, {
-        width: pageWidth,
-        align: "justify",
+    const blocks = [];
+    sections.forEach((s) => {
+      const seen = new Map();
+      s.items.forEach((it) => {
+        const k = it.group || s.c.title || "Critère";
+        const b = seen.get(k) || { name: k, earned: 0, max: 0 };
+        b.earned += it.earned;
+        b.max += it.max;
+        seen.set(k, b);
       });
-      ensureSpace(doc, summaryH, 6);
-
-      doc.moveDown(0.8);
-      doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#e5e7eb").stroke();
-      doc.moveDown(0.6);
-      doc.fontSize(10).fillColor("#111827").text("SYNTHÈSE DE L'ENSEIGNANT", left, doc.y, { continued: false });
-      doc.moveDown(0.3);
-      doc.fontSize(10).fillColor("#374151").text(evaluation.generalComment, left, doc.y, {
-        width: pageWidth,
-        align: "justify",
+      blocks.push(...seen.values());
+    });
+    if (blocks.length > 1) {
+      text("SYNTHÈSE PAR ÉTAPE", L, y, { width: W, characterSpacing: 1 }, "Helvetica-Bold", 8, ACCENT);
+      y += 16;
+      blocks.forEach((b) => {
+        need(24);
+        const pct = b.max ? b.earned / b.max : 0;
+        const nameW = W * 0.5;
+        const nh = heightOf(latin(b.name), nameW, "Helvetica", 9);
+        text(latin(b.name), L, y, { width: nameW }, "Helvetica", 9, INK);
+        doc.roundedRect(L + W * 0.55, y + 3, W * 0.28, 6, 3).fill("#e2e8f0");
+        doc.roundedRect(L + W * 0.55, y + 3, Math.max(3, W * 0.28 * pct), 6, 3).fill(STATUS[pct >= 0.999 ? "full" : pct <= 0 ? "none" : "partial"].fg);
+        text(`${NUM(b.earned)} / ${NUM(b.max)}`, L + W * 0.85, y, { width: W * 0.15, align: "right" }, "Helvetica-Bold", 9, INK);
+        y += Math.max(nh, 12) + 6;
       });
+      y += 10;
     }
 
-    // Rétroaction finale (feedbackMessages)
+    // --- Détail question par question
+    const numW = 24;
+    const ptsW = 84;
+    sections.forEach((s) => {
+      need(60);
+      doc.rect(L, y, W, 24).fill("#eef2ff");
+      doc.rect(L, y, 4, 24).fill(criterionStripeColor(s.c));
+      text(latin(s.c.title) || "Critère", L + 14, y + 7, { width: W - 120, lineBreak: false }, "Helvetica-Bold", 10, ACCENT);
+      text(`${NUM(s.earned)} / ${NUM(Number(s.c.weight) || 0)}`, L + W - 100, y + 7, { width: 90, align: "right" }, "Helvetica-Bold", 10, ACCENT);
+      y += 24;
+      if (s.c.competencyElement) {
+        y += 4;
+        const ch = heightOf(`Élément de compétence : ${latin(s.c.competencyElement)}`, W - 14, "Helvetica-Oblique", 8);
+        text(`Élément de compétence : ${latin(s.c.competencyElement)}`, L + 14, y, { width: W - 14 }, "Helvetica-Oblique", 8, MUTED);
+        y += ch;
+      }
+      y += 10;
+
+      let lastGroup = null;
+      s.items.forEach((it) => {
+        if (it.group && it.group !== lastGroup) {
+          need(52);
+          lastGroup = it.group;
+          const gb = blocks.find((b) => b.name === it.group);
+          text(latin(it.group), L, y, { width: W - 100 }, "Helvetica-Bold", 10, INK);
+          if (gb) text(`${NUM(gb.earned)} / ${NUM(gb.max)} pts`, L + W - 100, y, { width: 100, align: "right" }, "Helvetica-Bold", 9, MUTED);
+          const gh = heightOf(latin(it.group), W - 100, "Helvetica-Bold", 10);
+          y += gh + 3;
+          doc.moveTo(L, y).lineTo(L + W, y).strokeColor("#c7d2fe").lineWidth(0.8).stroke();
+          y += 8;
+        }
+        const st = statusOf(it.evaluated, it.earned, it.max);
+        const labelW = W - numW - ptsW - 8;
+        const lh = heightOf(it.label, labelW, "Helvetica-Bold", 9.5);
+        const fbW = W - numW - 24;
+        const fh = it.feedback ? heightOf(it.feedback, fbW - 70, "Helvetica", 8.5) + 12 : 0;
+        const blockH = Math.max(lh, 14) + 12 + (fh ? fh + 6 : 0) + 8;
+        need(blockH);
+
+        doc.circle(L + 9, y + 8, 9).fill(st.fg);
+        text(String(it.n), L, y + 4.5, { width: 18, align: "center", lineBreak: false }, "Helvetica-Bold", 8.5, "#ffffff");
+        text(it.label, L + numW, y + 1, { width: labelW }, "Helvetica-Bold", 9.5, INK);
+        text(`${NUM(it.earned)} / ${NUM(it.max)}`, L + W - ptsW, y, { width: ptsW, align: "right" }, "Helvetica-Bold", 12, st.fg);
+        let yy = y + Math.max(lh, 14) + 3;
+        const badge = it.evaluated ? (it.level || st.name) : st.name;
+        text(badge, L + numW, yy, { width: labelW, lineBreak: false }, "Helvetica-Bold", 7.5, st.fg);
+        yy += 11;
+        if (fh) {
+          doc.roundedRect(L + numW, yy, W - numW, fh, 3).fill("#fff7ed");
+          doc.rect(L + numW, yy, 3, fh).fill("#f97316");
+          text("Observation", L + numW + 10, yy + 6, { width: 60, lineBreak: false }, "Helvetica-Bold", 7.5, "#c2410c");
+          text(it.feedback, L + numW + 70, yy + 6, { width: fbW - 70 }, "Helvetica", 8.5, "#7c2d12");
+          yy += fh;
+        }
+        y = yy + 10;
+        doc.moveTo(L + numW, y - 4).lineTo(L + W, y - 4).strokeColor("#f1f5f9").lineWidth(0.6).stroke();
+      });
+
+      if (s.note) {
+        const nh = heightOf(latin(s.note), W - 20, "Helvetica-Oblique", 8.5) + 10;
+        need(nh + 6);
+        text(`Note de l'enseignant : ${latin(s.note)}`, L + 14, y, { width: W - 14 }, "Helvetica-Oblique", 8.5, MUTED);
+        y += nh;
+      }
+      y += 8;
+    });
+
+    // --- Synthèse de l'enseignant
+    if (evaluation.generalComment) {
+      const gc = latin(evaluation.generalComment);
+      const h = heightOf(gc, W - 28, "Helvetica", 9.5) + 34;
+      need(h + 10);
+      doc.roundedRect(L, y, W, h, 6).fillAndStroke("#f8fafc", "#e2e8f0");
+      text("COMMENTAIRE DE L'ENSEIGNANT", L + 14, y + 11, { width: W - 28, characterSpacing: 1 }, "Helvetica-Bold", 7.5, MUTED);
+      text(gc, L + 14, y + 24, { width: W - 28 }, "Helvetica", 9.5, "#374151");
+      y += h + 14;
+    }
+
+    // --- Message final, adressé à l'étudiant
     const match = pickFeedbackMessage(rubric, finalPct);
     if (match && match.message) {
-      doc.fontSize(10);
-      const feedbackTextH = doc.heightOfString(match.message, { width: pageWidth - 20 });
-      const feedbackH = Math.max(36, feedbackTextH + 16) + 20;
-      ensureSpace(doc, feedbackH, 6);
+      const msg = latin(match.message);
+      const h = heightOf(msg, W - 32, "Helvetica", 10) + 40;
+      need(h + 10);
+      doc.roundedRect(L, y, W, h, 6).fill(colors.bg);
+      doc.rect(L, y, 4, h).fill(colors.border);
+      text(`MESSAGE POUR ${firstName.toUpperCase()}`, L + 16, y + 11, { width: W - 32, characterSpacing: 1 }, "Helvetica-Bold", 7.5, colors.text);
+      text(msg, L + 16, y + 26, { width: W - 32 }, "Helvetica", 10, colors.text);
+      y += h + 10;
+    }
 
-      doc.moveDown(1);
-      doc.moveTo(left, doc.y).lineTo(left + pageWidth, doc.y).strokeColor("#e5e7eb").stroke();
-      doc.moveDown(0.8);
-      const bandTop = doc.y;
-      const colors = feedbackBandColors(finalPct);
-      const bandH = Math.max(36, feedbackTextH + 16);
-      doc.rect(left + 3, bandTop, pageWidth - 3, bandH).fillAndStroke(colors.bg, colors.bg);
-      doc.rect(left, bandTop, 4, bandH).fillAndStroke(colors.border, colors.border);
-      doc.fontSize(10).fillColor(colors.text).text(match.message, left + 14, bandTop + 10, { width: pageWidth - 20 });
-      doc.y = bandTop + bandH + 8;
+    // --- Pied de page sur chaque page
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const fy = doc.page.height - 34;
+      doc.moveTo(L, fy - 6).lineTo(L + W, fy - 6).strokeColor("#e2e8f0").lineWidth(0.6).stroke();
+      doc.page.margins.bottom = 0;
+      text(`${student}  -  ${course}`, L, fy, { width: W - 80, lineBreak: false }, "Helvetica", 7.5, MUTED);
+      text(`Page ${i + 1} / ${range.count}`, L + W - 80, fy, { width: 80, align: "right", lineBreak: false }, "Helvetica", 7.5, MUTED);
     }
 
     doc.end();

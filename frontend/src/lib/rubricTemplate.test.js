@@ -86,6 +86,7 @@ import { taskFeedback as _tf } from "./rubricTemplate";
 describe("taskFeedback", () => {
   it("assemble les éléments manqués ou retombe sur le texte général", () => {
     expect(_tf({ feedback: "Général." }, [])).toBe("Général.");
+    expect(_tf({ feedback: "Général.", checks: ["a"] }, [])).toBe("");
     expect(_tf({}, ["la carte n'est pas renommée"])).toBe("La carte n'est pas renommée.");
     expect(_tf({}, ["a", "b", "c"])).toBe("A, b et c.");
   });
