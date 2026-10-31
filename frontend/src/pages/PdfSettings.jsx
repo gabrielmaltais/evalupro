@@ -6,7 +6,7 @@ const SECTIONS = [
   {
     title: "Présentation",
     fields: [
-      { key: "layout", type: "select", label: "Mise en page", options: [["compact", "Compact (1 à 2 pages)"], ["detaille", "Détaillé (une fiche par question ratée)"]] },
+      { key: "layout", type: "select", label: "Mise en page", options: [["detaille", "Détaillé (récit par étape, une fiche par question à revoir)"], ["compact", "Compact (1 à 2 pages)"]] },
       { key: "pageSize", type: "select", label: "Format du papier", options: [["LETTER", "Lettre (8,5 × 11 po)"], ["A4", "A4"]] },
       { key: "palette", type: "select", label: "Couleurs", options: [["carnet", "Carnet (crème, vert, terracotta)"], ["ardoise", "Ardoise (bleu et sarcelle)"], ["bordeaux", "Bordeaux (sobre et chaud)"]] },
       { key: "showDate", type: "toggle", label: "Afficher la date de l'évaluation" },

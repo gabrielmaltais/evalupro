@@ -511,14 +511,17 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
             const gh = HH(gname, W - 100, F.letterB, 13.5);
             doc.moveTo(L, y + gh + 3).lineTo(L + W, y + gh + 3).strokeColor(P.line).lineWidth(0.8).stroke();
             y += gh + 10;
-            T(vtxt, L, y, { width: W }, F.letterI, 10.5, P.muted);
-            y += HH(vtxt, W, F.letterI, 10.5) + 10;
+            if (S.showStepVerdict) {
+              T(vtxt, L, y, { width: W }, F.letterI, 10.5, P.muted);
+              y += HH(vtxt, W, F.letterI, 10.5) + 10;
+            }
           }
           const k = keyOf(it.evaluated, it.earned, it.max);
           const color = col(k);
           const ptsStr = `${NUM(it.earned)} / ${NUM(it.max)}`;
           const labelW = W - numW - ptsW - 10;
           const lostItem = it.evaluated && it.earned < it.max;
+          if (!lostItem && !S.listAllQuestions) return;
           if (!lostItem) {
             const lh = HH(it.label, labelW, bodyFont, 10.5);
             need(lh + 12);

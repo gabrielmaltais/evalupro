@@ -1,6 +1,6 @@
 /** Réglages du PDF de correction (par enseignant). Les booléens activent / désactivent un élément; les textes acceptent des variables {etudiant} {prenom} {cours} {examen} {enseignant}. */
 const DEFAULTS = {
-  layout: "compact",
+  layout: "detaille",
   pageSize: "LETTER",
   palette: "carnet",
   headerLabel: "Rapport de correction",
