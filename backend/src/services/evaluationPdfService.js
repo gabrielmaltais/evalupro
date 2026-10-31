@@ -92,7 +92,7 @@ const short = (str, n = 78) => (str.length > n ? `${str.slice(0, n - 1).trim()}�
 
 /** Résumé écrit à l'élève à partir de ses résultats par étape (points forts, priorité). */
 function openingText(firstName, totalScore, totalMax, finalPct, blocks, lost) {
-  const parts = [`${firstName}, tu as obtenu ${NUM(Math.round(totalScore * 10) / 10)} sur ${NUM(totalMax)} (${Math.round(finalPct)} %).`];
+  const parts = [`Tu as obtenu ${NUM(Math.round(totalScore * 100) / 100)} sur ${NUM(totalMax)} (${Math.round(finalPct)} %).`];
   if (!lost.length) {
     parts.push("Tous les points sont acquis : chaque élément demandé a été réalisé correctement.");
     return parts.join(" ");

@@ -16,7 +16,7 @@ const DEFAULTS = {
   showPriorityHint: true,
   showFinalMessage: true,
   showTeacherComment: true,
-  greeting: "firstName",
+  greeting: "inline",
   signatureText: "",
   footerText: "",
   showPageNumbers: true,
@@ -26,7 +26,7 @@ const ENUMS = {
   layout: ["compact", "detaille"],
   pageSize: ["LETTER", "A4"],
   palette: ["carnet", "ardoise", "bordeaux"],
-  greeting: ["firstName", "none"],
+  greeting: ["inline", "heading", "none"],
 };
 
 const TEXTS = { headerLabel: 60, signatureText: 80, footerText: 120 };
@@ -36,7 +36,7 @@ function sanitizePdfSettings(input) {
   const src = input && typeof input === "object" ? input : {};
   const out = {};
   Object.entries(DEFAULTS).forEach(([key, def]) => {
-    const v = src[key];
+    const v = key === "greeting" && src[key] === "firstName" ? "heading" : src[key];
     if (ENUMS[key]) out[key] = ENUMS[key].includes(v) ? v : def;
     else if (typeof def === "boolean") out[key] = typeof v === "boolean" ? v : def;
     else out[key] = typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, TEXTS[key] || 120) : def;

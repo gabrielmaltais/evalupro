@@ -226,7 +226,7 @@ function createCompactPdfBuffer(evaluation, rubric, { teacherName = "", settings
     if (S.showFinalMessage && D.match && D.match.message) paras.push(latin(D.match.message));
     if (S.showPriorityHint && D.lost.length && D.blocks.length > 1) {
       const worst = [...D.blocks].sort((a, b) => pct1(a) - pct1(b))[0];
-      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique, commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
+      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique,${S.greeting === "inline" ? ` ${D.firstName},` : ""} commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
     }
     const gc = S.showTeacherComment ? latin(evaluation.generalComment) : "";
     if (gc) paras.push(gc);
@@ -237,7 +237,7 @@ function createCompactPdfBuffer(evaluation, rubric, { teacherName = "", settings
       y += 8;
       doc.rect(L, y, 34, 1.4).fill(P.accent);
       y += 12;
-      if (S.greeting === "firstName") {
+      if (S.greeting === "heading") {
         T(`${D.firstName},`, L, y, { width: W, lineBreak: false }, F.letterB, 12, P.ink);
         y += 17;
       }
@@ -660,7 +660,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
     if (S.showFinalMessage && D.match && D.match.message) paras.push(latin(D.match.message));
     if (S.showPriorityHint && D.lost.length && D.blocks.length > 1) {
       const worst = [...D.blocks].sort((a, b) => pct1(a) - pct1(b))[0];
-      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique, commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
+      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique,${S.greeting === "inline" ? ` ${D.firstName},` : ""} commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
     }
     const gc = S.showTeacherComment ? latin(evaluation.generalComment) : "";
     if (gc) paras.push(gc);
@@ -675,7 +675,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       else if (theme === "editorial") doc.rect(L, y, 40, 3).fill(P.accent);
       else doc.rect(L, y, 40, 1.4).fill(P.accent);
       y += theme === "studio" ? 22 : 18;
-      if (S.greeting === "firstName") {
+      if (S.greeting === "heading") {
         T(`${D.firstName},`, L + inset, y, { width: bw }, F.letterB, theme === "studio" ? 12 : 14, theme === "studio" ? P.accent : P.ink);
         y += theme === "studio" ? 20 : 24;
       }

@@ -20,7 +20,7 @@ const SECTIONS = [
     fields: [
       { key: "headerLabel", type: "text", label: "Étiquette en haut du document", placeholder: "Rapport de correction" },
       { key: "footerText", type: "text", label: "Texte du pied de page", placeholder: "Vide = « Étudiant / Cours »" },
-      { key: "greeting", type: "select", label: "Salutation de la lettre finale", options: [["firstName", "Prénom de l'étudiant (« Camille, »)"], ["none", "Aucune"]] },
+      { key: "greeting", type: "select", label: "Prénom dans la lettre finale", options: [["inline", "Discrète : le prénom dans une phrase de la lettre"], ["heading", "Ligne d'appel (« Camille, »)"], ["none", "Aucune"]] },
       { key: "signatureText", type: "text", label: "Signature de la lettre finale", placeholder: "Vide = aucune signature. Ex. : {enseignant}, enseignant" },
     ],
   },
