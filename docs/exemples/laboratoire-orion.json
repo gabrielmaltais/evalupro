@@ -74,7 +74,8 @@
             "l'adresse ou le masque est incorrect",
             "une passerelle est configurée à tort",
             "le DNS est différent de 127.0.0.1"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc2",
@@ -113,7 +114,8 @@
             "l'adressage n'est pas obtenu par DHCP",
             "le DNS est différent de 127.0.0.1",
             "l'enregistrement des adresses dans le DNS n'est pas désactivé"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc3",
@@ -152,7 +154,8 @@
             "l'adresse est incorrecte",
             "la passerelle est absente ou incorrecte",
             "le DNS est différent de 192.168.10.1"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc4",
@@ -189,7 +192,8 @@
           "checks": [
             "le redirecteur DNS est absent",
             "le redirecteur ne pointe pas vers le DNS reçu par la carte INTERNET"
-          ]
+          ],
+          "insight": "Le redirecteur DNS permet à SRV de transmettre aux serveurs DNS externes les noms qu'il ne sait pas résoudre lui-même; sans lui, seuls les noms locaux sont résolus et un site comme google.com reste inaccessible."
         },
         {
           "id": "c2-sc5",
@@ -226,7 +230,8 @@
           "checks": [
             "le rôle Accès à distance n'est pas installé",
             "les services de rôle DirectAccess et VPN (RAS) ou Routage sont incomplets"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc6",
@@ -264,7 +269,8 @@
             "la configuration n'est pas personnalisée",
             "l'Accès VPN ou le NAT n'est pas coché",
             "le service n'est pas démarré"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc7",
@@ -302,7 +308,8 @@
             "l'interface INTERNET n'est pas publique",
             "le NAT n'est pas activé sur INTERNET",
             "l'interface PRIVEE est mal typée"
-          ]
+          ],
+          "insight": "Le NAT remplace l'adresse privée des postes par l'adresse de l'interface publique (INTERNET) pour sortir sur Internet; l'interface PRIVEE doit donc être déclarée privée pour que le trafic du réseau local soit traduit."
         },
         {
           "id": "c2-sc8",
@@ -340,7 +347,8 @@
             "le ping 8.8.8.8 échoue",
             "la résolution de google.com échoue",
             "le tracert n'affiche pas le premier saut"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc9",
@@ -377,7 +385,8 @@
           "checks": [
             "les mappages NAT sont absents de la capture",
             "le ping continu n'est pas démontré"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc10",
@@ -414,7 +423,8 @@
           "checks": [
             "le routeur IPv4 n'est pas en mode réseau local uniquement",
             "l'accès à distance IPv4 n'est pas activé"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc11",
@@ -452,7 +462,8 @@
             "le pool d'adresses statiques est absent",
             "la plage est différente de .200 à .210",
             "l'adaptateur n'est pas PRIVEE"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc12",
@@ -489,7 +500,8 @@
           "checks": [
             "MS-CHAP v2 n'est pas activé",
             "des méthodes non sécuritaires sont restées actives"
-          ]
+          ],
+          "insight": "MS-CHAP v2 authentifie le client et le serveur l'un envers l'autre; les méthodes plus anciennes, comme PAP, transmettent le mot de passe de façon beaucoup moins sûre."
         },
         {
           "id": "c2-sc13",
@@ -526,7 +538,8 @@
           "checks": [
             "le port PPTP accepte aussi le routage",
             "le nombre de ports est différent de 5"
-          ]
+          ],
+          "insight": "Limiter le port PPTP aux connexions d'accès à distance entrantes fait du serveur un simple point d'entrée VPN; le nombre de ports fixe combien de connexions VPN peuvent être ouvertes en même temps."
         },
         {
           "id": "c2-sc14",
@@ -564,7 +577,8 @@
             "le compte vpn_externe est absent",
             "le mot de passe expire",
             "l'accès à distance n'est pas autorisé"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc15",
@@ -603,7 +617,8 @@
             "le mauvais template est utilisé",
             "la carte est sur le réseau internet",
             "la VM a plusieurs cartes"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc16",
@@ -641,7 +656,8 @@
             "l'IP statique n'est pas configurée dans DeltaCloud",
             "l'adresse ou le masque est incorrect",
             "la passerelle est incorrecte"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc17",
@@ -678,7 +694,8 @@
           "checks": [
             "l'interface web d'AdGuard est inaccessible depuis le PC",
             "le nslookup ne répond pas"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc18",
@@ -715,7 +732,8 @@
           "checks": [
             "le redirecteur de SRV pointe vers autre chose qu'AdGuard seul",
             "le DNS du PC a été modifié"
-          ]
+          ],
+          "insight": "En gardant SRV comme serveur DNS du PC et en redirigeant SRV vers AdGuard, un seul réglage central applique le filtrage à tout le réseau, sans modifier les postes un à un."
         },
         {
           "id": "c2-sc19",
@@ -752,7 +770,8 @@
           "checks": [
             "un ou plusieurs domaines ne sont pas bloqués",
             "la règle ne couvre pas les sous-domaines"
-          ]
+          ],
+          "insight": "Bloquer un domaine sans ses sous-domaines laisse souvent d'autres adresses du même service accessibles; la règle doit viser le domaine et tous ses sous-domaines."
         },
         {
           "id": "c2-sc20",
@@ -789,7 +808,8 @@
           "checks": [
             "le service TikTok n'est pas bloqué",
             "le blocage est fait par domaines manuels au lieu du service"
-          ]
+          ],
+          "insight": ""
         },
         {
           "id": "c2-sc21",
@@ -827,7 +847,8 @@
             "les caches DNS ne sont pas vidés",
             "les nslookup sont incomplets",
             "le journal des blocages est absent"
-          ]
+          ],
+          "insight": ""
         }
       ]
     }

@@ -24,6 +24,8 @@ const subCriterionSchema = new mongoose.Schema(
     group: { type: String, default: "" },
     // Éléments qui peuvent être manqués (cases à cocher à la correction): chacun est un fragment de phrase d'observation.
     checks: { type: [String], default: [] },
+    // « Pour comprendre »: courte explication fiable (pourquoi c'est important), affichée à l'élève dans le PDF quand la tâche n'a pas tous ses points. Facultatif.
+    insight: { type: String, default: "" },
   },
   { _id: false }
 );

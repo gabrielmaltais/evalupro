@@ -165,6 +165,7 @@ function normalizeSubCriteria(rawSubCriteria, criterionId, criterionWeight, used
       pts,
       feedback: asText(firstDefined(item.feedback, item.retroaction, item.rétroaction, item.comment, item.commentaire), ""),
       group: asText(firstDefined(item.group, item.groupe, item.etape, item.étape, item.step, item.bloc), ""),
+      insight: asText(firstDefined(item.insight, item.contexte, item.pourquoi, item.explication), ""),
       checks: asArray(firstDefined(item.checks, item.manques, item.erreurs, item.elementsManques)).map((x) => asText(x, "")).filter(Boolean),
       // Niveaux propres à la tâche: seulement si l'IA en a fourni (sinon la tâche suit ceux du critère).
       ...(asArray(firstDefined(item.levels, item.niveaux)).length ? { levels: normalizeLevels(firstDefined(item.levels, item.niveaux)) } : {}),
