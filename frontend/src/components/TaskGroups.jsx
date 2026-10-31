@@ -1,16 +1,17 @@
-import { groupTasks, matchLevel, MISSED_KEY, pointsForLevel, taskFeedback, taskPoints } from "../lib/rubricTemplate";
+import { groupTasks, matchLevel, LEVELS_KEY, MISSED_KEY, pointsForLevel, taskFeedback, taskPoints } from "../lib/rubricTemplate";
 
 const tone = (maxPct) =>
   maxPct < 0.5 ? "border-red-200 text-red-600 hover:bg-red-50" : maxPct < 0.8 ? "border-yellow-300 text-yellow-600 hover:bg-yellow-50" : "border-green-200 text-green-600 hover:bg-green-50";
 
 /** Une tâche (question ou élément à noter): son propre encadré, ses points et ses niveaux. */
-function TaskCard({ task, value, missed, touched, canEdit, onChange, onMissed }) {
+function TaskCard({ task, value, level, missed, touched, canEdit, onChange, onLevel, onMissed }) {
   const earned = taskPoints(task, value);
   const max = Number(task.pts) || 0;
   const isFull = max > 0 && earned >= max;
   const step = max > 0 && max <= 2 ? 0.25 : 0.5;
   const shown = touched || earned > 0;
-  const current = shown && task.levels?.length ? matchLevel(task.levels, max ? earned / max : 0) : null;
+  // Le degré choisi explicitement prime: ajuster les points ensuite ne le change pas (nuances).
+  const current = shown && task.levels?.length ? task.levels.find((l) => l.label === level) || matchLevel(task.levels, max ? earned / max : 0) : null;
   const quick = [["0", 0], ["½", Number((max / 2).toFixed(2))], ["Max", max]];
   return (
     <div className={`rounded-lg border p-3.5 ${isFull ? "border-purple-300 bg-purple-50/50 dark:border-violet-500/40 dark:bg-violet-950/40" : earned > 0 ? "border-amber-200 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-950/20" : "border-gray-200 bg-white dark:border-white/10 dark:bg-transparent"}`}>
@@ -27,11 +28,10 @@ function TaskCard({ task, value, missed, touched, canEdit, onChange, onMissed })
       {task.levels?.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {task.levels.map((lvl, i) => (
-            <button key={i} type="button" disabled={!canEdit} aria-pressed={current === lvl} onClick={() => onChange(pointsForLevel(task, lvl))} className={`rounded border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed ${tone(lvl.maxPct)} ${current === lvl ? "bg-blue-50/60 ring-2 ring-blue-400 ring-offset-1 dark:bg-white/10" : ""}`}>{lvl.label}</button>
+            <button key={i} type="button" disabled={!canEdit} aria-pressed={current === lvl} onClick={() => onLevel(pointsForLevel(task, lvl), lvl.label)} className={`rounded border px-2.5 py-1 text-xs font-semibold transition disabled:cursor-not-allowed ${tone(lvl.maxPct)} ${current === lvl ? "bg-blue-50/60 ring-2 ring-blue-400 ring-offset-1 dark:bg-white/10" : ""}`}>{lvl.label}</button>
           ))}
         </div>
       )}
-      {current?.desc && <p className="mt-2 text-sm italic leading-snug text-gray-600 dark:text-slate-300">{current.desc}</p>}
       {earned < max && touched && task.checks?.length > 0 && (
         <div className="mt-2 space-y-1">
           <p className="text-xs font-semibold text-gray-500 dark:text-slate-400">Éléments manqués (facultatif)</p>
@@ -51,7 +51,7 @@ function TaskCard({ task, value, missed, touched, canEdit, onChange, onMissed })
 }
 
 /** Tâches d'un critère, regroupées par bloc (étape) quand elles en ont un. */
-export default function TaskGroups({ criterion, cid, subScores, touched, canEdit, onSubScore, onMissed }) {
+export default function TaskGroups({ criterion, cid, subScores, touched, canEdit, onSubScore, onLevel, onMissed }) {
   return (
     <div className="space-y-4">
       {groupTasks(criterion.subCriteria).map((g, gi) => {
@@ -66,7 +66,7 @@ export default function TaskGroups({ criterion, cid, subScores, touched, canEdit
               </div>
             )}
             {g.tasks.map((t) => (
-              <TaskCard key={t.id} task={t} value={subScores[cid]?.[t.id]} missed={subScores[cid]?.[MISSED_KEY]?.[t.id] || []} onMissed={(list) => onMissed(cid, t.id, list)} touched={touched[cid]?.[t.id]} canEdit={canEdit} onChange={(v) => onSubScore(cid, t.id, v, criterion)} />
+              <TaskCard key={t.id} task={t} value={subScores[cid]?.[t.id]} level={subScores[cid]?.[LEVELS_KEY]?.[t.id]} missed={subScores[cid]?.[MISSED_KEY]?.[t.id] || []} onLevel={(v, label) => onLevel(cid, t.id, v, label, criterion)} onMissed={(list) => onMissed(cid, t.id, list)} touched={touched[cid]?.[t.id]} canEdit={canEdit} onChange={(v) => onSubScore(cid, t.id, v, criterion)} />
             ))}
           </section>
         );

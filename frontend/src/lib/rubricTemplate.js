@@ -383,6 +383,8 @@ export function normalizeFeedbackMessages(messages, fallback = []) {
 
 /** Clé réservée dans subScores[critère] qui garde, par tâche, les éléments cochés comme manqués. */
 export const MISSED_KEY = "_manques";
+/** Idem pour le degré de performance choisi par tâche (libellé): reste fixe même si les points sont ajustés ensuite. */
+export const LEVELS_KEY = "_niveaux";
 
 /** Rétroaction d'une tâche: les éléments cochés (fragments joints par « , » et « et »). Sans élément coché: rien si la tâche en propose, sinon son texte général. */
 export function taskFeedback(task, missed) {

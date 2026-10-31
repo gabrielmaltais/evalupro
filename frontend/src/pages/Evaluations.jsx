@@ -6,7 +6,7 @@ import { Chip } from "../components/ui";
 import MarkerBadge, { MarkerStyleControls } from "../components/MarkerBadge";
 import { evalStudentId, evalRubricId, findLatestEvalForStudentRubric } from "../lib/evaluationHubHelpers";
 import { studentDisplayName } from "../lib/studentDisplay";
-import { applyLevelToCriterion, matchLevel, MISSED_KEY, taskPoints } from "../lib/rubricTemplate";
+import { applyLevelToCriterion, LEVELS_KEY, matchLevel, MISSED_KEY, taskPoints } from "../lib/rubricTemplate";
 import TaskGroups from "../components/TaskGroups";
 
 function evalItemStudentId(it) {
@@ -1536,6 +1536,15 @@ export default function Evaluations() {
     });
   }
 
+  // Degré choisi pour une tâche: ses points suivent, mais le degré reste tel quel si les points sont ajustés ensuite.
+  function handleTaskLevel(cid, scId, points, label, criterion) {
+    handleSubScore(cid, scId, points, criterion);
+    setSubScores((prev) => {
+      const block = prev[cid] || {};
+      return { ...prev, [cid]: { ...block, [LEVELS_KEY]: { ...(block[LEVELS_KEY] || {}), [scId]: label } } };
+    });
+  }
+
   // `value` : points obtenus pour la tâche (nombre), ou booléen pour l'ancien format (case à cocher).
   function handleSubScore(cid, scId, value, criterion) {
     const task = criterion.subCriteria.find((sc) => sc.id === scId);
@@ -1665,7 +1674,7 @@ export default function Evaluations() {
                           </div>
                         )}
 
-                        {hasTasks && <TaskGroups criterion={c} cid={cid} subScores={subScores} touched={subCriteriaTouched} canEdit={canEditEvaluation} onSubScore={handleSubScore} onMissed={handleMissed} />}
+                        {hasTasks && <TaskGroups criterion={c} cid={cid} subScores={subScores} touched={subCriteriaTouched} canEdit={canEditEvaluation} onSubScore={handleSubScore} onLevel={handleTaskLevel} onMissed={handleMissed} />}
 
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 min-h-[80px] flex flex-col justify-center dark:border-white/10">

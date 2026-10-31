@@ -78,6 +78,7 @@ function criterionStripeColor(criterion) {
 }
 
 const MISSED_KEY = "_manques";
+const LEVELS_KEY = "_niveaux";
 
 // Même règle qu'à l'écran (frontend/src/lib/rubricTemplate.js taskFeedback): quand la tâche propose des
 // éléments à cocher, seule la sélection de l'enseignant sert; sinon, le texte général de la tâche.
@@ -207,7 +208,9 @@ function createEvaluationPdfBuffer(evaluation, rubric) {
           const evaluated = raw !== undefined && raw !== null;
           const max = Number(sc.pts) || 0;
           const earned = taskPoints(sc, raw);
-          const lvl = evaluated ? pickLevel(sc.levels && sc.levels.length ? sc.levels : c.levels, max ? earned / max : 0) : null;
+          const scale = sc.levels && sc.levels.length ? sc.levels : c.levels;
+          const chosen = (block[LEVELS_KEY] || {})[sc.id];
+          const lvl = evaluated ? (scale || []).find((l) => l.label === chosen) || pickLevel(scale, max ? earned / max : 0) : null;
           items.push({
             n: ++qn,
             group: sc.group || "",
