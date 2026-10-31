@@ -8,6 +8,7 @@ import AdminStudents from "./pages/AdminStudents";
 import SessionCourses from "./pages/SessionCourses";
 import AdminUsers from "./pages/AdminUsers";
 import AccountSettings from "./pages/AccountSettings";
+import PdfSettings from "./pages/PdfSettings";
 import MainLayout from "./components/MainLayout";
 import SessionLayout from "./components/SessionLayout";
 import ResourcesLayout from "./components/ResourcesLayout";
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/admin/students" element={<Navigate to="/ressources/groupes" replace />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/account" element={<AccountSettings />} />
+        <Route path="/parametres-pdf" element={<PdfSettings />} />
         <Route path="/admin/smtp" element={<Navigate to="/admin/users" replace />} />
         <Route path="*" element={<Navigate to="/session" replace />} />
       </Route>

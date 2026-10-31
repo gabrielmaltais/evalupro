@@ -14,6 +14,7 @@ const groupRoutes = require("./routes/groups");
 const userRoutes = require("./routes/users");
 const adminSmtpRoutes = require("./routes/adminSmtp");
 const groupStyleRoutes = require("./routes/groupStyles");
+const pdfSettingsRoutes = require("./routes/pdfSettings");
 const commonGroupRoutes = require("./routes/commonGroups");
 
 const app = express();
@@ -44,6 +45,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminSmtpRoutes);
+app.use("/api/pdf-settings", pdfSettingsRoutes);
 app.use("/api/group-styles", groupStyleRoutes);
 app.use("/api/common-groups", commonGroupRoutes);
 

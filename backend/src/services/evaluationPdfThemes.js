@@ -1,6 +1,7 @@
 const PDFDocument = require("pdfkit");
 const { toPlainObject, criterionKey } = require("../utils/evaluationTotals");
 const { helpers: H } = require("./evaluationPdfService");
+const { DEFAULTS, fill } = require("../utils/pdfSettings");
 
 const { getScore, getNumber, getSubBlock, taskPoints, computeTotals, pickFeedbackMessage, taskFeedback, pickLevel, latin, formatDate, NUM, openingText, pct1, short, MISSED_KEY, LEVELS_KEY } = H;
 
@@ -25,6 +26,14 @@ const THEMES = {
     margin: 50, fonts: { head: "Times-Bold", body: "Times-Roman", num: "Times-Bold", letter: "Times-Italic", letterB: "Times-BoldItalic", letterI: "Times-Italic" },
   },
 };
+
+const PALETTES = {
+  carnet: {},
+  ardoise: { page: "#FFFFFF", ink: "#1E293B", muted: "#64748B", accent: "#2B4C7E", accent2: "#1F6F78", line: "#E2E8F0", soft: "#F1F5F9", full: "#1F6F78", partial: "#B7791F", none: "#B91C1C", open: "#94A3B8" },
+  bordeaux: { page: "#FFFDFB", ink: "#2B2B2B", muted: "#7A7068", accent: "#8C2F39", accent2: "#3F4A52", line: "#E8DED6", soft: "#F6EEE8", full: "#3F6B4F", partial: "#B7791F", none: "#8C2F39", open: "#A8998A" },
+};
+const palette = (S, base = THEMES.carnet) => ({ ...base, ...(PALETTES[S.palette] || {}) });
+const varsOf = (D, teacherName) => ({ etudiant: D.student, prenom: D.firstName, cours: D.course, examen: D.exam, enseignant: latin(teacherName) });
 
 const keyOf = (evaluated, earned, max) => (!evaluated ? "open" : max > 0 && earned >= max ? "full" : earned <= 0 ? "none" : "partial");
 
@@ -82,16 +91,194 @@ function prepare(evaluation, rubric) {
   return { sections, blocks, all, lost, done, totalScore, totalMax, finalPct, student, firstName, course: latin(rubric.title) || "Évaluation", exam: latin(rubric.taskTitle), opening: openingText(firstName, totalScore, totalMax, finalPct, blocks, lost), match: pickFeedbackMessage(rubric, finalPct), date: formatDate(evaluation.date) };
 }
 
-function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "carnet" } = {}) {
-  const P = THEMES[theme] || THEMES.carnet;
+/** Version courte (1 à 2 pages): en-tête, mot d'ouverture, étapes avec toutes les questions sur une ligne, puis « Pour mieux comprendre » et lettre de clôture. */
+function createCompactPdfBuffer(evaluation, rubric, { teacherName = "", settings = {} } = {}) {
+  const S = { ...DEFAULTS, ...settings };
+  const P = palette(S);
   const F = P.fonts;
   const D = prepare(evaluation, rubric);
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "LETTER", margin: 40, bufferPages: true });
+    const doc = new PDFDocument({ size: S.pageSize, margin: 40, bufferPages: true });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+    const V = varsOf(D, teacherName);
+    const L = 46;
+    const W = doc.page.width - L * 2;
+    const PH = doc.page.height;
+    const paint = () => doc.rect(0, 0, doc.page.width, PH).fill(P.page);
+    paint();
+    doc.on("pageAdded", paint);
+    let y = 40;
+    const need = (h) => {
+      if (y + h > PH - 52) {
+        doc.addPage();
+        y = 44;
+      }
+    };
+    const T = (str, x, yy, o = {}, font = F.body, size = 9, color = P.ink) => doc.font(font).fontSize(size).fillColor(color).text(str, x, yy, o);
+    const HH = (str, w, font = F.body, size = 9, o = {}) => {
+      doc.font(font).fontSize(size);
+      return doc.heightOfString(str, { width: w, ...o });
+    };
+    const frac = D.totalMax ? Math.min(1, D.totalScore / D.totalMax) : 0;
+    const colorOf = (it) => (!it.evaluated ? P.open : it.earned >= it.max ? P.full : it.earned <= 0 ? P.none : P.partial);
+
+    // --- En-tête
+    doc.rect(L, y, W, 1.2).fill(P.ink);
+    T(`${latin(fill(S.headerLabel, V)).toUpperCase()}  /  ${D.course.toUpperCase()}`, L, y + 10, { width: W * 0.7, characterSpacing: 1.4, lineBreak: false }, F.body, 7, P.muted);
+    const title = D.exam || D.course;
+    T(title, L, y + 24, { width: W * 0.66 }, F.head, 18, P.ink);
+    const th = HH(title, W * 0.66, F.head, 18);
+    T(D.student, L, y + 30 + th, { width: W * 0.66, lineBreak: false }, F.head, 13, P.accent);
+    if (S.showDate && D.date) T(D.date, L, y + 47 + th, { lineBreak: false }, F.letterI, 9.5, P.muted);
+    const bx = L + W * 0.7;
+    const bw = W * 0.3;
+    T(NUM(Math.round(D.totalScore * 100) / 100), bx, y + 12, { width: bw, align: "right", lineBreak: false }, F.head, 38, P.accent2);
+    T(`sur ${NUM(D.totalMax)}${S.showPercent ? `   -   ${Math.round(D.finalPct)} %` : ""}`, bx, y + 54, { width: bw, align: "right", lineBreak: false }, F.letterI, 10, P.muted);
+    doc.rect(bx + bw - 100, y + 70, 100, 3).fill(P.line);
+    doc.rect(bx + bw - 100, y + 70, Math.max(3, 100 * frac), 3).fill(P.accent2);
+    y += Math.max(th + 66, 84) + 8;
+    doc.rect(L, y, W, 0.6).fill(P.line);
+    y += 12;
+
+    // --- Mot d'ouverture
+    if (S.showOpening) {
+      const oh = HH(D.opening, W, F.letter, 11, { lineGap: 2 });
+      T(D.opening, L, y, { width: W, lineGap: 2 }, F.letter, 11, P.ink);
+      y += oh + 12;
+    }
+
+    // --- Étapes + questions sur une ligne
+    const numW = 22;
+    const ptsW = 64;
+    const labelW = W - numW - ptsW - 6;
+    D.sections.forEach((s) => {
+      if (D.sections.length > 1) {
+        need(30);
+        T(latin(s.c.title), L, y, { width: W - 90, lineBreak: false }, F.head, 10.5, P.ink);
+        T(`${NUM(s.earned)} / ${NUM(Number(s.c.weight) || 0)}`, L + W - 90, y, { width: 90, align: "right", lineBreak: false }, F.head, 10.5, P.accent);
+        y += 18;
+      }
+      let last = null;
+      s.items.forEach((it) => {
+        if (it.group && it.group !== last) {
+          last = it.group;
+          const gb = D.blocks.find((b) => b.name === it.group);
+          const inGroup = s.items.filter((x) => x.group === it.group);
+          const n = inGroup.filter((x) => x.evaluated && x.earned < x.max).length;
+          const p = gb ? pct1(gb) : 1;
+          const verdict = p >= 0.999 ? "entièrement réussie" : p >= 0.85 ? "bien maîtrisée" : p >= 0.65 ? "en bonne partie réussie" : "à reprendre en grande partie";
+          need(60);
+          y += 4;
+          T(latin(it.group), L, y, { width: W - 90, lineBreak: false, ellipsis: true, height: 14 }, F.letterB, 11.5, P.accent2);
+          if (gb) T(`${NUM(gb.earned)} / ${NUM(gb.max)}`, L + W - 90, y + 1, { width: 90, align: "right", lineBreak: false }, F.head, 10, P.ink);
+          y += 15;
+          doc.rect(L, y, W, 0.6).fill(P.line);
+          doc.rect(L, y - 0.6, Math.max(2, W * (gb ? pct1(gb) : 1)), 1.8).fill(P.accent2);
+          y += 5;
+          if (S.showStepVerdict) {
+            T(`${verdict.charAt(0).toUpperCase()}${verdict.slice(1)}${n ? ` - ${n} question${n > 1 ? "s" : ""} à revoir` : ""}.`, L, y, { width: W, lineBreak: false }, F.letterI, 9, P.muted);
+            y += 13;
+          }
+        }
+        const lost = it.evaluated && it.earned < it.max;
+        if (!lost && !S.listAllQuestions) return;
+        const col = colorOf(it);
+        need(lost && it.feedback && S.showObservations ? 34 : 15);
+        T(`${it.n}.`, L, y + 0.5, { width: numW - 6, lineBreak: false }, F.head, 8.5, lost ? col : P.muted);
+        T(it.label, L + numW, y, { width: labelW, height: 11, ellipsis: true }, lost ? F.letterB : F.letter, 9.6, P.ink);
+        T(it.evaluated ? `${NUM(it.earned)} / ${NUM(it.max)}` : "non évalué", L + W - ptsW, y, { width: ptsW, align: "right", lineBreak: false }, F.head, 9.5, col);
+        y += 12.5;
+        if (lost && it.feedback && S.showObservations) {
+          const fh = HH(it.feedback, W - numW - 70, F.letterI, 9);
+          T(it.feedback, L + numW + 10, y, { width: W - numW - 70 }, F.letterI, 9, P.accent);
+          y += fh + 3.5;
+        }
+        y += 1.5;
+      });
+      y += 4;
+    });
+
+    // --- Pour mieux comprendre (questions les plus coûteuses)
+    const explain = D.lost.filter((it) => it.insight).slice(0, 5);
+    if (S.showInsights && explain.length) {
+      need(60);
+      y += 6;
+      doc.rect(L, y, W, 1.2).fill(P.ink);
+      T("POUR MIEUX COMPRENDRE", L, y + 8, { characterSpacing: 1.6, lineBreak: false }, F.body, 7.5, P.accent);
+      y += 24;
+      explain.forEach((it) => {
+        const head = `${it.n}. ${short(it.label, 88)}`;
+        const body = [S.showExpected && it.expected ? `Attendu : ${it.expected}` : "", it.insight].filter(Boolean).join("  ");
+        const hh = HH(head, W, F.letterB, 10);
+        const bh = HH(body, W - numW, F.letter, 9.6, { lineGap: 1 });
+        need(hh + bh + 12);
+        T(head, L, y, { width: W }, F.letterB, 10, P.ink);
+        T(body, L + numW, y + hh + 1, { width: W - numW, lineGap: 1 }, F.letter, 9.6, P.muted);
+        y += hh + bh + 9;
+      });
+    }
+
+    // --- Lettre de clôture
+    const paras = [];
+    if (S.showFinalMessage && D.match && D.match.message) paras.push(latin(D.match.message));
+    if (S.showPriorityHint && D.lost.length && D.blocks.length > 1) {
+      const worst = [...D.blocks].sort((a, b) => pct1(a) - pct1(b))[0];
+      if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique, commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
+    }
+    const gc = S.showTeacherComment ? latin(evaluation.generalComment) : "";
+    if (gc) paras.push(gc);
+    const signature = latin(fill(S.signatureText, V));
+    if (paras.length || signature) {
+      const total = paras.reduce((h, p) => h + HH(p, W, F.letter, 10.5, { lineGap: 1 }) + 6, 0) + 50;
+      need(Math.min(total, 220));
+      y += 8;
+      doc.rect(L, y, 34, 1.4).fill(P.accent);
+      y += 12;
+      if (S.greeting === "firstName") {
+        T(`${D.firstName},`, L, y, { width: W, lineBreak: false }, F.letterB, 12, P.ink);
+        y += 17;
+      }
+      paras.forEach((p) => {
+        const ph = HH(p, W, F.letter, 10.5, { lineGap: 1 });
+        T(p, L, y, { width: W, lineGap: 1 }, p === gc ? F.letterI : F.letter, 10.5, p === gc ? P.muted : P.ink);
+        y += ph + 6;
+      });
+      y += 4;
+      if (signature) T(signature, L, y, { lineBreak: false }, F.letterB, 11.5, P.accent);
+    }
+
+    const range = doc.bufferedPageRange();
+    const footer = latin(fill(S.footerText, V)) || `${D.student}  /  ${D.course}`;
+    for (let i = 0; i < range.count; i += 1) {
+      doc.switchToPage(range.start + i);
+      doc.page.margins.bottom = 0;
+      const fy = PH - 30;
+      doc.rect(L, fy - 8, W, 0.5).fill(P.line);
+      T(footer, L, fy, { width: W - 80, lineBreak: false }, F.letterI, 7.5, P.muted);
+      if (S.showPageNumbers) T(`${i + 1} / ${range.count}`, L + W - 80, fy, { width: 80, align: "right", lineBreak: false }, F.letterI, 7.5, P.muted);
+    }
+    doc.end();
+  });
+}
+
+function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "", settings = {} } = {}) {
+  const S = { ...DEFAULTS, ...settings };
+  const mode = theme || (S.layout === "detaille" ? "carnet" : "compact");
+  if (mode === "compact") return createCompactPdfBuffer(evaluation, rubric, { teacherName, settings: S });
+  theme = mode;
+  const P = theme === "carnet" ? palette(S) : THEMES[theme] || THEMES.carnet;
+  const F = P.fonts;
+  const D = prepare(evaluation, rubric);
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: S.pageSize, margin: 40, bufferPages: true });
+    const chunks = [];
+    doc.on("data", (c) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    const V = varsOf(D, teacherName);
 
     const L = P.margin;
     const W = doc.page.width - L * 2;
@@ -122,7 +309,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
     };
     const col = (k) => P[k];
     const frac = D.totalMax ? Math.min(1, D.totalScore / D.totalMax) : 0;
-    const scoreStr = NUM(Math.round(D.totalScore * 10) / 10);
+    const scoreStr = NUM(Math.round(D.totalScore * 100) / 100);
 
     // ============ EN-TÊTE ============
     if (theme === "editorial") {
@@ -163,7 +350,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       y = 222;
     } else {
       doc.rect(L, 40, W, 1.2).fill(P.ink);
-      T("RAPPORT DE CORRECTION", L, 54, { characterSpacing: 2, lineBreak: false }, F.body, 7.5, P.muted);
+      T(latin(fill(S.headerLabel, V)).toUpperCase(), L, 54, { characterSpacing: 2, lineBreak: false }, F.body, 7.5, P.muted);
       T(D.course, L, 72, { width: W * 0.64 }, F.head, 27, P.ink);
       let hy = 72 + HH(D.course, W * 0.64, F.head, 27) + 2;
       if (D.exam) {
@@ -174,7 +361,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       T("ÉTUDIANT", L, hy + 10, { characterSpacing: 1.5, lineBreak: false }, F.body, 7, P.muted);
       T(D.student, L, hy + 22, { width: W * 0.64 }, F.head, 18, P.ink);
       const nameH = HH(D.student, W * 0.64, F.head, 18);
-      if (D.date) T(D.date, L, hy + 26 + nameH, { lineBreak: false }, F.letterI, 10, P.muted);
+      if (S.showDate && D.date) T(D.date, L, hy + 26 + nameH, { lineBreak: false }, F.letterI, 10, P.muted);
       const bx = L + W * 0.7;
       const bw = W * 0.3;
       doc.rect(bx - 14, 62, 0.8, 104).fill(P.line);
@@ -183,19 +370,22 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       T(`sur ${NUM(D.totalMax)}`, bx, 128, { width: bw, align: "right", lineBreak: false }, F.letterI, 11, P.muted);
       doc.rect(bx + bw - 90, 148, 90, 3).fill(P.line);
       doc.rect(bx + bw - 90, 148, Math.max(3, 90 * frac), 3).fill(P.accent2);
-      T(`${Math.round(D.finalPct)} %`, bx, 154, { width: bw, align: "right", lineBreak: false }, F.head, 9.5, P.accent2);
+      if (S.showPercent) T(`${Math.round(D.finalPct)} %`, bx, 154, { width: bw, align: "right", lineBreak: false }, F.head, 9.5, P.accent2);
       y = Math.max(hy + nameH + 52, 190);
     }
 
     // ============ MOT D'OUVERTURE ============
     const opFont = theme === "studio" ? F.body : F.letter;
     const opSize = theme === "studio" ? 10.5 : theme === "carnet" ? 13 : 12.5;
-    const oh = HH(D.opening, W, opFont, opSize, { lineGap: 3 });
-    need(oh + 20);
-    T(D.opening, L, y, { width: W, lineGap: 3 }, opFont, opSize, P.ink);
-    y += oh + 22;
+    if (S.showOpening) {
+      const oh = HH(D.opening, W, opFont, opSize, { lineGap: 3 });
+      need(oh + 20);
+      T(D.opening, L, y, { width: W, lineGap: 3 }, opFont, opSize, P.ink);
+      y += oh + 22;
+    }
 
     // ============ RÉUSSITES / POINTS À GAGNER ============
+    if (S.showHighlights) {
     const colW = (W - 24) / 2;
     const winsLine = D.done.length ? `Questions ${D.done.map((i) => i.n).join(", ")}` : "";
     const lossRows = D.lost.slice(0, 3).map((it) => ({ head: `${it.n}. ${short(it.label, 96)}`, pts: `-${NUM(it.max - it.earned)} pt`, fb: it.feedback }));
@@ -237,6 +427,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       ly += 6;
     });
     y += boxH + 26;
+    }
 
     // ============ SYNTHÈSE PAR ÉTAPE ============
     if (D.blocks.length > 1) {
@@ -340,9 +531,9 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
           const lh = HH(it.label, labelW, F.letterB, 11.5);
           const pw = W - numW - 14;
           const paras = [
-            ["Ce qui était attendu. ", it.expected, P.accent2],
-            ["Ce que j'ai relevé. ", it.feedback || "Des points ont été retranchés sur des détails de cette question.", P.accent],
-            ["Pour comprendre. ", it.insight, P.muted],
+            ["Ce qui était attendu. ", S.showExpected ? it.expected : "", P.accent2],
+            ["Ce que j'ai relevé. ", S.showObservations ? it.feedback || "Des points ont été retranchés sur des détails de cette question." : "", P.accent],
+            ["Pour comprendre. ", S.showInsights ? it.insight : "", P.muted],
           ].filter((x) => x[1]);
           const heights = paras.map(([lead, txt]) => HH(lead + txt, pw, "Times-Roman", 10.5, { lineGap: 1 }) * 1.03);
           const blockH = Math.max(lh, 16) + 14 + heights.reduce((a, b) => a + b + 6, 0);
@@ -463,14 +654,15 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
 
     // ============ MOT DE LA FIN ============
     const paras = [];
-    if (D.match && D.match.message) paras.push(latin(D.match.message));
-    if (D.lost.length && D.blocks.length > 1) {
+    if (S.showFinalMessage && D.match && D.match.message) paras.push(latin(D.match.message));
+    if (S.showPriorityHint && D.lost.length && D.blocks.length > 1) {
       const worst = [...D.blocks].sort((a, b) => pct1(a) - pct1(b))[0];
       if (pct1(worst) < 1) paras.push(`Pour ta prochaine mise en pratique, commence par « ${latin(worst.name)} » : c'est là que tu peux gagner le plus.`);
     }
-    const gc = latin(evaluation.generalComment);
+    const gc = S.showTeacherComment ? latin(evaluation.generalComment) : "";
     if (gc) paras.push(gc);
-    if (paras.length) {
+    const signature = latin(fill(S.signatureText, V));
+    if (paras.length || signature) {
       const lSize = theme === "studio" ? 10 : 12;
       const inset = theme === "studio" ? 20 : 0;
       const bw = W - inset * 2;
@@ -480,8 +672,10 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       else if (theme === "editorial") doc.rect(L, y, 40, 3).fill(P.accent);
       else doc.rect(L, y, 40, 1.4).fill(P.accent);
       y += theme === "studio" ? 22 : 18;
-      T(`${D.firstName},`, L + inset, y, { width: bw }, F.letterB, theme === "studio" ? 12 : 14, theme === "studio" ? P.accent : P.ink);
-      y += theme === "studio" ? 20 : 24;
+      if (S.greeting === "firstName") {
+        T(`${D.firstName},`, L + inset, y, { width: bw }, F.letterB, theme === "studio" ? 12 : 14, theme === "studio" ? P.accent : P.ink);
+        y += theme === "studio" ? 20 : 24;
+      }
       paras.forEach((p) => {
         const ph = HH(p, bw, p === gc ? F.letterI : F.letter, lSize, { lineGap: 2 });
         need(ph + 8);
@@ -489,7 +683,7 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
         y += ph + 8;
       });
       y += 8;
-      T(latin(teacherName) || "Ton enseignant", L + inset, y, { width: bw, lineBreak: false }, F.letterB, 12.5, theme === "carnet" ? P.accent : theme === "studio" ? P.accent : P.ink);
+      if (signature) T(signature, L + inset, y, { width: bw, lineBreak: false }, F.letterB, 12.5, theme === "carnet" ? P.accent : theme === "studio" ? P.accent : P.ink);
       y += 22;
     }
 
@@ -501,8 +695,8 @@ function createThemedPdfBuffer(evaluation, rubric, { teacherName = "", theme = "
       const fy = PH - 32;
       if (theme === "editorial") doc.rect(L, fy - 8, W, 0.6).fill(P.ink);
       else doc.moveTo(L, fy - 8).lineTo(L + W, fy - 8).strokeColor(P.line).lineWidth(0.6).stroke();
-      T(`${D.student}  /  ${D.course}`, L, fy, { width: W - 80, lineBreak: false, characterSpacing: theme === "editorial" ? 1 : 0 }, theme === "carnet" ? F.letterI : F.body, 7.5, P.muted);
-      T(`${i + 1} / ${range.count}`, L + W - 80, fy, { width: 80, align: "right", lineBreak: false }, theme === "carnet" ? F.letterI : F.body, 7.5, P.muted);
+      T(latin(fill(S.footerText, V)) || `${D.student}  /  ${D.course}`, L, fy, { width: W - 80, lineBreak: false, characterSpacing: theme === "editorial" ? 1 : 0 }, theme === "carnet" ? F.letterI : F.body, 7.5, P.muted);
+      if (S.showPageNumbers) T(`${i + 1} / ${range.count}`, L + W - 80, fy, { width: 80, align: "right", lineBreak: false }, theme === "carnet" ? F.letterI : F.body, 7.5, P.muted);
     }
     doc.end();
   });

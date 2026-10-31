@@ -65,6 +65,14 @@ function HeaderActions() {
             <i className="fa-solid fa-screwdriver-wrench text-sm" aria-hidden />
           </NavLink>
         )}
+        <NavLink
+          to="/parametres-pdf"
+          title="Paramètres du PDF de correction"
+          aria-label="Paramètres du PDF de correction"
+          className={({ isActive }) => `${iconBtn} ${isActive ? "!bg-white !text-blue-600 shadow-sm ring-1 ring-gray-200/80 dark:!bg-gray-700 dark:!text-blue-300 dark:ring-gray-600" : ""}`}
+        >
+          <i className="fa-solid fa-file-pdf text-sm" aria-hidden />
+        </NavLink>
         <DarkToggle className="!h-8 !w-8 sm:!h-9 sm:!w-9 !bg-transparent hover:!bg-white hover:shadow-sm dark:hover:!bg-gray-700" />
         <button
           type="button"

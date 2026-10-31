@@ -92,6 +92,19 @@ export const api = {
   register: (payload) => request("/api/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   me: () => request("/api/auth/me"),
+  getPdfSettings: () => request("/api/pdf-settings"),
+  savePdfSettings: (settings) => request("/api/pdf-settings", { method: "PUT", body: JSON.stringify(settings) }),
+  // Aperçu du PDF avec les réglages en cours d'édition (non enregistrés): renvoie un Blob.
+  previewPdfSettings: async (settings) => {
+    const token = getToken();
+    const response = await fetch(`${API_URL}/api/pdf-settings/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) throw new Error("Aperçu impossible.");
+    return response.blob();
+  },
   updateMe: (payload) => request("/api/auth/me", { method: "PUT", body: JSON.stringify(payload) }),
   listRubrics: () => request("/api/rubrics"),
   createRubric: (payload) => request("/api/rubrics", { method: "POST", body: JSON.stringify(payload) }),

@@ -12,6 +12,7 @@ const { generateSummary } = require("../services/gemini");
 const { startBatchJob, getProgress, sendOneEvaluationEmail } = require("../services/emailBatchService");
 const { getEvaluationPdfFileName } = require("../services/evaluationPdfService");
 const { createThemedPdfBuffer: createEvaluationPdfBuffer } = require("../services/evaluationPdfThemes");
+const { getPdfSettings } = require("../services/pdfSettingsService");
 const { studentFullNameFromDoc } = require("../utils/studentName");
 const { computeEvaluationTotals } = require("../utils/evaluationTotals");
 const { resolveActiveSession } = require("../services/sessionService");
@@ -270,7 +271,7 @@ router.get("/:id/pdf", async (req, res) => {
     }
     if (!item.rubric) return res.status(400).json({ message: "Rubric introuvable pour cette evaluation" });
 
-    const pdfBuffer = await createEvaluationPdfBuffer(item, item.rubric, { teacherName: req.user.name });
+    const pdfBuffer = await createEvaluationPdfBuffer(item, item.rubric, { teacherName: req.user.name, settings: await getPdfSettings(item.owner) });
     const filename = getEvaluationPdfFileName(item, item.rubric);
 
     res.setHeader("Content-Type", "application/pdf");

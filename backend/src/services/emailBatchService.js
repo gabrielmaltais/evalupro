@@ -6,6 +6,7 @@ const EvaluationEmailDelivery = require("../models/EvaluationEmailDelivery");
 const { sendMailWithCurrentConfig } = require("./emailService");
 const { getEvaluationPdfFileName } = require("./evaluationPdfService");
 const { createThemedPdfBuffer: createEvaluationPdfBuffer } = require("./evaluationPdfThemes");
+const { getPdfSettings } = require("./pdfSettingsService");
 const { buildEvaluationEmailParts } = require("./evaluationEmailTemplate");
 const { getActiveSmtpConfig } = require("./smtpConfigService");
 const { studentsOfGroup, groupNameFor } = require("./groupService");
@@ -144,7 +145,7 @@ async function runBatchJob({
     }
 
     try {
-      const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName });
+      const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName, settings: await getPdfSettings(owner._id) });
       const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
       const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
         owner: ownerForTemplate,
@@ -265,7 +266,7 @@ async function sendOneEvaluationEmail({ owner, evaluationId, resend = false }) {
   const ownerForTemplate = { ...owner, name: teacherName };
 
   try {
-    const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName });
+    const pdfBuffer = await createEvaluationPdfBuffer(evaluation, evaluation.rubric, { teacherName, settings: await getPdfSettings(owner._id) });
     const filename = getEvaluationPdfFileName(evaluation, evaluation.rubric);
     const { subject, text } = buildEvaluationEmailParts(smtpConfig, {
       owner: ownerForTemplate,
